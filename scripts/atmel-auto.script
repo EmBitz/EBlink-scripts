@@ -14,8 +14,7 @@ intrfApi  <- InterfAPI()  // Global so that all included script files also have 
 targetApi <- TargetAPI()  // Global so that all included script files also have access
 deviceId  <- 0            // Global deviceId
 
-const SAMD_DSU      0x41002000  // Device Service Unit
-const SAMD_DSU_DID  0x18        // Device ID register
+const SAMD_DSU_ID  0x41002018  // Device ID register
 
 // Used by script to denote a not found devcie
 const ERROR_NOT_FOUND -100
@@ -60,7 +59,7 @@ function findAtmelDevice()
     switch(targetApi.cpuType)
     {
         case 0: // Cortex-M 0
-            _n_throw(intrfApi.readMem32(SAMD_DSU + SAMD_DSU_DID))
+            _n_throw(intrfApi.readMem32(SAMD_DSU_ID))
             deviceId = intrfApi.value32
 
             // Check if we have a meaningful device ID
@@ -72,7 +71,6 @@ function findAtmelDevice()
             else
                 throw ERROR_NOT_FOUND
             break;
-
 
         // Todo: Other Atmel families
              // intrfApi.readMem32(0x400E0740)
