@@ -2,14 +2,9 @@
 ## Win32, Linux_x86_64 and Raspberry 
 ### Auto detects Silabs, STmicro and Atmel
 
-_Warning:  
-Stop updating your stlink/v2 firmware to the latest if you want to keep using it for non-STmicro mcu's.  
-Firmware V2.J34 is confirmed to work with e.g. Silabs. You can check firmware version with the EBlink option -v5.  
-Most updates are mass storage related which we don't use anyway._
-
 EBlink ARM Cortex-M debug tool with squirrel scripting device support
 
-[ Windows installer ](https://github.com/EmBitz/EBlink/tree/master/packages) available with windows shell context menu.  
+[ Windows installer ](https://embitz.org/forum/thread-141.html) available with windows shell context menu.  
 The installer set environment variable EB_DEFAULT_SCRIPT to "auto"(.script) so that all supported vendors are automaticlly detected (currently Silabs, STmicro and Atmel).
 
 ![alt text](https://www.embitz.org/context3.png)  
