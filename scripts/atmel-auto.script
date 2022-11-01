@@ -1,0 +1,120 @@
+//! Atmel
+/////////////////////////////////////////////////////
+//
+//     This is a virtual device for Atmel cortex's M0(plus)
+//
+//     The script tries to detect the right memory sizes
+//     however, if this is not correct you can set the sizes
+//     in kilobytes on the command line as:
+//
+//         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx  (check also device scripts)
+//
+
+intrfApi  <- InterfAPI()  // Global so that all included script files also have access
+targetApi <- TargetAPI()  // Global so that all included script files also have access
+deviceId  <- 0            // Global deviceId
+
+const SAMD_DSU      0x41002000  // Device Service Unit
+const SAMD_DSU_DID  0x18        // Device ID register
+
+// Used by script to denote a not found devcie
+const ERROR_NOT_FOUND -100
+
+/////////////////////////////////////////////////////
+//
+//  EBlink called Entry point
+//
+function main( )
+{
+    // If we still haven't a valid device ID, inform user and quit
+    try{
+        findAtmelDevice()
+    }
+    catch(e)
+    {
+        if( e == ERROR_NOT_FOUND)
+            if(deviceId)
+                errorf("ERROR: Atmel device [%x] is missing in table\n", deviceId)
+            else
+                errorf("ERROR: No valid Atmel device ID found\n")
+        else
+            errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
+        return ERROR_NOTIFIED  // We have already thrown an error so use -1 (otherwise < -1)
+    }
+
+    return ERROR_OK;
+}
+
+/////////////////////////////////////////////////////
+//
+//  Look for Atmel device
+//
+function findAtmelDevice()
+{
+    // Check if the right script API is supported
+    if( VERSION < 4.7)
+    {
+       errorf("Error:\nIncompatiable EBlink version %.1f\nPlease update EBlink in order to use this script file\n", VERSION)
+       return ERROR_NOTIFIED
+    }
+
+    switch(targetApi.cpuType)
+    {
+        case 0: // Cortex-M 0
+            _n_throw(intrfApi.readMem32(SAMD_DSU + SAMD_DSU_DID))
+            deviceId = intrfApi.value32
+
+            // Check if we have a meaningful device ID
+            if(deviceId != 0)
+            {
+                require("atmel/samcd.script")
+                atmel_device()
+            }
+            else
+                throw ERROR_NOT_FOUND
+            break;
+
+
+        // Todo: Other Atmel families
+             // intrfApi.readMem32(0x400E0740)
+             // intrfApi.readMem32(0x400E0940)
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Additional commands after reset (optional) called by EBlink
+//
+// resetType:
+//        SYSTEM_RESET
+//        CORE_RESET
+//        JTAG_RESET
+//        USER_RESET
+//
+function  reset_post(resetType)
+{
+    // Check if there is an user defined post reset hook, the user
+    // can add his own reset strategy with -S <myscript> as last
+    // defined script on the cli.
+    if (isScriptObject("reset_post_hook"))
+        return reset_post_hook(resetType);
+
+    // We don't use this if the reset is a user_script type. In that
+    // case, the user is responsible for the initialization.
+    if( resetType != USER_RESET )
+    {
+        // Set the Stack pointer according the Vector table entry
+        intrfApi.readMem32(0x00000000)
+        targetApi.writeReg("SP", intrfApi.value32)
+
+        // Set the Program pointer according the Vector table entry        
+        intrfApi.readMem32(0x00000004)
+        targetApi.writeReg("PC", intrfApi.value32)
+    }
+
+    return ERROR_OK
+}
+

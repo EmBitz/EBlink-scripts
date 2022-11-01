@@ -1,0 +1,229 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32Gx
+//
+// ToDo: - option programming
+//
+
+
+// -- Single bank with no CRAM ----
+const mem_single_no_cram = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x00000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+// -- Single bank with CRAM ----
+const mem_single_cram = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x00000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x10000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+// -- Dual bank with CRAM ----
+const mem_dual_cram = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x00000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x10000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"flash\" start=\"0x08040000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+// -- Dual bank with no CRAM ----
+const mem_dual_no_cram = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x00000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+// The parameters for the flash script
+const FLASH_BASE 0x40022000
+hasDualBank <- false // Enables dual bank support
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local cram_size = 0  // Default no CRAM
+    local flash_size
+    local page_size
+    local sram_size
+	local bank2_start_address = 0x08020000
+
+    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+    _n_throw(intrfApi.writeMem32(0x40015804, 6))
+
+    // Get the flash size by reading the info register
+    _n_throw(intrfApi.readMem32(0x1fff75e0))
+
+    flash_size = intrfApi.value32 & ~3
+    flash_size = (flash_size & 0xffff) * 1024
+
+    local deviceStr
+    switch(deviceId)
+    {
+    case 0x456 :
+            deviceStr = "05/06xx"
+            page_size = 0x800
+            sram_size = 0x4800 // 18Kbyte
+            break
+
+    case 0x460 :
+            deviceStr = "07/08xx"
+            page_size = 0x800
+            sram_size = 0x9000 // 36Kbyte
+            break
+
+    case 0x466 :
+            deviceStr = "03/04xx"
+            page_size = 0x800
+            sram_size = 0x2000 // 8Kbyte
+            break
+
+    case 0x467 :
+            deviceStr = "0B1xx/0C1xx"
+            page_size = 0x800   // 2K single bank
+            sram_size = 0x20000 // 144K
+            hasDualBank = readDualBankOption()
+            if(hasDualBank)
+            {
+                flash_size = flash_size/2
+				if(flash_size > 0x20000) // 128Kbyte
+				{
+					bank2_start_address = 0x08040000
+				}
+            }
+            break
+
+    case 0x468 :
+            deviceStr = "43/44xx"
+            page_size = 0x800
+            cram_size = 0x2800 // 10K
+            sram_size = 0x8000 // 32K
+            break
+
+    case 0x469 :
+            deviceStr = "47/48xx"
+            page_size = 0x1000  // 4K single bank
+            cram_size = 0x8000  // 32K
+            sram_size = 0x20000 // 128K
+            hasDualBank = readDualBankOption()
+            if(hasDualBank)
+            {
+                page_size =  0x800  // 2K
+                flash_size = flash_size/2
+            }
+            break
+
+    default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32G%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X%s\nConfigured RAM : 0x%X\n", flash_size, (hasDualBank ? " - Dualbank" :""), sram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      sram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", sram_size)
+    }
+
+    if(hasDualBank)
+    {
+		if(cram_size ==0)
+			DeviceAPI().memmap( format( mem_dual_no_cram,   flash_size,
+                                                sram_size,
+                                                flash_size,
+                                                page_size,
+												bank2_start_address,
+                                                flash_size,
+                                                page_size) )
+		else
+			DeviceAPI().memmap( format( mem_dual_cram,   flash_size,
+                                                cram_size,
+                                                sram_size,
+                                                flash_size,
+                                                page_size,
+                                                flash_size,
+                                                page_size) )
+    }
+    else
+    {
+        if(cram_size ==0)
+            DeviceAPI().memmap( format( mem_single_no_cram, flash_size,
+                                                       sram_size,
+                                                       flash_size,
+                                                       page_size) )
+        else
+            DeviceAPI().memmap( format( mem_single_cram, flash_size,
+                                                    cram_size,
+                                                    sram_size,
+                                                    flash_size,
+                                                    page_size) )
+
+    }
+
+    // Flash loader script
+    require("stmicro/flash/wx_l4_gx.script")
+}
+
+
+////////////////////////////////////////
+//
+//  Helper function to get the dual bank
+//  option state
+//
+function readDualBankOption()
+{
+     intrfApi.readMem32(FLASH_BASE+0x20)
+     return (intrfApi.value32 & (1<<22) ? true: false)
+}

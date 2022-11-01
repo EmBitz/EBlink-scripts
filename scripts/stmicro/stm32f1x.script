@@ -1,0 +1,122 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32F1x
+//
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x00000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+<!-- option byte area -->
+ <memory type=\"rom\" start=\"0x1ffff800\" length=\"0x10\"/>
+</memory-map>"
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local flash_size
+    local page_size
+    local ram_size
+
+
+    // Get the flash size by reading the info register
+    _n_throw(intrfApi.readMem32(0x1ffff7e0))
+    flash_size = intrfApi.value32 & 0xFFFF
+    flash_size = (flash_size & 0xffff) * 1024
+
+    local deviceStr
+    switch(deviceId) {
+        case 0x410 : // CHIPID_STM32_F1_MEDIUM
+            deviceStr = "1x medium-density"
+            flash_size = 0x20000 // Override, chip has bug!!!
+            page_size = 0x400
+            ram_size = 0x5000
+            break
+
+        case 0x412 : // CHIPID_STM32_F1_LOW
+            deviceStr =  "1x low-density"
+            page_size = 0x400
+            ram_size = 0x2800
+            break
+
+        case 0x414 : // CHIPID_STM32_F1_HIGH
+            deviceStr =  "1x high-density"
+            page_size = 0x800
+            ram_size = 0x10000
+            break
+
+        case 0x418 : // CHIPID_STM32_F1_CONN
+            deviceStr =  "1x connectivity"
+            page_size = 0x800
+            ram_size = 0x10000
+            break
+
+        case 0x420 : // CHIPID_STM32_F1_VL_MEDIUM_LOW
+            deviceStr =  "100xx low/medium-density value line"
+            //medium and low devices have the same chipID ram size depends on flash size.
+            //STM32F100xx datasheet Doc ID 16455 Table 2
+            page_size = 0x400
+            if( flash_size < (64*1024) )
+                ram_size = 0x1000
+            else
+                ram_size = 0x2000
+            break
+
+        case 0x428 : // CHIPID_STM32_F1_VL_HIGH
+            deviceStr =  "100xx high-density value line"
+            page_size = 0x800
+            ram_size = 0x8000
+            break
+
+        case 0x430 : // CHIPID_STM32_F1_XL
+            deviceStr =  "1x XL-density (dual flash banks)"
+            page_size = 0x800
+            ram_size = 0x18000
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32F%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size, page_size) )
+
+    // Half Word flash loader script
+    require("stmicro/flash/f3_f1_f0.script")
+}

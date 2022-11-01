@@ -1,0 +1,120 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32F3x
+//
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces.
+//
+
+//*************************************************************
+//*****             Memory map of the F3                   ****
+//*************************************************************
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <memory type=\"rom\" start=\"0x00000000\" length=\"0x100000\"/>
+  <memory type=\"ram\" start=\"0x10000000\" length=\"0x4000\"/>
+  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%X\"/>
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x%X\">
+   <property name=\"blocksize\">0x%X</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+  <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+  <memory type=\"rom\" start=\"0x1fff0000\" length=\"0x7800\"/>
+  <memory type=\"rom\" start=\"0x1fffc000\" length=\"0x10\"/>
+ </memory-map>"
+
+
+const DBGMCU_CR      0xE0042004
+const DBGMCU_APB1_FZ 0xE0042008
+
+const DBG_SLEEP     (1<<0)
+const DBG_STOP      (1<<1)
+const DBG_STANDBY   (1<<2)
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local flash_size
+    local ram_size
+    local page_size = 0x800 // Default page size
+
+    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP
+    _n_throw(intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY | DBG_STOP | DBG_SLEEP  ))
+
+    // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
+    _n_throw(intrfApi.writeMem32(DBGMCU_APB1_FZ, 0x00001800))
+
+    // Get the flash size
+    _n_throw(intrfApi.readMem32(0x1ffff7cc))
+
+    // Translate from Kbytes to bytes
+    flash_size = (intrfApi.value32  & 0xffff) *1024
+
+    // Set the memory map argument(s) according the device ID
+      local deviceStr
+      switch(deviceId) {
+        case 0x422 : // CHIPID_STM32_F3
+            deviceStr = "02/3xB/C"
+            ram_size = 0xa000
+            break
+
+        case 0x432 : // CHIPID_STM32_F37x
+            deviceStr = "7x"
+            ram_size = 0xa000
+            break
+
+        case 0x438 : // CHIPID_STM32_F334
+            deviceStr = "3x"
+            ram_size = 0x3000
+            break
+
+        case 0x439 : // CHIPID_STM32_F3_SMALL
+            deviceStr = "02x6/8"
+            ram_size = 0xa000
+            break
+
+        case 0x446 : // CHIPID_STM32_F303_HIGH
+            deviceStr = "03xD/E"
+            ram_size = 0x10000
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32F3%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    DeviceAPI().memmap( format( mem_template, ram_size, flash_size, page_size ))
+
+    // Include flash loader script
+    require("stmicro/flash/f3_f1_f0.script")
+}

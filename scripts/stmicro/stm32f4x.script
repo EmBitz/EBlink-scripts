@@ -1,0 +1,201 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32F4x
+//
+
+
+//---------- Memory map of the F4 < 1MB
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <memory type=\"rom\" start=\"0x00000000\" length=\"0x%X\"/>
+  <memory type=\"ram\" start=\"0x10000000\" length=\"0x10000\"/>
+  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%X\"/>
+ <!-- Sectors 0..3 page size 16kB -->
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x10000\">
+   <property name=\"blocksize\">0x4000</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+  <!-- Sectors 4 page size 64kB -->
+  <memory type=\"flash\" start=\"0x08010000\" length=\"0x10000\">
+   <property name=\"blocksize\">0x10000</property>
+  </memory>
+    <!-- Sectors 5.. page size 128kB -->
+  <memory type=\"flash\" start=\"0x08020000\" length=\"0x%X\">
+   <property name=\"blocksize\">0x20000</property>
+  </memory>
+
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+  <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+  <memory type=\"rom\" start=\"0x1fff0000\" length=\"0x7800\"/>
+  <memory type=\"rom\" start=\"0x1fffc000\" length=\"0x10\"/>
+ </memory-map>"
+
+
+//--------   Memory map of the F4 with 2MB (e.g. STM32F429)
+const mem_template_2MB = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <memory type=\"rom\" start=\"0x00000000\" length=\"0x200000\"/>
+ <!-- ccm ram -->
+ <memory type=\"ram\" start=\"0x10000000\" length=\"0x10000\"/>
+ <!--   sram -->
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%X\"/>
+ <!--   fmc bank 1 (nor/psram/sram)  -->
+ <memory type=\"ram\" start=\"0x60000000\" length=\"0x10000000\"/>
+ <!--   fmc bank 2 & 3 (nand flash) -->
+ <memory type=\"ram\" start=\"0x70000000\" length=\"0x20000000\"/>
+ <!--   fmc bank 4 (pc card) -->
+ <memory type=\"ram\" start=\"0x90000000\" length=\"0x10000000\"/>
+ <!--   fmc sdram bank 1 & 2  -->
+ <memory type=\"ram\" start=\"0xC0000000\" length=\"0x20000000\"/>
+
+ <!-- Sectors 0..3 page size 16kB -->
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x10000\">
+   <property name=\"blocksize\">0x4000</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+ <!-- Sectors 4 page size 64kB -->
+  <memory type=\"flash\" start=\"0x08010000\" length=\"0x10000\">
+   <property name=\"blocksize\">0x10000</property>
+  </memory>
+ <!-- Sectors 5..11 page size 128kB -->
+  <memory type=\"flash\" start=\"0x08020000\" length=\"0xE0000\">
+    <property name=\"blocksize\">0x20000</property>
+  </memory>
+
+ <!-- Sectors 12..15 page size 16kB -->
+  <memory type=\"flash\" start=\"0x08100000\" length=\"0x10000\">
+   <property name=\"blocksize\">0x4000</property>
+  </memory>
+ <!-- Sectors 16 page size 64kB -->
+  <memory type=\"flash\" start=\"0x08110000\" length=\"0x10000\">
+   <property name=\"blocksize\">0x10000</property>
+  </memory>
+ <!-- Sectors 17..23 page size 128kB -->
+  <memory type=\"flash\" start=\"0x08120000\" length=\"0xE0000\">
+    <property name=\"blocksize\">0x20000</property>
+  </memory>
+
+ <!-- peripheral regs -->
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1FFFFFFF\"/>
+
+<!-- Cortex regs -->
+  <memory type=\"ram\" start=\"0xE0000000\" length=\"0x1FFFFFFF\"/>
+  <memory type=\"rom\" start=\"0x1FFF0000\" length=\"0x7800\"/>
+  <memory type=\"rom\" start=\"0x1FFFC000\" length=\"0x10\"/>
+</memory-map>"
+
+
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+function stm32_device()
+{
+    local flash_size
+    local ram_size
+
+    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+    _n_throw(intrfApi.writeMem32(0xE0042004, 7))
+
+    // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
+    _n_throw(intrfApi.writeMem32(0xE0042008, 0x00001800))
+
+    // Get the flash size
+    _n_throw(intrfApi.readMem32(0x1FFF7A22))
+
+    flash_size = intrfApi.value32 >>16
+    flash_size = (flash_size & 0xffff) *1024
+
+
+    // Set the memory map argument(s) according the device ID
+    local deviceStr
+    switch(deviceId) {
+        case 0x413 : // CHIPID_STM32_F4
+            deviceStr = "05/407/415/417"
+            ram_size = 0x30000
+            break
+
+        case 0x419 : // CHIPID_STM32_F4_HD
+            deviceStr = "2x/43x"
+            ram_size = 0x40000
+            break
+
+        case 0x421 : // CHIPID_STM32_F446
+            deviceStr = "46"
+            ram_size = 0x20000
+            break
+
+        case 0x423 : // CHIPID_STM32_F4_LP
+            deviceStr = "01xB/C (Low Power)"
+            ram_size = 0x10000
+            break
+
+        case 0x431 : // CHIPID_STM32_F411RE
+            deviceStr = "11"
+            ram_size = 0x20000
+            break
+
+        case 0x433 : // CHIPID_STM32_F4_DE
+            deviceStr = "01xD/E"
+            ram_size = 0x18000
+            break
+
+        case 0x434 : // CHIPID_STM32_F4_DSI
+            deviceStr = "69/479"
+            ram_size = 0x40000
+            break
+
+        case 0x441 : // CHIPID_STM32_F412
+            deviceStr = "12"
+            ram_size = 0x40000
+            break
+
+        case 0x458 : // CHIPID_STM32_F410
+            deviceStr = "10"
+            ram_size = 0x8000
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32F4%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+      if(flash_size < (128*1024))
+      {
+          errorf("ERROR: Flash size at least 128KB")
+          throw ERROR_NOTIFIED
+      }
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    if(flash_size > (1024*1024) )
+        DeviceAPI().memmap( format(mem_template_2MB, ram_size) )
+    else
+        // Substract the first 128Kb (sector 0..4)
+        DeviceAPI().memmap( format( mem_template, flash_size,
+                                                  ram_size,
+                                                  flash_size - (128*1024) ) )
+
+    // Include flash loader script
+    require("stmicro/flash/f7_f4_f2.script")
+}

@@ -1,0 +1,375 @@
+/////////////////////////////////////////////////////
+//
+//        STM32H7x - Single and DualCore
+//
+
+
+//--------- Core DAP-AP ports ---------
+const CM7_AP  0  // Cortex-M7
+const CM4_AP  3  // Cortex-M4
+
+//--------- Core start vectors --------
+const CM7_VEC 0x08000000
+const CM4_VEC 0x08100000
+
+//============== Debug registers and flags ==============
+const DBGMCU_CR       0x5c001004
+const DBGMCU_APB3FZ1  0x5c001034
+const DBGMCU_APB1LFZ1 0x5c00103C
+const DBGMCU_APB2FZ1  0x5c00104C
+const DBGMCU_APB4FZ1  0x5c001054
+
+// DBGMCU_CR
+const DBGSLEEP_D1   (1 << 0)
+const DBGSTOP_D1    (1 << 1)
+const DBGSTBY_D1    (1 << 2)
+const TRACE_CLKEN   (1 << 20)
+const D1DBGCKEN     (1 << 21)
+const D3DBGCKEN     (1 << 22)
+const TRGO_EN       (1 << 28)
+
+// DBGMCU_APB3FZ1
+const WWDG1_FRZ     (1 << 6)
+
+// DBGMCU_APB1LFZ1
+const DBG_TIM2      (1 << 0)
+const DBG_TIM3      (1 << 1)
+const DBG_TIM4      (1 << 2)
+const DBG_TIM5      (1 << 3)
+const DBG_TIM6      (1 << 4)
+const DBG_TIM7      (1 << 5)
+const DBG_TIM12     (1 << 6)
+const DBG_TIM13     (1 << 7)
+const DBG_TIM14     (1 << 8)
+const DBG_LPTIM1    (1 << 9)
+const DBG_I2C1      (1 << 21)
+const DBG_I2C2      (1 << 22)
+const DBG_I2C3      (1 << 23)
+
+// DBGMCU_APB2FZ1
+const DBG_TIM1      (1 << 0)
+const DBG_TIM8      (1 << 1)
+const DBG_TIM15     (1 << 16)
+const DBG_TIM16     (1 << 17)
+const DBG_TIM17     (1 << 18)
+const DBG_HRTIM     (1 << 29)
+
+// DBGMCU_APB4FZ1
+const DBG_I2C4      (1 << 7)
+const DBG_LPTIM2    (1 << 9)
+const DBG_LPTIM3    (1 << 10)
+const DBG_LPTIM4    (1 << 11)
+const DBG_LPTIM5    (1 << 12)
+const DBG_RTC       (1 << 16)
+const DBG_IIWDG1    (1 << 18) // Stop watchdog in debug
+
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+//   We use @@ to denote that it is a multi-line format string and not verbatim.
+//
+const mem_template_H7 = @@"
+<?xml version=\"1.0\"?> <memory-map>
+    <!-- ITCM ram 64kB -->
+    <memory type=\"ram\" start=\"0x00000000\" length=\"0x10000\"/>
+
+    <!-- Place holder for sram aliases -->
+    %s
+
+    <!-- DTCM Ram, 128kB -->
+    <memory type=\"ram\" start=\"0x20000000\" length=\"0x20000\"/>
+
+    <!-- AXI Ram (D1),  512kB -->
+    <memory type=\"ram\" start=\"0x24000000\" length=\"0x80000\"/>
+
+    <!-- AHB SRAM1, 128 kB -->
+    <memory type=\"ram\" start=\"0x30000000\" length=\"0x20000\"/>
+
+    <!-- AHB SRAM2, 128 kB -->
+    <memory type=\"ram\" start=\"0x30020000\" length=\"0x20000\"/>
+
+    <!-- AHB SRAM3,  32 kB -->
+    <memory type=\"ram\" start=\"0x30040000\" length=\"0x08000\"/>
+
+    <!-- AHB SRAM4,  64 kB -->
+    <memory type=\"ram\" start=\"0x38000000\" length=\"0x10000\"/>
+
+    <!-- Backup SRAM -->
+    <memory type=\"ram\" start=\"0x38800000\" length=\"0x01000\"/>
+
+    <!-- Sectors 0..7 128KB each -->
+    <memory type=\"flash\" start=\"0x08000000\" length=\"0x%X\">
+        <property name=\"blocksize\">0x20000</property>
+        <property name=\"secstart\">0</property>
+    </memory>
+
+    <!-- Place holder for second 1MB bank -->
+    %s
+
+    <!-- peripheral regs -->
+    <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+
+    <!-- AHB3 Peripherals -->
+    <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+
+    <!-- cortex regs -->
+    <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+
+    <!-- bootrom -->
+    <memory type=\"rom\" start=\"0x00100000\" length=\"0xEDC0\"/>
+
+    <memory type=\"rom\" start=\"0x1fff0000\" length=\"0x20\"/>
+
+    <!-- option byte area (virtual sector) -->
+    <memory type=\"flash\" start=\"0x1ff20000\" length=\"32\">
+        <property name=\"blocksize\">32</property>
+        <property name=\"secstart\">999</property>
+        <property name=\"sectype\">virtual</property>
+    </memory>
+
+</memory-map>"
+
+
+// The second 1MB bank if available which is put into the place holder above
+const mem_2MB = @@"
+    <!-- Sectors 8..16 128kB each -->
+    <memory type=\"flash\" start=\"0x08100000\" length=\"0x100000\">
+        <property name=\"blocksize\">0x20000</property>
+    </memory>"
+
+// Dual core has some additional sram aliases
+const mem_ram_alias = @@"
+    <!-- SRAM1 alias -->
+    <memory type=\"ram\" start=\"0x10000000\" length=\"0x20000\"/>
+
+    <!-- SRAM2 alias -->
+    <memory type=\"ram\" start=\"0x10020000\" length=\"0x20000\"/>
+
+    <!-- SRAM3 alias -->
+    <memory type=\"ram\" start=\"0x10040000\" length=\"0x20000\"/>"
+
+
+// Gloabal variables
+hasSecondBank <- false // Global boolean used by flash script
+hasDualCore   <- false // There is a Dual Core
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local flash_size
+    local ram_size
+
+
+    // Enable debug clocks
+    _n_throw( intrfApi.readMem32(DBGMCU_CR) )
+    _n_throw( intrfApi.writeMem32(DBGMCU_CR, intrfApi.value32 | DBGSTBY_D1 | D1DBGCKEN | D3DBGCKEN) )
+
+    // Stop watchdog counters during halt: DBGMCU_APB4FZ1 |= DBG_IIWDG1
+    _n_throw( intrfApi.readMem32(DBGMCU_APB4FZ1) )
+    _n_throw( intrfApi.writeMem32(DBGMCU_APB4FZ1, intrfApi.value32 | DBG_IIWDG1) )
+
+    // If IWDG runs as HARDWARE watchdog (44.3.4) erase
+    // will be aborted by the Watchdog and erase fails!
+    // Setting IWDG_KR to 0xaaaa does not seem to help!*/
+    _n_throw( intrfApi.readMem32(0x52002020) )
+    if( !(intrfApi.value32 & (1<<4) ) )
+        printf("\nHardware IWDG running, expect failure.\nSet IWDG1_SW!\n\n")
+
+    // Get the flash size by reading the info register
+    // Be sure that we are usig DAP-AP 0, the user can change the
+    // default interface AP-port on the CLI
+    local curAp = intrfApi.setDapAp(0)
+    intrfApi.readMem32(0x1ff1e880)    
+    intrfApi.setDapAp(curAp) // Restore the default DAP-AP!
+
+    // Check if the read was succesful
+    if(intrfApi.result < ERROR_OK)
+        _n_throw(interfApi.result)
+
+    flash_size = (intrfApi.value32 & 0xffff) * 1024
+
+    local deviceStr
+    switch(deviceId) {
+         case 0x450 :
+             deviceStr = "74x/75x"
+             if( hasDualCore = checkDualCore(CM4_AP) )
+                 deviceStr += " - DualCore (CM7/CM4)"
+             ram_size = 0x80000
+             break
+
+        case 0x480 :
+            deviceStr = "7Ax/7Bx"
+            ram_size = 0x80000
+            break
+
+        case 0x483 :
+            deviceStr = "72x/73x"
+            ram_size = 0x80000
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32H%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && ( FLASH_SIZE > 0 ) )
+    {
+        flash_size = (FLASH_SIZE & 0xffff) * 1024
+        printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && (RAM_SIZE > 0) )
+    {
+       ram_size = (RAM_SIZE & 0xffff) * 1024
+       printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    // If we have more then 1MB, add the second bank
+    if(flash_size > 0x100000)
+    {
+        flash_size = 0x100000
+        hasSecondBank = true
+    }
+
+    // Generate XML and put it in EBlink's device object
+    DeviceAPI().memmap( format(mem_template_H7, ( hasDualCore ? mem_ram_alias : "" ), flash_size, ( hasSecondBank ? mem_2MB : "") ) )
+
+    // Use the normal H7 flash algorithm
+    require("stmicro/flash/h7.script")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// We overrule the default reset_post function 
+//
+// resetType:
+//        SYSTEM_RESET
+//        CORE_RESET
+//        JTAG_RESET
+//        USER_RESET
+//
+function  reset_post_hook(resetType)
+{
+    // We don't use this if the reset is a user_script type. In that
+    // case, the user is responsible for the initialization.
+    //
+    if( resetType != USER_RESET )
+    {
+        try
+        {
+            // CM7  vector table start as default
+            local cpuVector = CM7_VEC
+
+            // If CM4 is reset, change vector table start address
+            if(intrfApi.getDapAp() == CM4_AP)
+                cpuVector = CM4_VEC
+
+            // Set the Stack pointer according the Vector table entry
+            _n_throw( intrfApi.readMem32(cpuVector) )
+            _n_throw( targetApi.writeReg("SP", intrfApi.value32) )
+
+            // Set the Program pointer according the Vector table entry
+            _n_throw( intrfApi.readMem32(cpuVector + 4) )
+            _n_throw( targetApi.writeReg("PC", intrfApi.value32) )
+
+            // Print additional info if we have dual core
+            if(hasDualCore)
+                printf("... on target %s\n", intrfApi.getDapAp() == CM4_AP ? "CM4" :  "CM7")
+        }
+
+        // Catch the errors
+        catch(e){
+            if(e < ERROR_NOTIFIED)
+                errorf("\nError: Resetting! %d\n", e )
+            return ERROR_NOTIFIED
+        }
+    }
+
+    return ERROR_OK
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Define services (optional) called by EBlink when the Service Manager is started
+//
+//  Remark:
+//    Add all the services or add none.
+//    As soon as a service is added, any EBlink default services are skipped and
+//    the user is responsible to add all the needed services.
+//
+function services_setup()
+{
+    // If we only have one core we can use the EBlink default services
+    if(!hasDualCore)
+        return ERROR_OK
+
+    try
+    {
+        local servicesApi = :: ServicesAPI()  // API to the services manager
+
+        //                                 service        Name                  service-options
+        //------------------------------------------------------------------------------------------------------
+        _n_throw( servicesApi.addService("GDB-target", "GDB_CM7",  format("%s,ap=%d", cliSwitch("-G"),CM7_AP )) )// Add GDB server for cpu1
+        _n_throw( servicesApi.addService("GDB-target", "GDB_CM4",  format("%s,ap=%d", cliSwitch("-G"),CM4_AP )) )// Add GDB server for cpu2
+
+        // Remark:
+        //  We start the GDB servers with the original GDB options from the command line (like no-caching etc)
+        //  and override the dap-ap port id.
+        //  Place the "ap=%d" at the end of the options!!
+    }
+
+    // Catch the errors
+    catch(e){
+        if(e < ERROR_NOTIFIED)
+            errorf("Error(%d): Services!\n", e )
+        return ERROR_NOTIFIED
+    }
+
+    return ERROR_OK
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Check if there is an core on given dap_ap
+//  We assume that a non zero cpuid is valid core
+//
+function checkDualCore(dap_ap)
+{
+    // Check user dual core override
+    // -D DUAL_CORE(=1)  enables  dual core  '=1' is optional default defined's are 1
+    // -D DUAL_CORE=0    disables dual core
+    if(isScriptObject("DUAL_CORE"))
+        return ( DUAL_CORE ? true : false)
+
+    // Read the core ID
+    local curAp = intrfApi.setDapAp(dap_ap)
+    intrfApi.readMem32(0xE000ED00)
+    intrfApi.setDapAp(curAp)
+
+    // Check if the read was successful
+    if(intrfApi.result < ERROR_OK)
+        return false
+
+    // Not sure this is right but if the CM4 is invisible because disabled by CM7 then
+    // the upper byte is not zero but the lower 3 bytes are zero.
+    if( intrfApi.value32 && !(intrfApi.value32 & 0xFFFFFF))
+        printf("DualCore status: Disabled (single core mode)\n")
+
+    // cpuID of non-zero is valid core
+    return (intrfApi.value32 & 0xFFFFFF ? true : false)
+}

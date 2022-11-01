@@ -1,0 +1,267 @@
+//! STmicro
+/////////////////////////////////////////////////////
+//
+//     This is a virtual device for STM32 cortex's
+//     The real device type is checked by reading
+//     the device ID and include the corresponding
+//     device script's
+//
+//     The script tries to detect the right memory sizes
+//     however, if this is not correct you can set the sizes
+//     in kilobytes on the command line as:
+//
+//         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx  (check also device scripts)
+//
+
+intrfApi <- InterfAPI()  // Global so that all included script files also have access
+targetApi<- TargetAPI()  // Global interface to the target class
+deviceId <- 0            // Global deviceId
+
+// Used by script to denote a not found devcie
+const ERROR_NOT_FOUND -100
+
+/////////////////////////////////////////////////////
+//
+//  EBlink called Entry point
+//
+function main()
+{
+    try{
+        findSTmicroDevice()
+    }
+    catch(e)
+    {
+        if( e == ERROR_NOT_FOUND)
+            if(deviceId)
+            {
+                printf("\n\nPlease report this ID so that we can add it.\n")
+                errorf("Error unsupported STM32 ID: 0x%X\n", deviceId)
+            }
+            else
+                errorf("ERROR: No valid STmicro device ID found\n")
+        else
+            errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
+        return ERROR_NOTIFIED  // We have already thrown an error so use -1 (otherwise < -1)
+    }
+    return ERROR_OK
+}
+
+/////////////////////////////////////////////////////
+//
+//
+//
+function findSTmicroDevice()
+{
+    // Check if the right script API is supported
+    if( VERSION < 4.7)
+    {
+       errorf("Error:\n\nIncompatiable EBlink version %.1f\n\tPlease update\n", VERSION)
+       throw ERROR_NOTIFIED
+    }
+
+    // Default device ID register
+    local result = intrfApi.readMem32(0xE0042000)
+
+    //Otherwise.. try Corex M0 DBGMCU_IDCODE register address
+    if( (result >=0) && (intrfApi.value32 == 0) )
+        result = intrfApi.readMem32(0x40015800)
+
+    //Otherwise.. Perhaps H7
+    if( (result >=0) && (intrfApi.value32 == 0) )
+        result = intrfApi.readMem32(0x5C001000)
+
+    //Otherwise.. Perhaps L5
+    if( (result >=0) && (intrfApi.value32 == 0) )
+        result = intrfApi.readMem32(0xE0044000)
+
+    //Set our global device ID
+    deviceId = intrfApi.value32
+
+    if(deviceId == 0)
+        throw ERROR_NOT_FOUND
+
+    // We have valid device ID which will be used to load the right scripts
+    set_target()
+}
+
+
+
+/////////////////////////////////////////////////////
+//
+//
+//
+function set_target()
+{
+    deviceId = deviceId & 0xfff // Filter device ID part
+    noticef("STmicro device : 0x%X\n", deviceId)
+
+    switch(deviceId)
+    {
+
+    // Cortex M0
+    case 0x440 : // CHIPID_F0
+    case 0x442 : // CHIPID_F09X
+    case 0x444 : // CHIPID_STM32_F0_SMALL
+    case 0x445 : // CHIPID_STM32_F04
+    case 0x448 : // STM32_CHIPID_F0_CAN
+        require("stmicro/stm32f0x.script")
+        break
+
+    // Cortex M0+
+    case 0x417 : // CHIPID_STM32_L0
+    case 0x425 : // CHIPID_STM32_L0_CAT2
+    case 0x447 : // CHIPID_STM32_L0_CAT5
+    case 0x457 : // CHIPID_STM32_L0_CAT1
+        require("stmicro/stm32l0x.script")
+        break
+
+    // Cortex M0+
+    case 0x466 : // STM32G03xxx/04xxx
+    case 0x456 : // STM32G05xxx/06xxx
+    case 0x460 : // STM32G07xxx/08xxx
+    case 0x467 : // STM32G0B1xx/0C1xx
+        require("stmicro/stm32gx.script")
+        break
+
+    // Cortex M3
+    case 0x410 : // CHIPID_STM32_F1_MEDIUM
+    case 0x412 : // CHIPID_STM32_F1_LOW
+    case 0x414 : // CHIPID_STM32_F1_HIGH
+    case 0x418 : // CHIPID_STM32_F1_CONN
+    case 0x420 : // CHIPID_STM32_F1_VL_MEDIUM_LOW
+    case 0x428 : // CHIPID_STM32_F1_VL_HIGH
+    case 0x430 : // CHIPID_STM32_F1_XL
+        require("stmicro/stm32f1x.script")
+        break
+
+    // Cortex M3 XXXXXXXXXXXX
+    case 0x416 : // CHIPID_STM32_L1_MEDIUM
+    case 0x427 : // CHIPID_STM32_L1_MEDIUM_PLUS
+    case 0x429 : // CHIPID_STM32_L1_CAT2
+    case 0x436 : // CHIPID_STM32_L1_HIGH
+    case 0x437 : // CHIPID_STM32_L152_RE
+        require("stmicro/stm32l1x.script")
+        break
+
+    // Cortex M3
+    case 0x411 : // CHIPID_STM32_F2
+
+        // Fix chip_id for F4 rev A errata , Read CPU ID, as CoreID is the same for F2/F4
+        _n_throw(intrfApi.readMem32(0xE000ED00))
+        if ((intrfApi.value32  & 0xfff0) == 0xc240)
+        {
+            deviceId = 0x413
+            require("stmicro/stm32f4x.script")
+            break
+        }
+
+        require("stmicro/stm32f2x.script")
+        break
+
+    // Cortex M4
+    case 0x422 : // CHIPID_STM32_F3
+    case 0x432 : // CHIPID_STM32_F37x
+    case 0x438 : // CHIPID_STM32_F334
+    case 0x439 : // CHIPID_STM32_F3_SMALL
+    case 0x446 : // CHIPID_STM32_F303_HIGH
+        require("stmicro/stm32f3x.script")
+        break
+
+
+    // Cortex M4
+    case 0x413 : // CHIPID_STM32_F4
+    case 0x419 : // CHIPID_STM32_F4_HD
+    case 0x421 : // CHIPID_STM32_F446
+    case 0x423 : // CHIPID_STM32_F4_LP
+    case 0x431 : // CHIPID_STM32_F411RE
+    case 0x433 : // CHIPID_STM32_F4_DE
+    case 0x434 : // CHIPID_STM32_F4_DSI
+    case 0x441 : // CHIPID_STM32_F412
+    case 0x458 : // CHIPID_STM32_F410
+        require("stmicro/stm32f4x.script")
+        break
+
+    // Cortex M4
+    case 0x415 : // CHIPID_STM32_L4
+    case 0x435 : // CHIPID_STM32_L43X
+    case 0x461 : // CHIPID_STM32_L49X/L4A
+    case 0x462 : // CHIPID_STM32_L45X/L46X
+    case 0x464 : // CHIPID_STM32_L41X/L42X
+    case 0x470 : // CHIPID_STM32_L4R/L4S
+    case 0x471 : // CHIPID_STM32_L4P5/L4Q5x
+        require("stmicro/stm32l4x.script")
+        break
+
+    // Cortex M4
+    case 0x468 : // STM32G431xx/441xx
+    case 0x469 : // STM32G47xxx/48xxx
+        require("stmicro/stm32gx.script")
+        break
+
+    // Cortex M4
+    case 0x495 : // CHIPID_STM32_WB5x
+    case 0x496 : // CHIPID_STM32_WB3x
+    case 0x497 : // CHIPID_STM32_WLEx
+        require("stmicro/stm32wxxx.script")
+        break
+
+    // Cortex M7
+    case 0x449 : // CHIPID_STM32_F7
+    case 0x451 : // CHIPID_STM32_F7xx
+    case 0x452 : // CHIPID_STM32_F72x
+        require("stmicro/stm32f7x.script")
+        break
+
+    // Cortex M7
+    case 0x450 : // CHIPID_STM32H74/5
+    case 0x480 : // CHIPID_STM32H7A/B
+    case 0x483 : // CHIPID_STM32H72/3
+        require("stmicro/stm32h7x.script")
+        break
+
+
+    // ---------- Not supported ChipId yet -----------
+    default:
+        throw ERROR_NOT_FOUND
+    }
+
+    // Call our generic entry point of the device script we just loaded
+    stm32_device()
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Additional commands after reset (optional) called by EBlink
+//
+// resetType:
+//        SYSTEM_RESET
+//        CORE_RESET
+//        JTAG_RESET
+//        USER_RESET
+//
+function  reset_post(resetType)
+{
+    // Check if there is an user defined post reset hook, the user
+    // can add his own reset strategy with -S <myscript> as last
+    // defined script on the cli.
+    if (isScriptObject("reset_post_hook"))
+        return reset_post_hook(resetType);
+
+    // We don't use this if the reset is a user_script type. In that
+    // case, the user is responsible for the initialization.
+    //
+    if( resetType != USER_RESET )
+    {
+        // Set the Stack pointer according the Vector table entry
+        intrfApi.readMem32(0x08000000)
+        targetApi.writeReg("SP", intrfApi.value32)
+
+        // Set the Program pointer according the Vector table entry
+        intrfApi.readMem32(0x08000004)
+        targetApi.writeReg("PC", intrfApi.value32)
+    }
+
+    return ERROR_OK
+}
+
+

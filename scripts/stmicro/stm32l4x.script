@@ -1,0 +1,145 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32FL4x
+//
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces.
+//
+
+//*************************************************************
+//*****             Memory map of the L4                   ****
+//*************************************************************
+const mem_template_L4 = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <memory type=\"rom\" start=\"0x00000000\" length=\"0x100000\"/>
+  <memory type=\"ram\" start=\"0x10000000\" length=\"0x4000\"/>
+  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+   <property name=\"blocksize\">0x%x</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+  <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+  <memory type=\"rom\" start=\"0x1fff0000\" length=\"0x7800\"/>
+  <memory type=\"rom\" start=\"0x1fffc000\" length=\"0x10\"/>
+ </memory-map>"
+
+
+// The parameters for the flash script
+const FLASH_BASE 0x40022000
+hasDualBank <- false // Can be set by upper scripts is we have dual bank support
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local flash_size
+    local page_size
+    local ram_size
+
+    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+    _n_throw(intrfApi.writeMem32(0xE0042004, 7))
+
+    // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
+    _n_throw(intrfApi.writeMem32(0xE0042008, 0x00001800))
+
+    // Get the flash size in KB
+    _n_throw(intrfApi.readMem32(0x1fff75e0))
+    flash_size = (intrfApi.value32 &0xFFFF) *1024
+
+    // Set the memory map according the device ID
+      local deviceStr
+      switch(deviceId) {
+        case 0x415 : // CHIPID_STM32_L47/L48
+        case 0x461 : // CHIPID_STM32_L49X/L4A
+            deviceStr = ( deviceId == 0x415 ? "L47/L48xx" : "L49/L4Axx")
+            if( (flash_size == (1024*1024)) && readDualBankOption(21) )
+            {
+                hasDualBank = true
+            }
+            ram_size = 0x18000
+            page_size = 0x800
+            break
+
+        case 0x435 :
+            deviceStr = "L43/L44xx"
+            ram_size = 0x10000
+            page_size = 0x800
+            break
+
+        case 0x462 :
+            deviceStr = "L45/L46xx"
+            ram_size = 0x10000
+            page_size = 0x800
+            break
+
+        case 0x464 :
+            deviceStr = "L41/L42xx"
+            ram_size = 0x10000
+            page_size = 0x800
+            break
+
+        case 0x470 : // CHIPID_STM32_L4R/L4S
+        case 0x471 : // CHIPID_STM32_L4P5/L4Q5x
+            deviceStr = ( deviceId == 0x470 ? "L4R/L4Sxx" : "L4P5/L4Q5x")
+            page_size = 0x2000
+            if( (flash_size == (1024*1024)) & readDualBankOption(21) )
+            {
+                hasDualBank = true
+                page_size = 0x1000
+            }
+            ram_size = 0x18000
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X%s\nConfigured RAM : 0x%X\n", flash_size, (hasDualBank ? " - Dualbank" :""), ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    DeviceAPI().memmap(format( mem_template_L4, ram_size, flash_size, page_size))
+
+    // Include flash loader script
+    require("stmicro/flash/wx_l4_gx.script")
+}
+
+////////////////////////////////////////
+//
+//  Helper function to get the dual bank
+//  option state
+//
+function readDualBankOption(bit)
+{
+     intrfApi.readMem32(FLASH_BASE+0x20)
+     return (intrfApi.value32 & (1<<bit) ? true: false)
+}
+

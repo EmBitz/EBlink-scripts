@@ -1,0 +1,508 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//                   STM32F7H7_flash
+//
+// TODO: This script is not yet capable of flashing <2.7V
+//
+
+// Same Flash registers for both banks access depends on Flash Base address
+const FLASH_ACR       0x00
+const FLASH_KEYR      0x04
+const FLASH_OPTKEYR   0x08
+const FLASH_CR        0x0C
+const FLASH_SR        0x10
+const FLASH_CCR       0x14
+const FLASH_OPTCR     0x18
+const FLASH_OPTSR_CUR 0x1C
+const FLASH_OPTSR_PRG 0x20
+const FLASH_OPTCCR    0x24
+const FLASH_WPSN_CUR  0x38
+const FLASH_WPSN_PRG  0x3C
+
+
+// FLASH_CR register bits
+const FLASH_LOCK     (1 << 0)
+const FLASH_PG       (1 << 1)
+const FLASH_SER      (1 << 2)
+const FLASH_BER      (1 << 3)
+const FLASH_PSIZE_8  (0 << 4)
+const FLASH_PSIZE_16 (1 << 4)
+const FLASH_PSIZE_32 (2 << 4)
+const FLASH_PSIZE_64 (3 << 4)
+const FLASH_FW       (1 << 6)
+const FLASH_START    (1 << 7)
+
+// FLASH_SR register bits
+const FLASH_BSY      (1 << 0)  // Operation in progress
+const FLASH_QW       (1 << 2)  // Operation queue in progress
+const FLASH_WRPERR   (1 << 17) // Write protection error
+const FLASH_PGSERR   (1 << 18) // Programming sequence error
+const FLASH_STRBERR  (1 << 19) // Strobe error
+const FLASH_INCERR   (1 << 21) // Inconsistency error
+const FLASH_OPERR    (1 << 22) // Operation error
+const FLASH_RDPERR   (1 << 23) // Read Protection error
+const FLASH_RDSERR   (1 << 24) // Secure Protection error
+const FLASH_SNECCERR (1 << 25) // Single ECC error
+const FLASH_DBECCERR (1 << 26) // Double ECC error
+
+// FLASH_OPTCR register bits
+const OPT_LOCK               (1 << 0)
+const OPT_START              (1 << 1)
+
+// FLASH_OPTSR register bits
+const OPT_BSY                 (1 << 0)
+const OPT_RDP_POS              8
+const OPT_RDP_MASK            (0xff << 8)
+const OPT_OPTCHANGEERR        (1 << 30)
+
+// FLASH_OPTCCR register bits
+const OPT_CLR_OPTCHANGEERR    (1 << 30)
+
+// register unlock keys
+const KEY1                    0x45670123
+const KEY2                    0xCDEF89AB
+
+// option register unlock key
+const OPTKEY1                 0x08192A3B
+const OPTKEY2                 0x4C5D6E7F
+
+const FLASH_BANK0_ADDRESS     0x08000000
+const FLASH_BANK1_ADDRESS     0x08100000
+const FLASH_REG_BASE_B0       0x52002000
+const FLASH_REG_BASE_B1       0x52002100
+
+// Mask of all the errors
+FLASH_ERROR <- (FLASH_WRPERR | FLASH_PGSERR | FLASH_STRBERR | FLASH_INCERR | FLASH_OPERR |
+                      FLASH_RDPERR | FLASH_RDSERR | FLASH_SNECCERR | FLASH_DBECCERR)
+
+maxFlashSpeed   <- 10000 // 10MHz is max speed for direct programming (we think)
+
+// Generic Flash Script errors
+require("stmicro/flash/errors.script")
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Unlock the flash and preload the flash loader called by EBlink
+//
+function flash_start()
+{
+    // Override the maximum flash speed from cli
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
+    {
+        maxFlashSpeed = FLASH_SPEED
+        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+    }
+
+    // Check that we don't go faster than the user selected on the cli
+    if(maxFlashSpeed > intrfApi.getSpeed())
+        maxFlashSpeed = intrfApi.getSpeed()
+
+    try{
+        // Be sure that the core is halted
+        _n_throw( targetApi.halt() )
+
+        // Wait for halt
+        local time = GetTickCount();
+        do{
+            _n_throw( targetApi.poll() )
+
+          // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+              _n_throw(ERROR_TIMEOUT)
+
+        } while(targetApi.getState() != TARGET_HALTED )
+
+        // Check voltage
+        if(intrfApi.targetVoltage() < 2.7)
+            _n_throw(ERROR_VOLTAGE)
+
+        return ERROR_OK
+    }
+
+    // Catch the errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: target initializing! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   The sector erase is called by EBlink if a sector need to be changed
+//   Sector erase sequence according ST user manual
+//
+function flash_erase(sector, address)
+{
+    local regbase = FLASH_REG_BASE_B0 // first flash bank
+
+    // Skip the virtual option sector
+    if(sector == 999)
+      return ERROR_OK
+
+    try{
+        local bnkSector = sector
+
+        // Select the right bank
+        if (address >= FLASH_BANK1_ADDRESS) {
+            regbase = FLASH_REG_BASE_B1 // Second flash bank
+            bnkSector = sector-8
+        }
+
+        // 1)  Check and clear (optional) all the error flags due to previous programming/erase
+        flash_get_clear_status(regbase)
+
+        // 2) Unlock the flash bank
+        flash_unlock(regbase)
+
+        // Not sure: We come out of reset with HSI 64 MHz. Adapt FLASH_ACR.
+        //_n_throw( intrfApi.writeMem32(regbase, 0) )
+
+        // (3) Set the SER bit and select the sector out of the 8 in the main memory block) you wish to erase (SNB) in the FLASH_CR register
+        // (4) Set the STRT bit in the FLASH_CR register also
+        _n_throw( intrfApi.writeMem32(regbase + FLASH_CR, (bnkSector<<8) | FLASH_SER  | FLASH_PG | FLASH_START ) )
+
+        // (5) Wait for the QW1/2 bit and BSY1/2 to be cleared in the corresponding FLASH_SR1/2 register
+        local time = GetTickCount();
+        do{
+            _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
+
+            // Timeout of 5sec
+            if(GetTickCount() - time > 5000)
+              _n_throw( ERROR_TIMEOUT)
+        }while ( intrfApi.value32 &  (FLASH_QW | FLASH_BSY) )
+
+        // Check for errors
+        if(intrfApi.value32 & FLASH_ERROR )
+          _n_throw(ERROR_FLASH)
+
+        // Lock the flash again
+        flash_lock(regbase)
+
+        return ERROR_OK
+    }
+
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: sector %d erase failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink to flash a sector
+//
+function flash_write(sector, address, buffer)
+{
+    local regbase = FLASH_REG_BASE_B0 // first flash bank
+
+    // If this is the virtual option sector, go to options write function
+    if(sector == 999)
+      return option_write(buffer)
+
+    // Select the right flash bank
+    if (address >= FLASH_BANK1_ADDRESS)
+        regbase = FLASH_REG_BASE_B1 // Second flash bank
+
+    // Flash loader works with multiple of 32 bytes.
+    buffer.trim(32)
+
+    try{
+        // Unlock flash
+        flash_unlock(regbase)
+
+        // Enable the program flag PG in flash_CR and 32bits parallelism
+        _n_throw( intrfApi.writeMem32(regbase+FLASH_CR, FLASH_PSIZE_32 | FLASH_PG ) )
+
+        // Lower the probe speed
+        local probeSpeed = intrfApi.getSpeed()
+        _n_throw(intrfApi.setSpeed(maxFlashSpeed))
+
+        // Write the buffer direct to flash with 32 bits access
+        _n_throw( intrfApi.writeBuf(address, buffer, 32) )
+
+        // Restore probe speed
+        _n_throw( intrfApi.setSpeed(probeSpeed) )
+
+        // Check and clear (optional) all the error flags due to previous programming/erase
+        _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
+        if(intrfApi.value32 & FLASH_ERROR )
+           _n_throw(ERROR_FLASH)
+
+        // Disable the program flag  PG in flash_CR
+        _n_throw( intrfApi.writeMem32(regbase+ FLASH_CR, 0) )
+
+        // Lock the flash again
+        flash_lock(regbase)
+
+        return ERROR_OK
+    }
+
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: sector %d writing failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Write STM32H7 option bytes
+//
+//  Virtual sector 999 of 32 bytes with format as below.
+//  Be aware of reserved reset values!! (otherwise program errors)
+//
+//  typedef struct {       //   Reset    Flash control offset
+//     un32 FLASH_OPTSR;   //0x1416AAF0  0x20 (alias 0x120)
+//     un32 FLASH_BOOT;    //0x1FF00800  0x44 (alias 0x144)
+//     un32 FLASH_PRAR_x1; //0x000000FF  0x2C
+//     un32 FLASH_PRAR_x2; //0x000000FF  0x12C
+//     un32 FLASH_SCAR_x1; //0x800000FF  0x34
+//     un32 FLASH_SCAR_x2; //0x800000FF  0x134
+//     un32 FLASH_WPSN_x1; //0x000000FF  0x3C
+//     un32 FLASH_WPSN_x2; //0x000000FF  0x13C
+//  } STM32H7_options;
+//
+//
+function option_write(buffer)
+{
+    local regbase = FLASH_REG_BASE_B0 // first flash bank
+
+    // Check if the buffer is valid
+    if(buffer.getSize() != 32)
+    {
+       errorf("Error: Option program length is %d, should be 32 bytes\n", buffer.getSize())
+       return ERROR_NOTIFIED
+    }
+
+    printf("\n\nStart writing option bytes virtual sector 999\n")
+
+    try{
+        //------------- Unlock options  --------------
+        // Read flash FLASH_OPTCR
+        _n_throw( intrfApi.readMem32(regbase + FLASH_OPTCR) )
+
+        // Check if options are locked by the FLASH_OPTCR_OPTLOCK flag
+        if( intrfApi.value32 & OPT_LOCK  )
+        {
+            // Write FLASH_OPTKEYR to unlock
+            _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY1) )
+            _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY2) )
+
+
+            // Reread flash FLASH_OPTCR to check if we are unlocked
+            _n_throw( intrfApi.readMem32(regbase + FLASH_OPTCR) )
+            if( intrfApi.value32 & OPT_LOCK  )
+              _n_throw(ERROR_UNLOCK)
+        }
+
+        //-------------- Program the options ---------
+        printf("FLASH_OPTSR  : 0x%x\n", buffer.un32(0))
+        _n_throw( intrfApi.writeMem32(regbase + 0x20, buffer.un32(0) ) )
+
+        printf("FLASH_BOOT   : 0x%x\n", buffer.un32(4))
+        _n_throw( intrfApi.writeMem32(regbase + 0x44, buffer.un32(4) ) )
+
+        printf("FLASH_PRAR_x1: 0x%x\n", buffer.un32(8))
+        _n_throw( intrfApi.writeMem32(regbase + 0x2C, buffer.un32(8) ) )
+
+        printf("FLASH_PRAR_x2: 0x%x\n", buffer.un32(12))
+        _n_throw( intrfApi.writeMem32(regbase + 0x12C, buffer.un32(12) ) )
+
+        printf("FLASH_SCAR_x1: 0x%x\n", buffer.un32(16))
+        _n_throw( intrfApi.writeMem32(regbase + 0x34, buffer.un32(16) ) )
+
+        printf("FLASH_SCAR_x2: 0x%x\n", buffer.un32(20))
+        _n_throw( intrfApi.writeMem32(regbase + 0x134, buffer.un32(20) ) )
+
+        printf("FLASH_WPSN_x1: 0x%x\n", buffer.un32(24))
+        _n_throw( intrfApi.writeMem32(regbase + 0x3C, buffer.un32(24) ) )
+
+        printf("FLASH_WPSN_x2: 0x%x\n", buffer.un32(28))
+        _n_throw( intrfApi.writeMem32(regbase + 0x13C, buffer.un32(28) ) )
+
+        //------------- Commit options  --------------
+
+        // Remove OPT error flag in FLASH_OPTCCR before programming
+        _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTCCR, OPT_OPTCHANGEERR) )
+
+        // Set the FLASH_OPTCR_OPTSTART in the FLASH_OPTCR
+        _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_START) )
+
+        local time = GetTickCount();
+        do{
+            AnimateCursor();
+
+            // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+                _n_throw( ERROR_TIMEOUT)
+
+            // Read the FLASH_OPTSR_CUR to get the busy flag
+            _n_throw( intrfApi.readMem32(regbase + FLASH_OPTSR_CUR) )
+        }while ( intrfApi.value32 &  OPT_BSY )
+
+        AnimateDone()
+
+        _n_throw( intrfApi.readMem32(regbase + FLASH_OPTSR_CUR) )
+
+        if(intrfApi.value32 & OPT_OPTCHANGEERR)
+            _n_throw( ERROR_FLASH)
+
+        // Relock the options bytes
+        _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_LOCK) )
+
+        printf("Options bytes ready\n\n")
+        return ERROR_OK
+    }
+
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: options writing failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink is chip erease is needed (e.g. command line flashing)
+//  This function is optional, if EBlink can't find it, it will erase per sector
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used.
+//   - This is an isolated function, flash_start and flash_done are not called by EB-link
+//   - The boolean "hasSecondBank" is set by parent script
+//
+function flash_erase_chip()
+{
+    try{
+        local time = GetTickCount()
+
+        _n_throw( flash_erase_bank(1, FLASH_REG_BASE_B0) )
+
+        if(hasSecondBank)
+            _n_throw( flash_erase_bank(2, FLASH_REG_BASE_B1) )
+
+        printf("done [%ums] \n", GetTickCount() - time)
+        return ERROR_OK
+    }
+
+    catch(e){
+       return e
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Erase a flash bank (1MB)
+//
+function flash_erase_bank(bank, regbase)
+{
+    try{
+        // 1. Check and clear (optional) all the error flags due to previous programming/erase
+        flash_get_clear_status(regbase)
+
+        // 2. Unlock the two FLASH_CR1/2 registers and FLASH_OPTCR register
+        flash_unlock(regbase)
+
+        //  3. BER1 and  START1 to launch bank erase
+        _n_throw( intrfApi.writeMem32(regbase + FLASH_CR,  FLASH_BER | FLASH_START  | FLASH_PG ) )
+
+        // 4. Then wait until QW bit are cleared in the corresponding FLASH_SR1/2
+        flash_check_busy(regbase, 30000) // 30 seconds timeout
+
+        // 5. Lock the flash banks again
+        flash_lock(regbase)
+
+        return ERROR_OK
+    }
+
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: mass erase bank %d! %s\n", bank, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Get (and clear) the flash status
+//
+function flash_get_clear_status(regbase)
+{
+    _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
+    if( intrfApi.value32 & FLASH_ERROR )
+        _n_throw(ERROR_FLASH)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Unlock the flash
+//
+function flash_unlock(regbase)
+{
+    // Wait for flash not busy
+    local time = GetTickCount();
+    do{
+        _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
+
+        // Timeout of 1sec
+        if(GetTickCount() - time > 1000)
+            _n_throw(ERROR_TIMEOUT)
+    }while ( intrfApi.value32 &  FLASH_BSY )
+
+    // Read flash lock status in FLASH_CR
+    _n_throw( intrfApi.readMem32(regbase + FLASH_CR) )
+
+    // Check if it's locked by the FLASH_CR_LOCK flag
+    if( intrfApi.value32 & FLASH_LOCK )
+    {
+        // Write flash KEYR
+        _n_throw( intrfApi.writeMem32(regbase + FLASH_KEYR, KEY1) )
+        _n_throw( intrfApi.writeMem32(regbase + FLASH_KEYR, KEY2) )
+
+
+        // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
+        _n_throw( intrfApi.readMem32(regbase + FLASH_CR) )
+        if( intrfApi.value32 & FLASH_LOCK )
+            _n_throw(ERROR_UNLOCK)
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Lock the flash
+//
+function flash_lock(regbase)
+{
+    _n_throw( intrfApi.writeMem32(regbase + FLASH_CR, FLASH_LOCK)  )
+    _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_LOCK) )
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//
+//
+function flash_check_busy(regbase, timeout)
+{
+    //Wait until QW bit are cleared in the corresponding FLASH_SR1/2
+    local time = GetTickCount()
+    do{
+        AnimateCursor()
+
+        // Timeout of 30sec (it can take quite long
+        if(GetTickCount() - time > timeout)
+            _n_throw(ERROR_TIMEOUT)
+
+        _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
+    }while ( intrfApi.value32 &  (FLASH_QW|FLASH_BSY) )
+
+    AnimateDone()
+}
+
+
+
+

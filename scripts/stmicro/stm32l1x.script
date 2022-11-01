@@ -1,0 +1,132 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32L1x
+//
+
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x00000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+// The flash parameters
+const FLASH_BASE 0x40023C00
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local flash_size
+    local page_size
+    local ram_size
+    local fsize_addr
+
+    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+
+    local deviceStr
+    switch(deviceId)
+    {
+        case 0x416 :
+            deviceStr = "Cat.1 - Low/Medium Density)"
+            page_size  = 0x100
+            ram_size   = 0x4000
+            fsize_addr = 0x1FF8004C
+            break
+
+        case 0x427 :
+            deviceStr = "(Cat.3 - Medium+ Density)"
+            page_size  = 0x100
+            ram_size   = 0x8000
+            fsize_addr = 0x1FF800CC
+            break
+
+        case 0x429 :
+            deviceStr = "(Cat.2)"
+            page_size  = 0x100
+            ram_size   = 0x8000
+            fsize_addr = 0x1FF8004C
+            break
+
+        case 0x436 :
+            deviceStr = "(Cat.4/Cat.3 - Medium+/High Density)"
+            // Get the flash size by reading the info register
+            _n_throw(intrfApi.readMem32(0x1ff800cc))
+            flash_size = intrfApi.value32 & ~3
+            flash_size = (flash_size & 0xffff)
+
+            // 0 is 384k and 1 is 256k
+            if(flash_size == 0)
+                flash_size = 384 * 1024
+            else
+                flash_size = 256 * 1024
+
+            page_size = 0x100
+            ram_size = 0xC000 /*Not completely clear if there are some with 32K*/
+            fsize_addr = 0x1FF800CC
+            break
+
+        case 0x437 :
+            deviceStr = "(Cat.5/Cat.6)"
+            page_size  = 0x100
+            ram_size   = 80 * 1024
+            fsize_addr = 0x1FF800CC
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32L1xx %s\n", deviceStr)
+
+    // Get the flash size by reading the info register
+    _n_throw(intrfApi.readMem32(fsize_addr))
+    flash_size = intrfApi.value32 & ~3
+    flash_size = (flash_size & 0xffff) * 1024
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size, page_size) )
+
+    // The erased value of these chips is not 0xFF but 0x00
+    DeviceAPI().setFlashEraseValue(0x00)
+
+    // Don't trim the sectors, only whole
+    DeviceAPI().setFlashDontTrim(true)
+
+    // Flash loader script
+    require("stmicro/flash/l1_l0.script")
+}
+

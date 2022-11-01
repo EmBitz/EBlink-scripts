@@ -1,0 +1,258 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//          STM32F3 / F1 and F0 (Half word flash loader)
+//
+//  Remark: We only support probe (STlink) versions with 16bit memory support !!!
+//          If needed, update probe firmware.
+//
+//          _n_throw is a built-in function which throws an exception if argument < 0
+//
+
+// TODO: - Dual bank F103_XL
+
+const FLASH_BASE  0x40022000
+
+const FLASH_KEY   0x04
+const FLASH_SR    0x0C
+const FLASH_CR    0x10
+const FLASH_AR    0x14
+
+// Register flags
+const FLASH_SR_BSY      0x01
+const FLASH_SR_PROGERR  0x04
+const FLASH_SR_WRPERR   0x10
+const FLASH_SR_EOP      0x20
+
+const FLASH_CR_LOCK     0x80
+const FLASH_CR_STRT     0x40
+
+const FLASH_CR_MER      4
+const FLASH_CR_PER      2
+const FLASH_CR_PG       1
+
+const FLASH_KEY1        0x45670123
+const FLASH_KEY2        0xCDEF89AB
+
+maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think)
+
+// Generic Flash Script errors
+require("stmicro/flash/errors.script")
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to initialize upcoming flash operations.
+//
+function flash_start()
+{
+    // Override the maximum flash speed from cli
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
+    {
+        maxFlashSpeed = FLASH_SPEED
+        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+    }
+
+    // Check that we don't go faster than the user selected on the cli
+    if(maxFlashSpeed > intrfApi.getSpeed())
+        maxFlashSpeed = intrfApi.getSpeed()
+
+    try{
+        // Be sure that the core is halted
+        _n_throw( targetApi.halt() )
+        // Unlock flash
+        flash_unlock()
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to erase a sector
+//   Erase sequence according ST user manual
+//    - flash_start() is already called
+//    - flash_done() will be called if all flash operations are ready
+//
+function flash_erase(sector, address)
+{
+    try{
+        // (1) Set the PER bit in the FLASH_CR register to enable page erasing
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_PER ) )
+
+        // (2) Program the FLASH_AR register to select a page to erase
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_AR, address ) )
+
+        // (3) Set the STRT bit (keep PER set) in the FLASH_CR register to start the erasing
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR,  FLASH_CR_STRT| FLASH_CR_PER) )
+
+        // (4) Wait until the BSY bit is reset in the FLASH_SR register
+        local time = GetTickCount()
+        do{
+            // Check for time out
+            if(GetTickCount() - time > 1500)
+               _n_throw(ERROR_TIMEOUT)
+
+            _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_SR))
+        }while ( intrfApi.value32 & FLASH_SR_BSY)
+
+        //  (5) Check the EOP flag in the FLASH_SR register
+        if( (intrfApi.value32 & FLASH_SR_EOP) == 0)
+            throw ERROR_FLASH
+
+        // (6) Clear EOP flag by software by writing EOP at 1
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_SR, intrfApi.value32 | FLASH_SR_EOP) )
+
+        // (7) Reset the PER Bit to disable the page erase
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 0 ))
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink to write a sector.
+//
+function flash_write(sector, address, buffer)
+{
+    try{
+        // Enable the program flag PG in flash_CR
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_PG ) )
+
+        // For direct flash writing we can't be too fast.
+        local probeSpeed = intrfApi.getSpeed()
+        _n_throw(intrfApi.setSpeed(maxFlashSpeed))
+
+        // Write buffer to flash with 16bit memory access
+        _n_throw( intrfApi.writeBuf(address, buffer, 16) )
+
+        // Restore probe speed
+        _n_throw(intrfApi.setSpeed(probeSpeed))
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e ==  INTERFACE_NOT_SUPPORTED)
+            errorf("This interface doesn't support direct 16bit memory access\nPlease update probe firmware or use other probe\n")
+       else if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Called by EBlink if all flash operations are ready
+//
+function flash_done()
+{
+    try{
+        // Relock the flash by setting the FLASH_CR_LOCK in the flash CR register
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK ) )
+        return ERROR_OK
+    }
+
+    // Catch all the lock errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: locking flash failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Unlock the flash
+//
+function flash_unlock()
+{
+    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
+    if(intrfApi.value32 & FLASH_CR_LOCK )
+    {
+        // Unlock Flash
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY1 ) )
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY2 ) )
+
+        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
+        if(intrfApi.value32 & FLASH_CR_LOCK )
+           _n_throw(ERROR_UNLOCK)
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//
+function flash_erase_chip()
+{
+    try{
+        printf("Flash chip erase ");
+
+        // Be sure that the target is halted
+        _n_throw( targetApi.halt() )
+
+        // Unlock flash
+        flash_unlock()
+
+        // (1) Set the MER bit in the FLASH_CR register to enable mass erasing
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER ) )
+
+        // (2) Set the STRT bit in the FLASH_CR register to start the erasing
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER | FLASH_CR_STRT ) )
+
+        // (3) Wait until the BSY bit is reset in the FLASH_SR register
+        local time = GetTickCount()
+        do{
+            AnimateCursor()
+
+            // Check for time out of 30 seconds
+            if(GetTickCount() - time > 3000)
+                _n_throw(ERROR_TIMEOUT)
+
+            _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_SR) )
+        }while ( intrfApi.value32 & FLASH_SR_BSY)
+
+        AnimateDone()
+
+        // (4) Check the EOP flag in the FLASH_SR register
+        if( (intrfApi.value32 & FLASH_SR_EOP) == 0)
+            _n_throw(ERROR_FLASH)
+
+        // (5) Clear EOP flag by software by writing EOP at 1
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_SR, intrfApi.value32 | FLASH_SR_EOP) )
+
+        // (6) Reset the PER Bit to disable the mass erase
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 0 ) )
+
+        // (7) Relock the flash by setting the FLASH_CR_LOCK in the flash CR register
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK ) )
+
+        printf("done\n")
+        return ERROR_OK
+    }
+
+    // Catch all the mass erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}

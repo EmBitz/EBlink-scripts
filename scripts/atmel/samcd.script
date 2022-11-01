@@ -1,0 +1,459 @@
+/////////////////////////////////////////////////////
+//
+//                   SAM_[C][D][L]
+//
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"flash\" start=\"0x00000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0x41000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0x42000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0x43000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0x60000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+// Debug core registers
+const DBGMCU_CR        0x40015804
+const DBGMCU_APB1_FZ   0x40015808
+const DBGMCU_APB2_FZ   0x4001580C
+
+const DBG_STOP     (1<<1)
+const DBG_STANDBY  (1<<2)
+
+const SAMD_NVMCTRL       0x41004000 // Non-volatile memory controller
+const SAMD_NVMCTRL_PARAM 0x08       // NVM parameters register
+
+// Known families
+const SAMD_FAMILY_D     0x00
+const SAMD_FAMILY_L     0x01
+const SAMD_FAMILY_C     0x02
+
+// Known series
+const SAMD_SERIES_20    0x00
+const SAMD_SERIES_21    0x01
+const SAMD_SERIES_22    0x02
+const SAMD_SERIES_10    0x02
+const SAMD_SERIES_11    0x03
+const SAMD_SERIES_09    0x04
+
+const SAMD_DSU			0x41002000	// Device Service Unit
+const SAMD_DSU_STATUSA  1           // DSU status register
+
+//------------------------------------
+//
+//  Per serie device ID's tables
+//  [0]id    [1]name    [2]Ram(kb)
+
+// Known SAMD09 parts
+SAMD09 <- [
+    [ 0x0, "SAMD09D14A",  4 ],
+    [ 0x7, "SAMD09C13A",  4 ] ]
+
+// Known SAMD10 parts
+SAMD10 <- [
+    [ 0x0, "SAMD10D14AMU",  4 ],
+    [ 0x1, "SAMD10D13AMU",  4 ],
+    [ 0x2, "SAMD10D12AMU",  4 ],
+    [ 0x3, "SAMD10D14ASU",  4 ],
+    [ 0x4, "SAMD10D13ASU",  4 ],
+    [ 0x5, "SAMD10D12ASU",  4 ],
+    [ 0x6, "SAMD10C14A",    4 ],
+    [ 0x7, "SAMD10C13A",    4 ],
+    [ 0x8, "SAMD10C12A",    4 ] ]
+
+SAMD11 <- [
+    [ 0x0, "SAMD11D14AM",  4 ],
+    [ 0x1, "SAMD11D13AMU", 4 ],
+    [ 0x2, "SAMD11D12AMU", 4 ],
+    [ 0x3, "SAMD11D14ASS", 4 ],
+    [ 0x4, "SAMD11D13ASU", 4 ],
+    [ 0x5, "SAMD11D12ASU", 4 ],
+    [ 0x6, "SAMD11C14A",   4 ],
+    [ 0x7, "SAMD11C13A",   4 ],
+    [ 0x8, "SAMD11C12A",   4 ],
+    [ 0x9, "SAMD11D14AU",  4 ] ]
+
+// Known SAMD20 parts
+SAMD20 <- [
+    [ 0x0, "SAMD20J18A", 32 ],
+    [ 0x1, "SAMD20J17A", 16 ],
+    [ 0x2, "SAMD20J16A",  8 ],
+    [ 0x3, "SAMD20J15A",  4 ],
+    [ 0x4, "SAMD20J14A",  2 ],
+    [ 0x5, "SAMD20G18A", 32 ],
+    [ 0x6, "SAMD20G17A", 16 ],
+    [ 0x7, "SAMD20G16A",  8 ],
+    [ 0x8, "SAMD20G15A",  4 ],
+    [ 0x9, "SAMD20G14A",  2 ],
+    [ 0xA, "SAMD20E18A", 32 ],
+    [ 0xB, "SAMD20E17A", 16 ],
+    [ 0xC, "SAMD20E16A",  8 ],
+    [ 0xD, "SAMD20E15A",  4 ],
+    [ 0xE, "SAMD20E14A",  2 ] ]
+
+// Known SAMD21 parts
+SAMD21 <- [
+    [ 0x0, "SAMD21J18A", 32 ],
+    [ 0x1, "SAMD21J17A", 16 ],
+    [ 0x2, "SAMD21J16A",  8 ],
+    [ 0x3, "SAMD21J15A",  4 ],
+    [ 0x4, "SAMD21J14A",  2 ],
+    [ 0x5, "SAMD21G18A", 32 ],
+    [ 0x6, "SAMD21G17A", 16 ],
+    [ 0x7, "SAMD21G16A",  8 ],
+    [ 0x8, "SAMD21G15A",  4 ],
+    [ 0x9, "SAMD21G14A",  2 ],
+    [ 0xA, "SAMD21E18A", 32 ],
+    [ 0xB, "SAMD21E17A", 16 ],
+    [ 0xC, "SAMD21E16A",  8 ],
+    [ 0xD, "SAMD21E15A",  4 ],
+    [ 0xE, "SAMD21E14A",  2 ],
+
+
+    // SAMR21 parts have integrated SAMD21 with a radio
+    [ 0x18, "SAMR21G19A", 32 ], // with 512k of serial flash
+    [ 0x19, "SAMR21G18A", 32 ],
+    [ 0x1A, "SAMR21G17A", 32 ],
+    [ 0x1B, "SAMR21G16A", 16 ],
+    [ 0x1C, "SAMR21E18A", 32 ],
+    [ 0x1D, "SAMR21E17A", 32 ],
+    [ 0x1E, "SAMR21E16A", 16 ],
+
+    // SAMD21 B Variants (Table 3-7 from rev I of datasheet)
+    [ 0x20, "SAMD21J16B",  8 ],
+    [ 0x21, "SAMD21J15B",  4 ],
+    [ 0x23, "SAMD21G16B",  8 ],
+    [ 0x24, "SAMD21G15B",  4 ],
+    [ 0x26, "SAMD21E16B",  8 ],
+    [ 0x27, "SAMD21E15B",  4 ],
+
+    // SAMD21 D and L Variants (from Errata)
+    //   http://ww1.microchip.com/downloads/en/DeviceDoc/
+    //   SAM-D21-Family-Silicon-Errata-and-DataSheet-Clarification-DS80000760D.pdf
+    [ 0x55, "SAMD21E16BU", 8 ],
+    [ 0x56, "SAMD21E15BU", 4 ],
+    [ 0x57, "SAMD21G16L",  8 ],
+    [ 0x3E, "SAMD21E16L",  8 ],
+    [ 0x3F, "SAMD21E15L",  4 ],
+    [ 0x62, "SAMD21E16CU", 8 ],
+    [ 0x63, "SAMD21E15CU", 4 ],
+    [ 0x92, "SAMD21J17D", 16 ],
+    [ 0x93, "SAMD21G17D", 16 ],
+    [ 0x94, "SAMD21E17D", 16 ],
+    [ 0x95, "SAMD21E17DU",16 ],
+    [ 0x96, "SAMD21G17L", 16 ],
+    [ 0x97, "SAMD21E17L", 16 ],
+
+    // Known SAMDA1 parts.
+    //   SAMD-A1 series uses the same series identifier like the SAMD21
+    //   taken from http://ww1.microchip.com/downloads/en/DeviceDoc/40001895A.pdf (pages 14-17)
+    [ 0x29, "SAMDA1J16A", 64, 8 ],
+    [ 0x2A, "SAMDA1J15A", 32, 4 ],
+    [ 0x2B, "SAMDA1J14A", 16, 4 ],
+    [ 0x2C, "SAMDA1G16A", 64, 8 ],
+    [ 0x2D, "SAMDA1G15A", 32, 4 ],
+    [ 0x2E, "SAMDA1G14A", 16, 4 ],
+    [ 0x2F, "SAMDA1E16A", 64, 8 ],
+    [ 0x30, "SAMDA1E15A", 32, 4 ],
+    [ 0x31, "SAMDA1E14A", 16, 4 ],
+    [ 0x64, "SAMDA1J16B", 64, 8 ],
+    [ 0x65, "SAMDA1J15B", 32, 4 ],
+    [ 0x66, "SAMDA1J14B", 16, 4 ],
+    [ 0x67, "SAMDA1G16B", 64, 8 ],
+    [ 0x68, "SAMDA1G15B", 32, 4 ],
+    [ 0x69, "SAMDA1G14B", 16, 4 ],
+    [ 0x6A, "SAMDA1E16B", 64, 8 ],
+    [ 0x6B, "SAMDA1E15B", 32, 4 ],
+    [ 0x6C, "SAMDA1E14B", 16, 4 ] ]
+
+// Known SAML21 parts
+SAML21 <- [
+    [ 0x00, "SAML21J18A", 32 ],
+    [ 0x01, "SAML21J17A", 16 ],
+    [ 0x02, "SAML21J16A",  8 ],
+    [ 0x05, "SAML21G18A", 32 ],
+    [ 0x06, "SAML21G17A", 16 ],
+    [ 0x07, "SAML21G16A",  8 ],
+    [ 0x0A, "SAML21E18A", 32 ],
+    [ 0x0B, "SAML21E17A", 16 ],
+    [ 0x0C, "SAML21E16A",  8 ],
+    [ 0x0D, "SAML21E15A",  4 ],
+    [ 0x0F, "SAML21J18B", 32 ],
+    [ 0x10, "SAML21J17B", 16 ],
+    [ 0x11, "SAML21J16B",  8 ],
+    [ 0x14, "SAML21G18B", 32 ],
+    [ 0x15, "SAML21G17B", 16 ],
+    [ 0x16, "SAML21G16B",  8 ],
+    [ 0x19, "SAML21E18B", 32 ],
+    [ 0x1A, "SAML21E17B", 16 ],
+    [ 0x1B, "SAML21E16B",  8 ],
+    [ 0x1C, "SAML21E15B",  4 ],
+
+    // SAMR30 parts have integrated SAML21 with a radio
+    [ 0x1E, "SAMR30G18A", 32 ],
+    [ 0x1F, "SAMR30E18A", 32 ],
+
+    // SAMR34/R35 parts have integrated SAML21 with a lora radio
+    [ 0x28, "SAMR34J18", 32 ] ]
+
+// Known SAML22 parts
+SAML22 <- [
+    [ 0x00, "SAML22N18A", 32 ],
+    [ 0x01, "SAML22N17A", 16 ],
+    [ 0x02, "SAML22N16A",  8 ],
+    [ 0x05, "SAML22J18A", 32 ],
+    [ 0x06, "SAML22J17A", 16 ],
+    [ 0x07, "SAML22J16A",  8 ],
+    [ 0x0A, "SAML22G18A", 32 ],
+    [ 0x0B, "SAML22G17A", 16 ],
+    [ 0x0C, "SAML22G16A",  8 ] ]
+
+// Known SAMC20 parts
+SAMC20 <- [
+    [ 0x00, "SAMC20J18A", 32 ],
+    [ 0x01, "SAMC20J17A", 16 ],
+    [ 0x02, "SAMC20J16A",  8 ],
+    [ 0x03, "SAMC20J15A",  4 ],
+    [ 0x05, "SAMC20G18A", 32 ],
+    [ 0x06, "SAMC20G17A", 16 ],
+    [ 0x07, "SAMC20G16A",  8 ],
+    [ 0x08, "SAMC20G15A",  4 ],
+    [ 0x0A, "SAMC20E18A", 32 ],
+    [ 0x0B, "SAMC20E17A", 16 ],
+    [ 0x0C, "SAMC20E16A",  8 ],
+    [ 0x0D, "SAMC20E15A",  4 ],
+    [ 0x20, "SAMC20N18A", 32 ],
+    [ 0x21, "SAMC20N17A", 16 ] ]
+
+// Known SAMC21 parts
+SAMC21 <- [
+    [ 0x00, "SAMC21J18A",  32 ],
+    [ 0x01, "SAMC21J17A",  16 ],
+    [ 0x02, "SAMC21J16A",   8 ],
+    [ 0x03, "SAMC21J15A",   4 ],
+    [ 0x05, "SAMC21G18A",  32 ],
+    [ 0x06, "SAMC21G17A",  16 ],
+    [ 0x07, "SAMC21G16A",   8 ],
+    [ 0x08, "SAMC21G15A",   4 ],
+    [ 0x0A, "SAMC21E18A",  32 ],
+    [ 0x0B, "SAMC21E17A",  16 ],
+    [ 0x0C, "SAMC21E16A",   8 ],
+    [ 0x0D, "SAMC21E15A",   4 ],
+    [ 0x20, "SAMC21N18A",  32 ],
+    [ 0x21, "SAMC21N17A",  16 ] ]
+
+//---------------------------------------
+// All the supported devices table
+device <- [
+  [SAMD_FAMILY_D, SAMD_SERIES_20, SAMD20],
+  [SAMD_FAMILY_D, SAMD_SERIES_21, SAMD21],
+  [SAMD_FAMILY_D, SAMD_SERIES_09, SAMD09],
+  [SAMD_FAMILY_D, SAMD_SERIES_10, SAMD10],
+  [SAMD_FAMILY_D, SAMD_SERIES_11, SAMD11],
+  [SAMD_FAMILY_L, SAMD_SERIES_21, SAML21],
+  [SAMD_FAMILY_L, SAMD_SERIES_22, SAML22],
+  [SAMD_FAMILY_C, SAMD_SERIES_20, SAMC20],
+  [SAMD_FAMILY_C, SAMD_SERIES_21, SAMC21] ]
+
+// Global page size
+pageSize <- 0
+
+// Number of pages per sector (or row's according Atmel)
+const PAGES_PER_SEC 4
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function atmel_device()
+{
+    local devInfo = getDeviceInfo(deviceId);
+
+    // Check if we have a valid device info record
+    if(devInfo == false)
+    {
+        // Device not found signaled to parent script
+        throw ERROR_NOT_FOUND;
+    }
+
+    // We get the ram size from the lookup table
+    local ram_size = devInfo[2]*1024
+
+    // Get the info about the flash
+    _n_throw(intrfApi.readMem32(SAMD_NVMCTRL + SAMD_NVMCTRL_PARAM))    
+
+     // The PSZ field (bits 18:16) indicate the page size bytes as 2^(3+n)
+     // so 0 is 8KB and 7 is 1024KB.
+     pageSize = (8 << ((intrfApi.value32 >> 16) & 0x7))
+
+     // The NVMP field (bits 15:0) indicates the total number of pages
+     local flash_size = (intrfApi.value32 & 0xFFFF) * pageSize
+
+    // Inform user about device type
+    printf("Atmel device   : %s\n", devInfo[1])
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    // Build the memory XML map and pass it to the EBlink device module
+    DeviceAPI().memmap( format( mem_template,  flash_size,
+                                          (pageSize * PAGES_PER_SEC),
+                                          ram_size) )
+    // Flash loader script
+    require("atmel/flash/samcd.script")
+
+    // SAMD DSU will hold the CPU in reset if TCK is low when RESET_N
+    // deasserts (see datasheet Atmel-42181E–SAM-D21_Datasheet–02/2015, section 12.6.2)
+    dsu_deassert()
+}
+
+
+/////////////////////////////////////////////////////
+//
+//  Get the device information by ID
+//
+function getDeviceInfo(deviceId)
+{
+   local family =  ((deviceId >> 23) & 0x1F)
+   local series =  ((deviceId >> 16) & 0x3F)
+   local id     =  (deviceId & 0xFF)
+
+   // Walk through all the family/series combinations
+   for( local f=0; f<device.len(); f++)
+   {
+       if( (device[f][0] == family ) &&
+           (device[f][1] == series ) )
+       {
+           // We found the family/serie, look for the device ID
+           local idList = device[f][2]
+           for( local i=0; i<idList.len(); i++)
+           {
+               // ID is found, return the device info record
+               if(idList[i][0] == id)
+                   return idList[i]
+           }
+           // We didn't found a device ID
+           return false;
+       }
+   }
+   // We didn't found a family/serie match
+   return false
+}
+
+//=======================================================================================
+//                   SAMD21 Alternative reset strategy
+//=======================================================================================
+
+const CORTEXM_DHCSR	0xE000EDF0
+const CORTEXM_AIRCR 0xE000ED0C
+const CORTEXM_DFSR  0xE000ED30
+
+const CORTEXM_AIRCR_VECTKEY     (0x05fa << 16)
+const CORTEXM_AIRCR_SYSRESETREQ (1 << 2 )
+const CORTEXM_DFSR_RESETALL     0x1f
+const CORTEXM_DHCSR_S_RESET_ST  (1 << 25)
+
+const SAMD_DSU_CTRLSTAT     0x41002100
+const SAMD_STATUSA_CRSTEXT  (1 << 9)
+
+const DBGKEY	(0xA05F << 16)
+const C_DEBUGEN	(1 << 0)
+const C_HALT	(1 << 1)
+
+/////////////////////////////////////////////////////
+//
+//  We override EBlink default reset function because SAMD needs
+//  different strategies. If this function doesn't exsist then EBlink's
+//  builtin default reset strategies are used.
+//
+// resetType:
+//        SYSTEM_RESET
+//        CORE_RESET
+//        JTAG_RESET
+//        USER_RESET
+//
+function reset(resetType)
+{
+    // Inform the user
+    printf("Reset: Atmel script\n")
+
+    // We don't use the resetType, we always use the same strategy
+    try{
+        // Read DHCSR here to clear S_RESET_ST bit before reset
+        _n_throw(intrfApi.readMem32(CORTEXM_DHCSR))
+
+        _n_throw(intrfApi.writeMem32(CORTEXM_DHCSR, DBGKEY | C_HALT | C_DEBUGEN))
+
+        // Request System Reset from NVIC: nRST doesn't work correctly
+        // This could be VECTRESET: 0x05FA0001 (reset only core)
+        //          or SYSRESETREQ: 0x05FA0004 (system reset)
+        _n_throw(intrfApi.writeMem32(CORTEXM_AIRCR, CORTEXM_AIRCR_VECTKEY | CORTEXM_AIRCR_SYSRESETREQ))
+
+        // Exit extended reset
+        dsu_deassert()
+
+        // Poll for release from reset
+        local time = GetTickCount()
+        do {
+            if(GetTickCount() - time > 1000)
+                break
+            _n_throw(intrfApi.readMem32(CORTEXM_DHCSR))
+        } while( intrfApi.value32 & CORTEXM_DHCSR_S_RESET_ST)
+
+         // Reset DFSR flags
+        _n_throw(intrfApi.writeMem32(CORTEXM_DFSR, CORTEXM_DFSR_RESETALL))
+    }
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: SAM reset failed\n")
+       return ERROR_NOTIFIED
+    }
+    return ERROR_OK;
+}
+
+/////////////////////////////////////////////////////
+//
+// Release from extended reset
+//
+function dsu_deassert()
+{
+    try{
+        // Exit extended reset
+        _n_throw(intrfApi.readMem32(SAMD_DSU_CTRLSTAT))
+        if(  intrfApi.value32 & SAMD_STATUSA_CRSTEXT)
+            _n_throw(intrfApi.writeMem32(SAMD_DSU_CTRLSTAT, SAMD_STATUSA_CRSTEXT))
+    }
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: SAM DSU deassert failed\n")
+       throw ERROR_NOTIFIED
+    }
+}
