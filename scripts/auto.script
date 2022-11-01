@@ -9,72 +9,34 @@
 //  script and can also be called directly to skip vendor detection.
 //
 
+// All the supported MCU vendors scripts
+// The order of this list is important!!
+mcuVendorList <- [
+    "atmel-auto.script",  // ATmel   cortex-M
+    "stm32-auto.script",  // STmicro cortex-M
+    "silabs-auto.script", // Siliabs (Gecko's) cortex-M
+]
+
+
 /////////////////////////////////////////////////////
 //
 //  The entry point for this script
 //
 function main()
 {
-    //============================================================
-    // ==== ATmel  cortex-M
+    for( local i=0; i < mcuVendorList.len(); i++)
     {
         try{
-            // Load the vendor script and go from there
-            require("atmel-auto.script")
-            findAtmelDevice()
-            return ERROR_OK
+            require(mcuVendorList[i])  // Load the script file
+            findDevice()               // Try to find a valid device
+            return ERROR_OK            // We succeed so return OK
         }
         catch(e)
         {
-            if(e == ERROR_NOTIFIED)
+            if(e == ERROR_NOTIFIED)    // Notified errors will stop searching
                return e
         }
     }
-
-    //============================================================
-    // ==== STmicro  cortex-M
-    {
-        try{
-            // Load the vendor script and go from there
-            require("stm32-auto.script")
-            findSTmicroDevice()
-            return ERROR_OK
-        }
-        catch(e)
-        {
-            if(e == ERROR_NOTIFIED)
-               return e
-        }
-    }
-
-    //============================================================
-    // ==== Siliabs  (Gecko's) cortex-M
-    {
-
-        try{
-            // Load the vendor script and go from there
-            require("silabs-auto.script")
-            findSilabsDevice()
-            return ERROR_OK
-        }
-        catch(e)
-        {
-            if(e == ERROR_NOTIFIED)
-               return e
-        }
-    }
-
-
-    //============================================================
-    // ==== NXP  cortex-M
-
-    // ToDo....
-    //    if( nxp)
-    //    {
-    //        require("nxp-auto.script")
-    //        return main();
-    //    }
-
 
     errorf("Error:\tCan't detect MCU vendor!\n\tIf reset is disabled (\"dr\" option), try with reset.")
     return ERROR_NOTIFIED

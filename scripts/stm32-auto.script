@@ -27,7 +27,7 @@ const ERROR_NOT_FOUND -100
 function main()
 {
     try{
-        findSTmicroDevice()
+        findDevice()
     }
     catch(e)
     {
@@ -50,7 +50,7 @@ function main()
 //
 //
 //
-function findSTmicroDevice()
+function findDevice()
 {
     // Check if the right script API is supported
     if( VERSION < 4.7)

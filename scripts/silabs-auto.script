@@ -50,7 +50,7 @@ const ERROR_NOT_FOUND -100
 function main()
 {
     try{
-        findSilabsDevice()
+        findDevice()
         return ERROR_OK
     }
     catch(e)
@@ -70,7 +70,7 @@ function main()
 //
 //
 //
-function findSilabsDevice()
+function findDevice()
 {
     // Check if the right script API is supported
     if( VERSION < 4.7)
