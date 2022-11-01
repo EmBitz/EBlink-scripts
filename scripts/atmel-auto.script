@@ -111,7 +111,6 @@ function  reset_post(resetType)
         intrfApi.readMem32(0x00000004)
         targetApi.writeReg("PC", intrfApi.value32)
     }
-
     return ERROR_OK
 }
 
