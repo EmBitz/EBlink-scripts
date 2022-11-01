@@ -26,7 +26,6 @@ const ERROR_NOT_FOUND -100
 //
 function main( )
 {
-    // If we still haven't a valid device ID, inform user and quit
     try{
         findAtmelDevice()
     }
@@ -55,7 +54,7 @@ function findAtmelDevice()
     if( VERSION < 4.7)
     {
        errorf("Error:\nIncompatiable EBlink version %.1f\nPlease update EBlink in order to use this script file\n", VERSION)
-       return ERROR_NOTIFIED
+       throw ERROR_NOTIFIED
     }
 
     switch(targetApi.cpuType)
@@ -110,7 +109,7 @@ function  reset_post(resetType)
         intrfApi.readMem32(0x00000000)
         targetApi.writeReg("SP", intrfApi.value32)
 
-        // Set the Program pointer according the Vector table entry        
+        // Set the Program pointer according the Vector table entry
         intrfApi.readMem32(0x00000004)
         targetApi.writeReg("PC", intrfApi.value32)
     }
