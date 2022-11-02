@@ -294,7 +294,7 @@ function atmel_device()
     local ram_size = devInfo[2]*1024
 
     // Get the info about the flash
-    _n_throw(intrfApi.readMem32(SAMD_NVMCTRL + SAMD_NVMCTRL_PARAM))    
+    _n_throw(intrfApi.readMem32(SAMD_NVMCTRL + SAMD_NVMCTRL_PARAM))
 
      // The PSZ field (bits 18:16) indicate the page size bytes as 2^(3+n)
      // so 0 is 8KB and 7 is 1024KB.
@@ -332,6 +332,7 @@ function atmel_device()
 
     // SAMD DSU will hold the CPU in reset if TCK is low when RESET_N
     // deasserts (see datasheet Atmel-42181E–SAM-D21_Datasheet–02/2015, section 12.6.2)
+    // So just in case it's active, release it.
     dsu_deassert()
 }
 
@@ -369,7 +370,7 @@ function getDeviceInfo(deviceId)
 }
 
 //=======================================================================================
-//                   SAMD21 Alternative reset strategy
+//                          Atmel Alternative reset strategy
 //=======================================================================================
 
 const CORTEXM_DHCSR	0xE000EDF0
@@ -377,6 +378,7 @@ const CORTEXM_AIRCR 0xE000ED0C
 const CORTEXM_DFSR  0xE000ED30
 
 const CORTEXM_AIRCR_VECTKEY     (0x05fa << 16)
+const CORTEXM_AIRCR_VECTRESET    1
 const CORTEXM_AIRCR_SYSRESETREQ (1 << 2 )
 const CORTEXM_DFSR_RESETALL     0x1f
 const CORTEXM_DHCSR_S_RESET_ST  (1 << 25)
@@ -390,8 +392,8 @@ const C_HALT	(1 << 1)
 
 /////////////////////////////////////////////////////
 //
-//  We override EBlink default reset function because SAMD needs
-//  different strategies. If this function doesn't exsist then EBlink's
+//  We override EBlink default reset function because Atmel's needs
+//  different strategies. If this function doesn't exist then EBlink's
 //  builtin default reset strategies are used.
 //
 // resetType:
@@ -402,29 +404,55 @@ const C_HALT	(1 << 1)
 //
 function reset(resetType)
 {
-    // Inform the user
-    printf("Reset: Atmel script\n")
+    // If verbose level is debugging inform user we are here
+    debugf("Using Atmel reset override script\n")
 
-    // We don't use the resetType, we always use the same strategy
+    // If it's a user-type reset we will call the user defined function
+    // reset_user just as the normal EBlink reset would do.
+    if( resetType == USER_RESET)
+    {
+        // Check if we have an user_reset script function
+        if( isScriptObject("reset_user") )
+        {
+            printf("Reset: user script\n")
+            reset_user()
+            return ERROR_OK
+        }
+
+        // This user_reset script is mandatory so signal an error
+        errorf("User defined reset script is missing\n")
+        return ERROR_NOTIFIED
+    }
+
     try{
-        // Read DHCSR here to clear S_RESET_ST bit before reset
-        _n_throw(intrfApi.readMem32(CORTEXM_DHCSR))
-
+        // Halt the core
         _n_throw(intrfApi.writeMem32(CORTEXM_DHCSR, DBGKEY | C_HALT | C_DEBUGEN))
 
-        // Request System Reset from NVIC: nRST doesn't work correctly
-        // This could be VECTRESET: 0x05FA0001 (reset only core)
-        //          or SYSRESETREQ: 0x05FA0004 (system reset)
-        _n_throw(intrfApi.writeMem32(CORTEXM_AIRCR, CORTEXM_AIRCR_VECTKEY | CORTEXM_AIRCR_SYSRESETREQ))
+        // The actual device reset according user request
+        if(resetType == CORE_RESET)
+        {
+            printf("Reset: core\n")
+            _n_throw(intrfApi.writeMem32(CORTEXM_AIRCR, CORTEXM_AIRCR_VECTKEY | CORTEXM_AIRCR_VECTRESET))
+        }
+        else
+        {
+            // The nRST is not working for all Atmel's so we overrule a JTAG_RESET by a SYSTEM_RESET
+            // but we inform the user that we are doing this.
+            if( resetType == JTAG_RESET)
+              printf("Reset: system (JTAG overruled)\n")
+            else
+              printf("Reset: system\n")
 
-        // Exit extended reset
+            _n_throw(intrfApi.writeMem32(CORTEXM_AIRCR, CORTEXM_AIRCR_VECTKEY | CORTEXM_AIRCR_SYSRESETREQ))
+        }
+
+        // Exit Atmel's extended reset
         dsu_deassert()
 
-        // Poll for release from reset
+        // Poll for release from reset with 1sec timeout
         local time = GetTickCount()
         do {
-            if(GetTickCount() - time > 1000)
-                break
+            if(GetTickCount() - time > 1000) break
             _n_throw(intrfApi.readMem32(CORTEXM_DHCSR))
         } while( intrfApi.value32 & CORTEXM_DHCSR_S_RESET_ST)
 
@@ -446,10 +474,14 @@ function reset(resetType)
 function dsu_deassert()
 {
     try{
-        // Exit extended reset
+        // Exit extended reset if active
         _n_throw(intrfApi.readMem32(SAMD_DSU_CTRLSTAT))
         if(  intrfApi.value32 & SAMD_STATUSA_CRSTEXT)
+        {
+            // If verbose level is debugging, inform user we are doing this
+            debugf("Exit Atmel's extended reset\n")
             _n_throw(intrfApi.writeMem32(SAMD_DSU_CTRLSTAT, SAMD_STATUSA_CRSTEXT))
+        }
     }
     catch(e){
        if(e < ERROR_NOTIFIED)

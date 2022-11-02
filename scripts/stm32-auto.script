@@ -1,16 +1,13 @@
 //! STmicro
 /////////////////////////////////////////////////////
 //
-//     This is a virtual device for STM32 cortex's
-//     The real device type is checked by reading
-//     the device ID and include the corresponding
-//     device script's
+//            STmicro cortex-M devices
 //
 //     The script tries to detect the right memory sizes
 //     however, if this is not correct you can set the sizes
 //     in kilobytes on the command line as:
 //
-//         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx  (check also device scripts)
+//         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx
 //
 
 intrfApi <- InterfAPI()  // Global so that all included script files also have access

@@ -1,9 +1,13 @@
 //! Silabs
 /////////////////////////////////////////////////////
 //
-//     This is a virtual device for Silabs cortex's
-//     The real device type is checked by reading
-//     the device ID
+//            Silabs cortex-M devices
+//
+//     The script tries to detect the right memory sizes
+//     however, if this is not correct you can set the sizes
+//     in kilobytes on the command line as:
+//
+//         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx
 //
 
 /////////////////////////////////////////////////////
