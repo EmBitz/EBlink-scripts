@@ -14,7 +14,13 @@ intrfApi  <- InterfAPI()  // Global so that all included script files also have 
 targetApi <- TargetAPI()  // Global so that all included script files also have access
 deviceId  <- 0            // Global deviceId
 
-const SAMD_DSU_ID  0x41002018  // Device ID register
+const SAMD_DSU_ID   0x41002018  // Device ID register
+
+// Manufacture ID code
+const SAMD_DSU_PID1 0x41003FE4
+const SAMD_DSU_PID2 0x41003FE8
+const ATMEL_JEP106  0x1F
+
 
 // Used by script to denote a not found devcie
 const ERROR_NOT_FOUND -100
@@ -59,6 +65,18 @@ function findDevice()
     switch(targetApi.cpuType)
     {
         case 0: // Cortex-M 0
+            // Get the JEP106 code and check if it's Atmel
+            _n_throw(intrfApi.readMem32(SAMD_DSU_PID1))
+            local JEP106 =  (intrfApi.value32 >> 4)
+
+             _n_throw(intrfApi.readMem32(SAMD_DSU_PID2))
+            JEP106 += ((intrfApi.value32 & 7) << 4)
+
+            debugf("Atmel JEP106: %x\n", JEP106)
+            if( JEP106 != ATMEL_JEP106)
+                   throw ERROR_NOT_FOUND
+
+            // Get the part info from the DSU
             _n_throw(intrfApi.readMem32(SAMD_DSU_ID))
             deviceId = intrfApi.value32
 
