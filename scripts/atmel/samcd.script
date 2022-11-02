@@ -455,9 +455,6 @@ function reset(resetType)
             if(GetTickCount() - time > 1000) break
             _n_throw(intrfApi.readMem32(CORTEXM_DHCSR))
         } while( intrfApi.value32 & CORTEXM_DHCSR_S_RESET_ST)
-
-         // Reset DFSR flags
-        _n_throw(intrfApi.writeMem32(CORTEXM_DFSR, CORTEXM_DFSR_RESETALL))
     }
     catch(e){
        if(e < ERROR_NOTIFIED)
