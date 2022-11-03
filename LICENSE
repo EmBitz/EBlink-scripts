@@ -1,0 +1,76 @@
+EBlink - Cortex-M debug and flash tool
+Copyright (C)2017 - 2020 Gerard Zagema (Sysdes)
+
+Freeware License Agreement
+BY SELECTING "I Agree" AND CLICKING "Next" AND INSTALLING THE
+SOFTWARE SELECTED IN THE PREVIOUS STEP (THE "PRODUCT"), YOU
+ARE CONSENTING TO BE BOUND BY AND BECOME A PARTY TO THIS
+AGREEMENT AS THE "LICENSEE." IF YOU DO NOT AGREE TO ALL OF THE
+TERMS OF THIS AGREEMENT, YOU MUST NOT INSTALL OR USE THE
+PRODUCT, AND YOU DO NOT BECOME A LICENSEE UNDER THIS AGREEMENT.
+
+1. License Agreement. 
+As used in this Agreement, "Sysdes" shall mean The Integrated to reproduce and
+use for personal or internal business purposes the executable code version of
+the Product, provided any copy must contain all of the original proprietary
+notices. This license does not entitle Licensee to receive from Sysdes 
+hard-copy documentation, technical support, telephone assistance, or 
+enhancements or updates to the Product. If more than one license agreement
+was provided for the Product, and the terms vary, the order of precedence of
+those license agreements is as follows: a signed agreement, a license agreement
+available for review on the Sysdes website, a printed or electronic agreement
+that states clearly that it supersedes other agreements, a printed agreement
+provided with the Product, an electronic agreement provided with the Product.
+Sysdes may terminate this Agreement at any time, for any reason or no reason.
+Sysdes may also terminate this Agreement if Licensee breaches any of its terms
+and conditions. Upon termination, Licensee shall destroy all copies of the
+Product.
+
+2. Restrictions. 
+Without Sysdes's prior written consent, Licensee may not: 
+(i)   modify or create any derivative works of the Product or documentation, 
+      including customization, translation or localization; 
+(ii)  decompile, disassemble, reverse engineer, or otherwise attempt to derive
+      the source code for the Product (except to the extent applicable laws 
+      specifically prohibit such restriction); 
+(iii) redistribute, encumber, sell, rent, lease, sublicense, or otherwise
+      transfer rights to the Product; 
+(iv)  remove or alter any trademark, logo, copyright or other proprietary 
+      notices, legends, symbols or labels in the Product. 
+
+3. Exceptions.
+All the restrictions of this license don't apply to supporting script files
+which or NOT subject to this License Agreement.
+
+4. Fees. 
+There is no license fee for the Product. The Product is not available on 
+media. Licensee is responsible for any applicable taxes.
+
+5. Proprietary Rights. 
+Title, ownership rights, and intellectual property rights in the Product 
+shall remain in Sysdes and/or its suppliers. The Product is protected by 
+copyright and other intellectual property laws and by international treaties.
+
+6. Disclaimer of Warranty. 
+THE PRODUCT IS PROVIDED FREE OF CHARGE, AND, THEREFORE, ON AN
+"AS IS" BASIS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING WITHOUT LIMITATION THE WARRANTIES THAT IT IS FREE OF
+DEFECTS, VIRUS FREE, ABLE TO OPERATE ON AN UNINTERRUPTED BASIS,
+MERCHANTABLE, FIT FOR A PARTICULAR PURPOSE OR NON-INFRINGING.
+THIS DISCLAIMER OF WARRANTY CONSTITUTES AN ESSENTIAL PART OF 
+THIS AGREEMENT. NO USE OF THE PRODUCT IS AUTHORIZED HEREUNDER 
+EXCEPT UNDER THIS DISCLAIMER.
+
+7. Limitation of Liability. 
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT 
+WILL SYSDES OR ITS AFFILIATES OR SUPPLIERS BE LIABLE FOR ANY
+INDIRECT, SPECIAL, INCIDENTAL OR CONSEQUENTIAL DAMAGES ARISING
+OUT OF THE USE OF OR INABILITY TO USE THE PRODUCT, INCLUDING,
+WITHOUT LIMITATION, DAMAGES FOR LOST PROFITS, LOSS OF GOODWILL,
+WORK STOPPAGE, COMPUTER FAILURE OR MALFUNCTION, OR ANY AND ALL 
+OTHER COMMERCIAL DAMAGES OR LOSSES, EVEN IF ADVISED OF THE
+POSSIBILITY THEREOF, AND REGARDLESS OF THE LEGAL OR EQUITABLE
+THEORY (CONTRACT, TORT OR OTHERWISE) UPON WHICH THE CLAIM IS
+BASED. IN ANY CASE, SYSDES'S COLLECTIVE LIABILITY UNDER ANY
+PROVISION OF THIS AGREEMENT SHALL NOT EXCEED IN THE AGGREGATE
+THE SUM OF THE FEES LICENSEE PAID FOR THIS LICENSE (IF ANY) 
