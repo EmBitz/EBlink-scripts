@@ -1,0 +1,184 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//          SAM3x/SAM4x flash loader
+//
+//          _n_throw is a built-in function which throws an exception if argument < 0
+//
+//
+
+
+//----------------------------------
+//  Extern variables from upper scripts:
+//
+//  EEFC_BASE = This is an array with EEFC base addresses. If single bank
+//              there is only 1 entry. Dual bank has two entries.
+//
+//
+
+// Base addresses are in parent script defined
+
+// Register offsets
+const EEFC_FMR	(0x00)
+const EEFC_FCR	(0x04)
+const EEFC_FSR	(0x08)
+const EEFC_FRR	(0x0C)
+
+const EEFC_FCR_FKEY		(0x5A << 24)
+const EEFC_FCR_FCMD_GETD 0x00
+const EEFC_FCR_FCMD_WP	 0x01
+const EEFC_FCR_FCMD_WPL	 0x02
+const EEFC_FCR_FCMD_EWP	 0x03
+const EEFC_FCR_FCMD_EWPL 0x04
+const EEFC_FCR_FCMD_EA	 0x05
+const EEFC_FCR_FCMD_EPA	 0x07
+const EEFC_FCR_FCMD_SLB	 0x08
+const EEFC_FCR_FCMD_CLB	 0x09
+const EEFC_FCR_FCMD_GLB	 0x0A
+const EEFC_FCR_FCMD_SGPB 0x0B
+const EEFC_FCR_FCMD_CGPB 0x0C
+const EEFC_FCR_FCMD_GGPB 0x0D
+const EEFC_FCR_FCMD_STUI 0x0E
+const EEFC_FCR_FCMD_SPUI 0x0F
+
+const EEFC_FSR_FRDY		(1)
+const EEFC_FSR_FCMDE	(2)
+const EEFC_FSR_FLOCKE	(4)
+const EEFC_FSR_ERROR	(6) //(EEFC_FSR_FCMDE | EEFC_FSR_FLOCKE)
+
+// Generic Flash Script errors
+require("atmel/flash/errors.script")
+
+// Used for dual bank
+half_sec  <- 0 // The half of the number of sectors
+dual_bank <- false
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to initialize upcoming flash operations.
+//
+function flash_start()
+{
+    try{
+        // Be sure that the core is halted
+        _n_throw( targetApi.halt() )
+            
+        // Check for dual bank    
+        if( EEFC_BASE.len() == 2) {
+            dual_bank = true
+            half_sec = DeviceAPI().sectorCount()/2
+        }
+        
+        return ERROR_OK
+    }
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink to write a sector.
+//  We have to write a single page (=sector) at the time
+//
+function flash_write(sector, address, buffer)
+{
+    try{
+        // Write page
+        _n_throw( targetApi.writeMem(address, buffer, 0, buffer.getSize()) )
+   
+        // Handle DUAL bank, we assume that the flash regions are split evenly
+        if( dual_bank && (sector >= half_sec ) )
+        {
+            sector = sector - half_sec
+            flash_cmnd(EEFC_BASE[1], EEFC_FCR_FCMD_WP, sector)
+            return ERROR_OK
+        }
+        
+        // Write sector
+        flash_cmnd(EEFC_BASE[0], EEFC_FCR_FCMD_WP, sector) 
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Finalize the flash operations
+//
+function flash_done()
+{
+    try{
+        // lock the flash
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       return e
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//
+function flash_erase_chip()
+{
+    try{
+        // Be sure that the target is halted
+        _n_throw( targetApi.halt() )
+        flash_cmnd(EEFC_BASE[0], EEFC_FCR_FCMD_EA, 0) 
+        
+        if( EEFC_BASE.len() == 2)
+            flash_cmnd(EEFC_BASE[1], EEFC_FCR_FCMD_EA, 0)
+        return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+////////////////////////////////////////////////////////
+//
+//  Generic SAM3 flash commander
+//
+function flash_cmnd(fbase, cmnd, arg)
+{      
+    debugf("SAM3 flash: 0x%X@0x%X\n", EEFC_FCR_FKEY | cmnd | (arg << 8), fbase + EEFC_FCR )
+ 
+    // Execute command 
+    _n_throw(intrfApi.writeMem32(fbase + EEFC_FCR, EEFC_FCR_FKEY | cmnd | (arg << 8)) )
+    
+    // Wait for ready
+    local time = GetTickCount()
+    do
+    {
+       _n_throw( intrfApi.readMem32(fbase + EEFC_FSR) )
+        
+        // Check for time out of 5 seconds
+        if(GetTickCount() - time > 5000)
+             throw ERROR_TIMEOUT
+             
+    }while(intrfApi.value32 & EEFC_FSR_FRDY )
+    
+    // On Error throw
+    if( intrfApi.value32 & EEFC_FSR_ERROR)
+        throw ERROR_FLASH    
+}

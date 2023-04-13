@@ -1,0 +1,234 @@
+//! NXP lpc
+// Adapted from stmicro scripts by J.DuBois
+// at Thermalogic Corporation (jer@thlogic.com)
+//
+/////////////////////////////////////////////////////
+//
+//     This is a virtual device for NXP LPC cortex's
+//     The real device type is checked by reading
+//     the device ID and include the corresponding
+//     device script's
+//
+//     The script tries to detect the right memory sizes
+//     however, if this is not correct you can set the sizes
+//     in kilobytes on the command line as:
+//
+//         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx  (check also device scripts)
+//
+
+intrfApi <- InterfAPI()  // Global so that all included script files also have access
+targetApi<- TargetAPI()  // Global interface to the target class
+deviceId <- 0            // Global deviceId
+deviceType <- 0			 // Global deviceType
+
+// Used by script to denote a not found devcie
+const ERROR_NOT_FOUND -100
+
+const IAP_ADDR     0x1FFF1FF1	// IAP entry point
+const IAP_ADDR_800 0x0F001FF1	// IAP entry point for LPC800 series
+const RETURN_ADDR  0x10000010
+const PARAM_ADDR   0x10000030
+const RESULT_ADDR  0x100000D0
+
+const IAP_BLANKCHECK 53
+const IAP_READPARTID 54
+
+/////////////////////////////////////////////////////
+//
+//  EBlink called Entry point
+//
+
+function main()
+{
+
+    try{
+        findLPCDevice()
+    }
+    catch(e)
+    {
+        if( e == ERROR_NOT_FOUND)
+            if(deviceId)
+            {
+                printf("\n\nPlease report this ID so that we can add it.\n")
+                errorf("Error unsupported NXP LPC ID: 0x%X\n", deviceId)
+            }
+            else
+                errorf("ERROR: No valid NXP LPC device ID found\n")
+        else
+            errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
+        return ERROR_NOTIFIED  // We have already thrown an error so use -1 (otherwise < -1)
+    }
+    return ERROR_OK
+}
+
+/////////////////////////////////////////////////////
+//
+//
+//
+function findLPCDevice()
+{
+    // Check if the right script API is supported
+    if( VERSION < 4.7)
+    {
+       errorf("Error:\n\nIncompatiable EBlink version %.1f\n\tPlease update\n", VERSION)
+       throw ERROR_NOTIFIED
+    }
+
+	// Read the Device ID
+    deviceId = readLPCDeviceID()
+
+    if(deviceId == 0)
+        throw ERROR_NOT_FOUND
+
+    // We have valid device ID which will be used to load the right scripts
+    set_target()
+}
+
+
+function readLPCDeviceID()
+{
+
+   _n_throw( targetApi.halt() )
+
+   // Write params to data ram space
+
+   _n_throw( intrfApi.writeMem32(PARAM_ADDR, IAP_READPARTID) )
+   _n_throw( intrfApi.writeMem32(RESULT_ADDR+4,0) )
+
+   // Write the param and result addresses into R0/R1
+
+   _n_throw( targetApi.writeReg("R0", PARAM_ADDR) )
+   _n_throw( targetApi.writeReg("R1", RESULT_ADDR) )
+
+   // Write the return address to the LR register, and set the BKPT instruction at
+   // the return address
+
+   _n_throw( targetApi.writeReg("LR", RETURN_ADDR+1) )
+   _n_throw( intrfApi.writeMem32(RETURN_ADDR, 0xBEAABEAA) )
+
+   // Execute the IAP command (If there's nothing at the standard IAP entry address,
+   // try the LPC800 entry address)
+
+   _n_throw(intrfApi.readMem32(IAP_ADDR))
+   if (intrfApi.value32 == 0xBEAABEAA)
+	_n_throw( targetApi.execute(IAP_ADDR_800, true) )
+   else
+	_n_throw( targetApi.execute(IAP_ADDR, true) )
+
+   // Read result
+
+   _n_throw( intrfApi.readMem32(RESULT_ADDR+4) )
+
+// Return result
+
+   return(intrfApi.value32)
+
+}
+
+/////////////////////////////////////////////////////
+//
+//
+//
+function set_target()
+{
+    noticef("NXP LPC device : 0x%X\n", deviceId)
+
+    switch(deviceId)
+    {
+
+	// LPC800
+	case 0x00008021 : // CHIPID_LPC802
+	case 0x00008022 :
+	case 0x00008023 :
+	case 0x00008024 :
+
+		require("nxp/lpc800.script")
+		break
+
+	// LPC1100
+	case 0x0A40902B : // CHIPID_LPC1114
+	case 0x1A40902B :
+	case 0x4440502B :
+	case 0x2540902B :
+	case 0x0444102B :
+	case 0x2540102B :
+	case 0x00040040 :
+	case 0x00040042 :
+	case 0x00040060 :
+	case 0x00040070 :
+	case 0x00050080 : // CHIPID_LPC1115
+
+        require("nxp/lpc1100.script")
+        break
+
+    // LPC1700
+    case 0x26113F37 : // CHIPID_1769
+    case 0x26013F37 : // CHIPID_1768
+    case 0x26012837 : // CHIPID_1767
+    case 0x26013F33 : // CHIPID_1766
+    case 0x26013733 : // CHIPID_1765
+    case 0x26011922 : // CHIPID_1766
+    case 0x26012033 : // CHIPID_1763
+    case 0x25113737 : // CHIPID_1759
+    case 0x25013F37 : // CHIPID_1758
+    case 0x25011723 : // CHIPID_1756
+    case 0x25011722 : // CHIPID_1754
+    case 0x25001121 : // CHIPID_1752
+    case 0x25001118 : // CHIPID_1751
+    case 0x25001110 : // CHIPID_1751 (no CRP)
+
+        require("nxp/lpc1700.script")
+        break
+
+    // ---------- Not supported ChipId yet -----------
+    default:
+        throw ERROR_NOT_FOUND
+    }
+
+    // Call our generic entry point of the device script we just loaded
+    lpc_device()
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Additional commands after reset (optional) called by EBlink
+//
+// resetType:
+//        SYSTEM_RESET
+//        CORE_RESET
+//        JTAG_RESET
+//        USER_RESET
+//
+
+function  reset_post(resetType)
+{
+
+    // Check if there is an user defined post reset hook, the user
+    // can add his own reset strategy with -S <myscript> as last
+    // defined script on the cli.
+    if (isScriptObject("reset_post_hook"))
+        return reset_post_hook(resetType);
+
+    // We don't use this if the reset is a user_script type. In that
+    // case, the user is responsible for the initialization.
+    //
+    if( resetType != USER_RESET )
+    {
+
+		// Unmap the boot loader from the first 512 bytes of memory
+//		if (type == 1700) intrfApi.writeMem32(0x400FC040,0x01)
+//		else intrfApi.writeMem32(0x40048000,0x02)
+
+        // Set the Stack pointer according the Vector table entry
+//        intrfApi.readMem32(0x00000000)
+//        targetApi.writeReg("SP", intrfApi.value32)
+
+        // Set the Program pointer according the Vector table entry
+//        intrfApi.readMem32(0x00000004)
+//        targetApi.writeReg("PC", intrfApi.value32)
+
+    }
+
+    return ERROR_OK
+}
+

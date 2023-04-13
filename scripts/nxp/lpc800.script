@@ -1,0 +1,139 @@
+/////////////////////////////////////////////////////
+//
+//                   LPC800
+//
+/////////////////////////////////////////////////////
+//
+// Adapted from stmicro scripts by J.DuBois
+// at Thermalogic Corporation (jer@thlogic.com)
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x1FFF0000\" length=\"0x1FFF\"/>
+ <memory type=\"ram\" start=\"0x10000000\" length=\"0x%x\"/>
+ <memory type=\"flash\" start=\"0x00000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">%x</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x80000\"/>
+ <memory type=\"ram\" start=\"0x50000000\" length=\"0x14000\"/>
+ <memory type=\"ram\" start=\"0xa0000000\" length=\"0x8000\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x100000\"/>
+</memory-map>"
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function lpc_device()
+{
+    local flash_size,flash1_size
+    local page_size,page1_size
+	local flash1_secstart
+    local ram_size
+    local deviceStr
+
+    switch(deviceId) {
+        case 0x00008021 : // CHIPID_LPC802
+		case 0x00008022 :
+		case 0x00008023 :
+		case 0x00008024 :
+            deviceStr = "802"
+			flash_size = 0x3C00
+			page_size = 0x400
+            ram_size = 0x800
+			flash1_size = 0x380
+			page1_size = 0x40
+			flash1_secstart = 15
+			DeviceAPI().setFlashEraseValue(0x00)
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+
+    // Inform user of the device found
+    printf("NXP LPC family : LPC%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X+0x%X\nConfigured RAM : 0x%X\n", flash_size, flash1_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+	_n_throw(intrfApi.writeMem32(0x40048000, 0x02))
+
+    DeviceAPI().memmap( format( mem_template,  ram_size,flash_size,page_size,flash_size,flash1_size,page1_size,flash1_secstart))
+
+    // Flash loader script
+    require("nxp/flash/lpc800.script")
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// We overrule the default reset_post function
+//
+// resetType:
+//        SYSTEM_RESET
+//        CORE_RESET
+//        JTAG_RESET
+//        USER_RESET
+//
+
+function  reset_post_hook(resetType)
+{
+
+    // We don't use this if the reset is a user_script type. In that
+    // case, the user is responsible for the initialization.
+    //
+
+    if( resetType != USER_RESET )
+    {
+        try
+        {
+			// Unmap the boot loader from the first 512 bytes of memory
+			_n_throw(intrfApi.writeMem32(0x40048000,0x02))
+
+			// Set the Stack pointer according the Vector table entry
+			intrfApi.readMem32(0x00000000)
+			targetApi.writeReg("SP", intrfApi.value32)
+
+			// Set the Program pointer according the Vector table entry
+			intrfApi.readMem32(0x00000004)
+			targetApi.writeReg("PC", intrfApi.value32)
+
+        }
+
+        // Catch the errors
+        catch(e){
+            if(e < ERROR_NOTIFIED)
+                errorf("\nError: Resetting! %d\n", e )
+            return ERROR_NOTIFIED
+        }
+
+    }
+
+    return ERROR_OK
+}

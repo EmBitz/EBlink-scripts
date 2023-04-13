@@ -1,0 +1,192 @@
+/////////////////////////////////////////////////////
+//
+//                   SAM3x
+//
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x00000000\" length=\"0x80000\"/>
+ <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+  <property name=\"blocksize\">256</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0x41000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0x42000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0x43000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0x60000000\" length=\"0x10000\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+
+const CHIPID_CIDR_ARCH_MASK		(0xFF << 20)
+const CHIPID_CIDR_ARCH_SAM3UxC	(0x80 << 20)
+const CHIPID_CIDR_ARCH_SAM3UxE	(0x81 << 20)
+const CHIPID_CIDR_ARCH_SAM3XxC	(0x84 << 20)
+const CHIPID_CIDR_ARCH_SAM3XxE	(0x85 << 20)
+const CHIPID_CIDR_ARCH_SAM3XxG	(0x86 << 20)
+const CHIPID_CIDR_ARCH_SAM3NxA	(0x93 << 20)
+const CHIPID_CIDR_ARCH_SAM3NxB	(0x94 << 20)
+const CHIPID_CIDR_ARCH_SAM3NxC	(0x95 << 20)
+const CHIPID_CIDR_ARCH_SAM3SxA	(0x88 << 20)
+const CHIPID_CIDR_ARCH_SAM3SxB	(0x89 << 20)
+const CHIPID_CIDR_ARCH_SAM3SxC	(0x8A << 20)
+
+EEFC_BASE <- array(2)
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function atmel_device()
+{
+    local deviceStr
+    local flashSize
+    local flashBase
+    
+    _n_throw(intrfApi.readMem32(SAM3X_CIDR))   
+    switch( intrfApi.value32 & CHIPID_CIDR_ARCH_MASK) {
+       case CHIPID_CIDR_ARCH_SAM3XxC:
+            deviceStr = "X_C"
+            break
+            
+       case CHIPID_CIDR_ARCH_SAM3XxE:
+            deviceStr = "X_E"       
+            break
+            
+       case CHIPID_CIDR_ARCH_SAM3XxG:
+            deviceStr = "X_G"       
+            break        
+    }
+
+    // Check if we already have a device found
+    if(deviceStr.len() != 0)
+    {
+        // SAM3X is dual bank 
+        EEFC_BASE[0] = (0x400E0A00+(0*0x200))
+        EEFC_BASE[1] = (0x400E0A00+(1*0x200))
+        
+        flashBase = 0x80000
+    }
+    else
+    {
+        _n_throw(intrfApi.readMem32(SAM34NSU_CIDR))
+        switch( intrfApi.value32 & CHIPID_CIDR_ARCH_MASK) {
+            case CHIPID_CIDR_ARCH_SAM3NxA:
+                deviceStr = "N_A"            
+                break
+            
+            case CHIPID_CIDR_ARCH_SAM3NxB:  
+                deviceStr = "N_B"             
+                break
+            
+            case CHIPID_CIDR_ARCH_SAM3NxC:
+                deviceStr = "N_C"             
+                break   
+            
+            case CHIPID_CIDR_ARCH_SAM3SxA:
+                deviceStr = "SAM3X_C"             
+                break
+            
+            case CHIPID_CIDR_ARCH_SAM3SxB:      
+                deviceStr = "S_B"           
+                break
+            
+            case CHIPID_CIDR_ARCH_SAM3SxC:
+                deviceStr = "S_C"             
+                break                                 
+        }
+
+    
+        // Check if we already have a device found
+        if(deviceStr.len() != 0)
+        {
+            flashBase = 0x400000
+            EEFC_BASE[0] = (0x400E0A00)
+        }
+        else
+        {
+            switch( intrfApi.value32 & CHIPID_CIDR_ARCH_MASK) {         
+                case CHIPID_CIDR_ARCH_SAM3UxC:      
+                    deviceStr = "U_C"           
+                    break
+            
+                case CHIPID_CIDR_ARCH_SAM3UxE:
+                    deviceStr = "U_E"             
+                    break  
+                
+                default:
+                    throw ERROR_NOT_FOUND
+            } 
+       
+            flashBase = 0x400000
+            EEFC_BASE[0] = (0x400E0A00+(0*0x200))
+                
+            // Larger devices are split in dual bank        
+            if(  sam_flash_size(intrfApi.value32) >  0x80000)
+                EEFC_BASE[1] = (0x400E0A00+(1*0x200))
+        
+        }
+    }
+
+    // Inform user of the device found
+    printf("Atmel device   : SAM3%s\n", deviceStr)    
+
+    // We get the flash size from the lookup table
+    local flash_size = sam_flash_size(intrfApi.value32)
+    
+    // We get the ram size from the lookup table
+    local ram_size = sam_ram_size(intrfApi.value32)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X\nDetected RAM   : 0x%X\n", flash_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    // Build the memory XML map and pass it to the EBlink device module
+    DeviceAPI().memmap( format( mem_template, flashBase, flash_size, ram_size) )
+    
+    // Flash loader script
+    require("atmel/flash/sam3x.script")
+}
+
+/////////////////////////////////////////////////////
+//
+//  Get the device flash size from cidr
+//
+function sam_flash_size(cidr)
+{
+    local flashsizes = [0,8,16,32,0,64,0,128,0,256,512,0,1024,0,2048,0]
+    return flashsizes[(cidr >>8) & 0x0F] * 1024
+}
+
+/////////////////////////////////////////////////////
+//
+//  Get the device ram size from cidr
+//
+function sam_ram_size(cidr)
+{
+   local ramsizes = [48, 1, 2, 6, 24, 4, 80, 160, 8, 16, 32, 64, 128, 256, 96, 512 ]   
+   return ramsizes[(cidr >>16) & 0x0F] * 1024
+}

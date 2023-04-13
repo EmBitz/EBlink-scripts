@@ -1,0 +1,257 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//          LPC1100
+//
+//          _n_throw is a built-in function which throws an exception if argument < 0
+//
+// Adapted from stmicro scripts by J.DuBois
+// at Thermalogic Corporation (jer@thlogic.com)
+
+// Generic Flash Script errors
+require("nxp/flash/errors.script")
+
+const IAP_ADDR     0x1FFF1FF1
+
+const DATA_ADDR   0x10000050
+const RETURN_ADDR 0x10000010
+const PARAM_ADDR  0x10000020
+const RESULT_ADDR 0x10000034
+
+const IAP_PREPARESECTORS 50
+const IAP_COPYRAMTOFLASH 51
+const IAP_ERASESECTORS   52
+const IAP_BLANKCHECK     53
+const IAP_READPARTID     54
+const IAP_READBOOTVERS   55
+const IAP_COMPARE        56
+const IAP_REINVOKEISP    57
+const IAP_READSERIAL     58
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to initialize upcoming flash operations.
+//
+function flash_start()
+{
+
+    try{
+        // Be sure that the core is halted
+        _n_throw( targetApi.halt() )
+
+		// Make sure boot ROM routines are mapped
+		_n_throw(intrfApi.writeMem32(0x40048000,0x0))
+
+		// Set Stack Pointer to not interfere with flash routines
+		_n_throw(targetApi.writeReg("SP", 0x10000000+ram_size-32))
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to erase a sector
+//    - flash_start() is already called
+//    - flash_done() will be called if all flash operations are ready
+//
+function flash_erase(sector, address)
+{
+	local result=[1,0,0,0]
+
+    try {
+
+		// Prepare sector for writing
+		_n_throw(executeIAP(IAP_PREPARESECTORS,result,sector,sector))
+
+		// Copy data from RAM to FLASH
+		_n_throw(executeIAP(IAP_ERASESECTORS,result,sector,sector,12000))
+
+		if (result[0] != 0) throw ERROR_FLASH
+
+		return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+	   flash_done()
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink to write a sector.
+//
+function flash_write(sector, address, buffer)
+{
+	local result=[1,0,0,0],writeSize;
+
+	writeSize = buffer.getSize();
+
+	if (ram_size <= 2048) {
+		// We can only write in blocks of 64, 128, 256, 512, or 1024 bytes
+
+		if (writeSize < 64) writeSize == 64;
+		else if (writeSize < 128) writeSize = 128;
+		else if (writeSize < 256) writeSize = 256;
+		else if (writeSize < 512) writeSize = 512;
+		else writeSize = 1024;
+	}
+	else {
+		// We can only write in blocks of 256, 512, 1024, or 4096 bytes
+
+		if (writeSize < 256) writeSize == 256;
+		else if (writeSize < 512) writeSize = 512;
+		else if (writeSize < 1024) writeSize = 1024;
+		else writeSize = 4096;
+	}
+
+    try{
+
+		// Write buffer to RAM
+
+		_n_throw(intrfApi.writeBuf(DATA_ADDR, buffer, 32))
+
+		// Fill up any remaining bytes in the block with 0xFF
+
+		for (local i=buffer.getSize()/4*4;i<writeSize;i+=4) {
+			_n_throw(intrfApi.writeMem32(DATA_ADDR+i, 0xFFFFFFFF))
+		}
+
+		// Prepare sector for writing
+		_n_throw(executeIAP(IAP_PREPARESECTORS,result,sector,sector,0))
+
+		// Copy data from RAM to FLASH
+		_n_throw(executeIAP(IAP_COPYRAMTOFLASH,result,address,DATA_ADDR,writeSize,12000))
+
+		if (result[0] != 0) throw ERROR_FLASH
+
+ 	    return ERROR_OK
+
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+	   flash_done()
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Called by EBlink if all flash operations are ready
+//
+function flash_done()
+{
+
+  // Unmap the boot loader from the first 512 bytes of memory
+  _n_throw(intrfApi.writeMem32(0x40048000,0x02))
+
+  // Set the Stack pointer according the Vector table entry
+  intrfApi.readMem32(0x00000000)
+  targetApi.writeReg("SP", intrfApi.value32)
+
+  // Set the Program pointer according the Vector table entry
+  intrfApi.readMem32(0x00000004)
+  targetApi.writeReg("PC", intrfApi.value32)
+
+  return ERROR_OK
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//
+
+function flash_erase_chip()
+{
+	local result=[1,0,0,0]
+
+	flash_start()
+
+    try {
+
+		// Prepare all sectors for erasing
+		_n_throw(executeIAP(IAP_PREPARESECTORS,result,0,flash_size/page_size-1))
+
+		// Erase all sectors
+		_n_throw(executeIAP(IAP_ERASESECTORS,result,0,flash_size/page_size-1))
+		if (result[0] != 0) throw ERROR_FLASH
+
+		return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing chip failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+function executeIAP(cmd,result,...)
+{
+	local i
+
+	try {
+
+		_n_throw( targetApi.halt() )
+
+		_n_throw( intrfApi.writeMem32(RESULT_ADDR, 1) )
+
+		// Write params to RAM
+		_n_throw( intrfApi.writeMem32(PARAM_ADDR, cmd) )
+
+		for (i=0;i < 4 && i < vargv.len();i++) {
+			_n_throw( intrfApi.writeMem32(PARAM_ADDR+(i+1)*4, vargv[i]) )
+		}
+
+		// Write the param and result addresses into R0/R1
+		_n_throw( targetApi.writeReg("R0", PARAM_ADDR) )
+		_n_throw( targetApi.writeReg("R1", RESULT_ADDR) )
+
+		// Write the return address to the LR register, and set the BKPT instruction at
+		// the return address
+		_n_throw( targetApi.writeReg("LR", RETURN_ADDR+1) )
+		_n_throw( intrfApi.writeMem32(RETURN_ADDR, 0xBEAABEAA) )
+
+		// Execute the IAP command
+
+		_n_throw( targetApi.execute(IAP_ADDR, true) )
+
+		// Return results
+
+		for (i=0;i<3;i++) {
+			_n_throw( intrfApi.readMem32(RESULT_ADDR+i*4) )
+			result[i] = intrfApi.value32;
+		}
+
+		return ERROR_OK
+	}
+	catch(e) {
+	   flash_done()
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing chip failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+	}
+}
