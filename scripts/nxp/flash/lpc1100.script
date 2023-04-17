@@ -120,14 +120,8 @@ function flash_write(sector, address, buffer)
     try{
 
 		// Write buffer to RAM
-
 		_n_throw(intrfApi.writeBuf(DATA_ADDR, buffer, 32))
 
-		// Fill up any remaining bytes in the block with 0xFF
-
-		for (local i=buffer.getSize()/4*4;i<writeSize;i+=4) {
-			_n_throw(intrfApi.writeMem32(DATA_ADDR+i, 0xFFFFFFFF))
-		}
 
 		// Prepare sector for writing
 		_n_throw(executeIAP(IAP_PREPARESECTORS,result,sector,sector,0))

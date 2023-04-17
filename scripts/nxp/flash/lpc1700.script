@@ -99,7 +99,10 @@ function flash_write(sector, address, buffer)
 	local result=[1,0,0,0],bufferSize,writeSize;
 
 	bufferSize = buffer.getSize();
-	if ((sector < 16 && bufferSize > 4096) || bufferSize > 32768) return ERROR_FLASH
+	if ((sector < 16 && bufferSize > 4096) || bufferSize > 32768) {
+        errorf("ERROR: writing sector %d length fault\n", sector )
+		return ERROR_NOTIFIED
+    }
 
 	// If we're writing more than 4K to one of the upper 32K sectors, we have
 	// to do it in 4K chunks.
