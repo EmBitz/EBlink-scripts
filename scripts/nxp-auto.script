@@ -24,13 +24,14 @@ deviceType <- 0			 // Global deviceType
 // Used by script to denote a not found devcie
 const ERROR_NOT_FOUND -100
 
+const BKPT		   0xBEAABEAA	// Breakpoint instruction
+const IAP_SIG	   0xF7FEB510	// Signature to identify that IAP entry point exists
 const IAP_ADDR     0x1FFF1FF1	// IAP entry point
 const IAP_ADDR_800 0x0F001FF1	// IAP entry point for LPC800 series
 const RETURN_ADDR  0x10000010
 const PARAM_ADDR   0x10000030
 const RESULT_ADDR  0x100000D0
 
-const IAP_BLANKCHECK 53
 const IAP_READPARTID 54
 
 /////////////////////////////////////////////////////
@@ -41,14 +42,13 @@ const IAP_READPARTID 54
 function main()
 {
 
-    try{
+    try {
         findLPCDevice()
     }
     catch(e)
     {
         if( e == ERROR_NOT_FOUND)
-            if(deviceId)
-            {
+            if(deviceId) {
                 printf("\n\nPlease report this ID so that we can add it.\n")
                 errorf("Error unsupported NXP LPC ID: 0x%X\n", deviceId)
             }
@@ -68,8 +68,7 @@ function main()
 function findLPCDevice()
 {
     // Check if the right script API is supported
-    if( VERSION < 4.7)
-    {
+    if( VERSION < 4.7) {
        errorf("Error:\n\nIncompatiable EBlink version %.1f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
     }
@@ -87,39 +86,38 @@ function findLPCDevice()
 
 function readLPCDeviceID()
 {
-
    _n_throw( targetApi.halt() )
 
-   // Write params to data ram space
+   // Check to make sure we're dealing with an NXP LPC device by
+   // looking for the IAP signature at the IAP routine memory locations
+   _n_throw(intrfApi.readMem32(IAP_ADDR))
+   if (intrfApi.value32 != IAP_SIG) _n_throw(intrfApi.readMem32(IAP_ADDR_800))
+   if (intrfApi.value32 != IAP_SIG) return(0)
 
+   // Write params to data ram space
    _n_throw( intrfApi.writeMem32(PARAM_ADDR, IAP_READPARTID) )
    _n_throw( intrfApi.writeMem32(RESULT_ADDR+4,0) )
 
    // Write the param and result addresses into R0/R1
-
    _n_throw( targetApi.writeReg("R0", PARAM_ADDR) )
    _n_throw( targetApi.writeReg("R1", RESULT_ADDR) )
 
    // Write the return address to the LR register, and set the BKPT instruction at
    // the return address
-
    _n_throw( targetApi.writeReg("LR", RETURN_ADDR+1) )
-   _n_throw( intrfApi.writeMem32(RETURN_ADDR, 0xBEAABEAA) )
+   _n_throw( intrfApi.writeMem32(RETURN_ADDR, BKPT) )
 
    // Execute the IAP command (If there's nothing at the standard IAP entry address,
    // try the LPC800 entry address)
+   _n_throw(intrfApi.readMem32(IAP_ADDR_800))
 
-   _n_throw(intrfApi.readMem32(IAP_ADDR))
-   if (intrfApi.value32 == 0xBEAABEAA)
+   if (intrfApi.value32 == IAP_SIG)
 	_n_throw( targetApi.execute(IAP_ADDR_800, true) )
    else
 	_n_throw( targetApi.execute(IAP_ADDR, true) )
 
    // Read result
-
    _n_throw( intrfApi.readMem32(RESULT_ADDR+4) )
-
-// Return result
 
    return(intrfApi.value32)
 
@@ -214,19 +212,7 @@ function  reset_post(resetType)
     //
     if( resetType != USER_RESET )
     {
-
-		// Unmap the boot loader from the first 512 bytes of memory
-//		if (type == 1700) intrfApi.writeMem32(0x400FC040,0x01)
-//		else intrfApi.writeMem32(0x40048000,0x02)
-
-        // Set the Stack pointer according the Vector table entry
-//        intrfApi.readMem32(0x00000000)
-//        targetApi.writeReg("SP", intrfApi.value32)
-
-        // Set the Program pointer according the Vector table entry
-//        intrfApi.readMem32(0x00000004)
-//        targetApi.writeReg("PC", intrfApi.value32)
-
+        // The reset strategies are defined in (lower) part definition scripts
     }
 
     return ERROR_OK

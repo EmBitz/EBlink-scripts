@@ -15,6 +15,7 @@
 //
 
 // Base addresses
+const USER_ROW      0x00804000  // User Row of Flash
 const PAC1          0x41000000  // Peripheral Access Control 1
 const DSU           0x41002000  // Device Service Unit
 const NVMCTRL       0x41004000  // Non-volatile memory controller

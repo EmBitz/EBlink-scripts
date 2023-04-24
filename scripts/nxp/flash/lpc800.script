@@ -34,8 +34,7 @@ const IAP_ERASEPAGES     59
 //
 function flash_start()
 {
-
-   try{
+   try {
         // Be sure that the core is halted
         _n_throw( targetApi.halt() )
 
@@ -55,7 +54,6 @@ function flash_start()
            errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
        return ERROR_NOTIFIED
     }
-
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -88,11 +86,10 @@ function flash_erase(sector, address)
 			_n_throw(executeIAP(IAP_ERASEPAGES,result,page,page,12000))
 		}
 
-		if (result[0] != 0) throw ERROR_FLASH
+		if (result[0] != 0)
+            throw ERROR_FLASH
 
 		return ERROR_OK
-
-
     }
 
     // Catch all the sector erase errors
@@ -123,11 +120,15 @@ function flash_write(sector, address, buffer)
 	else if (writeSize < 512) writeSize = 512;
 	else writeSize = 1024;
 
-    try{
+    try {
 
 		// Write buffer to RAM
-
 		_n_throw(intrfApi.writeBuf(DATA_ADDR, buffer, 32))
+
+		// Fill up any remaining bytes in the block with 0xFF
+		for (local i=buffer.getSize()/4*4;i<writeSize;i+=4) {
+			_n_throw(intrfApi.writeMem32(DATA_ADDR+i, 0x0))
+		}
 
 		if (sector < 15) {
 			// Prepare sector for writing
@@ -151,7 +152,6 @@ function flash_write(sector, address, buffer)
 		}
 
  	    return ERROR_OK
-
     }
 
     // Catch all the sector write errors
@@ -192,7 +192,6 @@ function flash_done()
 //   - If this function is not defined, sector by sector erase is used by EBlink.
 //   - This is an isolated function, flash_start and flash_done are not called by EBlink
 //
-
 function flash_erase_chip()
 {
 	local result=[1,0,0,0]
@@ -206,7 +205,8 @@ function flash_erase_chip()
 
 		// Erase all sectors
 		_n_throw(executeIAP(IAP_ERASESECTORS,result,0,15))
-		if (result[0] != 0) throw ERROR_FLASH
+		if (result[0] != 0)
+            throw ERROR_FLASH
 
 		flash_done()
 		return ERROR_OK
@@ -242,22 +242,18 @@ function executeIAP(cmd,result,...)
 		}
 
 		// Write the param and result addresses into R0/R1
-
 		_n_throw( targetApi.writeReg("R0", PARAM_ADDR) )
 		_n_throw( targetApi.writeReg("R1", RESULT_ADDR) )
 
 		// Write the return address to the LR register, and set the BKPT instruction at
 		// the return address
-
 		_n_throw( targetApi.writeReg("LR", RETURN_ADDR+1) )
 		_n_throw( intrfApi.writeMem32(RETURN_ADDR, 0xBEAABEAA) )
 
 		// Execute the IAP command
-
 		_n_throw( targetApi.execute(IAP_ADDR, true) )
 
 		// Return results
-
 		for (i=0;i<3;i++) {
 			_n_throw( intrfApi.readMem32(RESULT_ADDR+i*4) )
 			result[i] = intrfApi.value32;

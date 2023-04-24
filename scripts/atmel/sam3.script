@@ -1,0 +1,198 @@
+/////////////////////////////////////////////////////
+//
+//                   SAM3
+//
+// Adapted from samcd scripts by J.DuBois
+// at Thermalogic Corporation (jer@thlogic.com)
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"flash\" start=\"0x00400000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x00400000\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+// Flash Constroller Registers (also used by the flash script)
+const EEFC_FMR 	0x400E0A00
+const EEFC_FCR	0x400E0A04
+const EEFC_FSR 	0x400E0A08
+const EEFC_FRR 	0x400E0A0C
+
+const FKEY (0x5A << 24)
+const FCMD_GETD 0x00
+const FCMD_WP   0x01
+const FCMD_WPL  0x02
+const FCMD_EWP  0x03
+const FCMD_EWPL 0x04
+const FCMD_EA   0x05
+const FCMD_SLB  0x08
+const FCMD_CLB  0x09
+const FCMD_GLB  0x0A
+const FCMD_SGPB 0x0B
+const FCMD_CGPB 0x0C
+const FCMD_GGPB 0x0D
+const FCMD_STUI 0x0E
+const FCMD_SPUI 0x0F
+const FCMD_GCALB 0x10
+
+const FRDY 0x01
+
+// SRAM size lookup table
+
+sramTable <- [
+	48*1024,
+	1*1024,
+	2*1024,
+	6*1024,
+	112*1024,
+	4*1024,
+	80*1024,
+	160*1024,
+	8*1024,
+	16*1024,
+	32*1024,
+	64*1024,
+	128*1024,
+	256*1024,
+	96*1024,
+	512*1024 ]
+
+flash_size <- 0
+page_size <- 0
+lock_size <- 0
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function atmel_device()
+{
+    local devString
+
+    // Check if we have a recognized device Id
+
+	switch(deviceId)
+	{
+		case 0x28800960: devString = "S4A"; break;
+		case 0x288A0760: devString = "S2A"; break;
+		case 0x28890560: devString = "S1A"; break;
+		case 0x28900960: devString = "S4B"; break;
+		case 0x289A0760: devString = "S2B"; break;
+		case 0x28990560: devString = "S1B"; break;
+		case 0x28A00960: devString = "S4C"; break;
+		case 0x28AA0760: devString = "S2C"; break;
+		case 0x28A90560: devString = "S1C"; break;
+		case 0x288B0A60: devString = "S8A"; break;
+		case 0x289B0A60: devString = "S8B"; break;
+		case 0x28AB0A60: devString = "S8C"; break;
+		case 0x298B0A60: devString = "SD8A"; break;
+		case 0x299B0A60: devString = "SD8B"; break;
+		case 0x29AB0A60: devString = "SD8C"; break;
+
+		case 0x286E0A60: devString = "X8H"; break;
+		case 0x285E0A60: devString = "X8E"; break;
+		case 0x285B0960: devString = "X4E"; break;
+		case 0x284E0A60: devString = "X8C"; break;
+		case 0x284B0960: devString = "X4C"; break;
+		case 0x283E0A60: devString = "A8C"; break;
+		case 0x283B0960: devString = "A4C"; break;
+
+		case 0x29540960: devString = "N4C"; break;
+		case 0x29590760: devString = "N2C"; break;
+		case 0x29580560: devString = "N1C"; break;
+		case 0x29440960: devString = "N4B"; break;
+		case 0x29490760: devString = "N2B"; break;
+		case 0x29480560: devString = "N1B"; break;
+		case 0x29340960: devString = "N4A"; break;
+		case 0x29390760: devString = "N2A"; break;
+		case 0x29380560: devString = "N1A"; break;
+		case 0x29580561: devString = "N1C"; break;
+		case 0x29480561: devString = "N1B"; break;
+		case 0x29380561: devString = "N1A"; break;
+		case 0x29580361: devString = "N0C"; break;
+		case 0x29480361: devString = "N0B"; break;
+		case 0x29380361: devString = "N0A"; break;
+		case 0x29450261: devString = "N00B"; break;
+		case 0x29350261: devString = "N00A"; break;
+
+		case 0x28000961: devString = "U4C"; break;
+		case 0x280A0761: devString = "U2C"; break;
+		case 0x28090561: devString = "U1C"; break;
+		case 0x28100961: devString = "U4E"; break;
+		case 0x281A0761: devString = "U2E"; break;
+		case 0x28190561: devString = "U1E"; break;
+
+		default:
+        // Device not found signaled to parent script
+        throw ERROR_NOT_FOUND;
+	}
+
+    // We get the ram size from the lookup table
+    local ram_size = sramTable[(deviceId >> 16) & 0x0F]
+
+	// Read the Flash Descriptor
+
+	local flash_desc = array(8)
+
+	try {
+		_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | FCMD_GETD))
+
+		do {
+		  _n_throw(intrfApi.readMem32(EEFC_FSR))
+		} while (!(intrfApi.value32 & FRDY))
+
+		for (local i=0;i<8;i++) {
+			_n_throw(intrfApi.readMem32(EEFC_FRR))
+			flash_desc[i] = intrfApi.value32
+		}
+	}
+	// Catch the errors
+	catch(e) {
+        if(e < ERROR_NOTIFIED)
+			errorf("\nError: %d\n", e )
+       return ERROR_NOTIFIED
+	}
+
+    // Get the info about the flash
+
+	flash_size = flash_desc[1]
+	page_size  = flash_desc[2]
+	lock_size  = flash_size/flash_desc[5]
+
+    // Inform user about device type
+    printf("Atmel device   : ATSAM3%s\n", devString)
+
+    // Inform the user
+    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
+    {
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+      printf("CLI set  FLASH : 0x%X\n", flash_size)
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
+    {
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+      printf("CLI set    RAM : 0x%X\n", ram_size)
+    }
+
+    // Build the memory XML map and pass it to the EBlink device module
+    DeviceAPI().memmap( format( mem_template, flash_size, page_size, ram_size) )
+
+    // Flash loader script
+    require("atmel/flash/sam3.script")
+}

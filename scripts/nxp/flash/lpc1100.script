@@ -33,8 +33,7 @@ const IAP_READSERIAL     58
 //
 function flash_start()
 {
-
-    try{
+    try {
         // Be sure that the core is halted
         _n_throw( targetApi.halt() )
 
@@ -53,7 +52,6 @@ function flash_start()
            errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
        return ERROR_NOTIFIED
     }
-
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -74,7 +72,8 @@ function flash_erase(sector, address)
 		// Copy data from RAM to FLASH
 		_n_throw(executeIAP(IAP_ERASESECTORS,result,sector,sector,12000))
 
-		if (result[0] != 0) throw ERROR_FLASH
+		if (result[0] != 0)
+            throw ERROR_FLASH
 
 		return ERROR_OK
     }
@@ -117,7 +116,7 @@ function flash_write(sector, address, buffer)
 		else writeSize = 4096;
 	}
 
-    try{
+    try {
 
 		// Write buffer to RAM
 		_n_throw(intrfApi.writeBuf(DATA_ADDR, buffer, 32))
@@ -132,7 +131,6 @@ function flash_write(sector, address, buffer)
 		if (result[0] != 0) throw ERROR_FLASH
 
  	    return ERROR_OK
-
     }
 
     // Catch all the sector write errors

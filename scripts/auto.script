@@ -14,7 +14,8 @@
 mcuVendorList <- [
     "atmel-auto.script",  // ATmel   cortex-M
     "stm32-auto.script",  // STmicro cortex-M
-    "silabs-auto.script", // Siliabs (Gecko's) cortex-M
+    "silabs-auto.script", // Siliabs cortex-M (Gecko's)
+    "nxp-auto.script",    // NXP     cortex-M
 ]
 
 

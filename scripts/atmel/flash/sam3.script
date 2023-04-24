@@ -1,0 +1,178 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//          SAM3 flash loader
+//
+//          _n_throw is a built-in function which throws an exception if argument < 0
+//
+//
+// Adapted from samcd scripts by J.DuBois
+// at Thermalogic Corporation (jer@thlogic.com)
+
+maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think)
+
+
+// Generic Flash Script errors
+require("atmel/flash/errors.script")
+
+// Whether page should be erased before writing
+local page_erase = array(flash_size/page_size)
+
+
+const FLASH_ADDR 0x00400000
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to initialize upcoming flash operations.
+//
+function flash_start()
+{
+	// Initialize our page_erase array
+	for (local i=0;i<flash_size/page_size;i++)
+        page_erase[i] = 0
+
+    // Override the maximum flash speed from cli
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
+    {
+        maxFlashSpeed = FLASH_SPEED
+        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+    }
+
+    // Check that we don't go faster than the user selected on the cli
+    if(maxFlashSpeed > intrfApi.getSpeed())
+        maxFlashSpeed = intrfApi.getSpeed()
+
+    try{
+        // Be sure that the core is halted
+        _n_throw( targetApi.halt() )
+        return ERROR_OK
+    }
+
+    // Catch all the errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to erase a sector
+//
+function flash_erase(sector, address)
+{
+	// There is no "erase sector" command on the SAM3 chips
+	// so we just note here that the sector should be written
+	// with the "erase and write" command.
+	page_erase[sector] = 1
+	return ERROR_OK
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink to write a sector.
+//  We have to write a single page at the time, a sector has 4 pages
+//
+function flash_write(sector, address, buffer)
+{
+	local flash_cmd
+
+    try{
+		// Unlock the page to be written
+		_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | FCMD_CLB))
+
+		do {
+			_n_throw(intrfApi.readMem32(EEFC_FSR))
+		} while (!(intrfApi.value32 & FRDY))
+
+		if (intrfApi.value32 != FRDY) throw ERROR_UNLOCK
+
+		// Write the data to the flash write buffer
+
+		_n_throw(intrfApi.writeBuf(FLASH_ADDR, buffer, 32))
+
+		// Either write and lock or erase, write and lock page
+
+		if (page_erase[sector] == 1)
+            flash_cmd = FCMD_EWPL
+		else
+            flash_cmd = FCMD_WPL
+
+		_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | flash_cmd))
+
+		do {
+			_n_throw(intrfApi.readMem32(EEFC_FSR))
+		} while (!(intrfApi.value32 & FRDY))
+
+		if (intrfApi.value32 != FRDY)
+            throw ERROR_FLASH
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Finalize the flash operations
+//
+function flash_done()
+{
+    try{
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       return e
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//
+function flash_erase_chip()
+{
+    try{
+		// Clear all locks
+		for (local i=0;i<flash_size/page_size;i+=lock_size/page_size) {
+			_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | (i << 8) | FCMD_CLB))
+
+			do {
+			_n_throw(intrfApi.readMem32(EEFC_FSR))
+			} while (!(intrfApi.value32 & FRDY))
+
+			if (intrfApi.value32 != FRDY)
+                throw ERROR_UNLOCK
+		}
+
+		// Erase whole chip
+
+		_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | FCMD_EA))
+
+		do {
+		  _n_throw(intrfApi.readMem32(EEFC_FSR))
+		} while (!(intrfApi.value32 & FRDY))
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}

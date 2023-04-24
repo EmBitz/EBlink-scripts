@@ -81,15 +81,13 @@ function lpc_device()
     printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
 
     // The user specified the size of flash memory
-    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
-    {
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0) {
       flash_size = (FLASH_SIZE & 0xffff) * 1024
       printf("CLI set  FLASH : 0x%X\n", flash_size)
     }
 
     // The user specified the size of ram memory
-    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
-    {
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0) {
       ram_size = (RAM_SIZE & 0xffff) * 1024
       printf("CLI set    RAM : 0x%X\n", ram_size)
     }
@@ -112,7 +110,6 @@ function lpc_device()
 //        JTAG_RESET
 //        USER_RESET
 //
-
 function  reset_post_hook(resetType)
 {
 	local tmp
@@ -123,8 +120,7 @@ function  reset_post_hook(resetType)
 
     if( resetType != USER_RESET )
     {
-        try
-        {
+        try {
 			// Unmap the boot loader from the first 512 bytes of memory
 			_n_throw(intrfApi.writeMem32(0x40048000,0x02))
 
