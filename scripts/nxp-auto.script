@@ -131,56 +131,55 @@ function set_target()
 {
     noticef("NXP LPC device : 0x%X\n", deviceId)
 
-    switch(deviceId)
-    {
+    switch(deviceId) {
+        
+        // LPC800
+        case 0x00008021 : // CHIPID_LPC802
+        case 0x00008022 :
+        case 0x00008023 :
+        case 0x00008024 :
 
-	// LPC800
-	case 0x00008021 : // CHIPID_LPC802
-	case 0x00008022 :
-	case 0x00008023 :
-	case 0x00008024 :
+            require("nxp/lpc800.script")
+            break
 
-		require("nxp/lpc800.script")
-		break
+        // LPC1100
+        case 0x0A40902B : // CHIPID_LPC1114
+        case 0x1A40902B :
+        case 0x4440502B :
+        case 0x2540902B :
+        case 0x0444102B :
+        case 0x2540102B :
+        case 0x00040040 :
+        case 0x00040042 :
+        case 0x00040060 :
+        case 0x00040070 :
+        case 0x00050080 : // CHIPID_LPC1115
 
-	// LPC1100
-	case 0x0A40902B : // CHIPID_LPC1114
-	case 0x1A40902B :
-	case 0x4440502B :
-	case 0x2540902B :
-	case 0x0444102B :
-	case 0x2540102B :
-	case 0x00040040 :
-	case 0x00040042 :
-	case 0x00040060 :
-	case 0x00040070 :
-	case 0x00050080 : // CHIPID_LPC1115
+            require("nxp/lpc1100.script")
+            break
 
-        require("nxp/lpc1100.script")
-        break
+        // LPC1700
+        case 0x26113F37 : // CHIPID_1769
+        case 0x26013F37 : // CHIPID_1768
+        case 0x26012837 : // CHIPID_1767
+        case 0x26013F33 : // CHIPID_1766
+        case 0x26013733 : // CHIPID_1765
+        case 0x26011922 : // CHIPID_1766
+        case 0x26012033 : // CHIPID_1763
+        case 0x25113737 : // CHIPID_1759
+        case 0x25013F37 : // CHIPID_1758
+        case 0x25011723 : // CHIPID_1756
+        case 0x25011722 : // CHIPID_1754
+        case 0x25001121 : // CHIPID_1752
+        case 0x25001118 : // CHIPID_1751
+        case 0x25001110 : // CHIPID_1751 (no CRP)
 
-    // LPC1700
-    case 0x26113F37 : // CHIPID_1769
-    case 0x26013F37 : // CHIPID_1768
-    case 0x26012837 : // CHIPID_1767
-    case 0x26013F33 : // CHIPID_1766
-    case 0x26013733 : // CHIPID_1765
-    case 0x26011922 : // CHIPID_1766
-    case 0x26012033 : // CHIPID_1763
-    case 0x25113737 : // CHIPID_1759
-    case 0x25013F37 : // CHIPID_1758
-    case 0x25011723 : // CHIPID_1756
-    case 0x25011722 : // CHIPID_1754
-    case 0x25001121 : // CHIPID_1752
-    case 0x25001118 : // CHIPID_1751
-    case 0x25001110 : // CHIPID_1751 (no CRP)
+            require("nxp/lpc1700.script")
+            break
 
-        require("nxp/lpc1700.script")
-        break
-
-    // ---------- Not supported ChipId yet -----------
-    default:
-        throw ERROR_NOT_FOUND
+        // ---------- Not supported ChipId yet -----------
+        default:
+            throw ERROR_NOT_FOUND
     }
 
     // Call our generic entry point of the device script we just loaded
