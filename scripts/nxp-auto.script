@@ -196,7 +196,6 @@ function set_target()
 //        JTAG_RESET
 //        USER_RESET
 //
-
 function  reset_post(resetType)
 {
 
