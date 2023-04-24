@@ -18,7 +18,6 @@ mcuVendorList <- [
     "nxp-auto.script",    // NXP     cortex-M
 ]
 
-
 /////////////////////////////////////////////////////
 //
 //  The entry point for this script
