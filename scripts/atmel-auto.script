@@ -67,7 +67,7 @@ function findDevice()
     switch(targetApi.cpuType)
     {
         case 0: // Cortex-M 0
-        
+
             // Get the JEP106 code and check if it's Atmel
             _n_throw(intrfApi.readMem32(SAMD_DSU_PID1))
             local JEP106 =  (intrfApi.value32 >> 4)
@@ -86,9 +86,9 @@ function findDevice()
             // Check if we have a meaningful device ID
             if(deviceId == 0)
                 throw ERROR_NOT_FOUND
-            
+
             require("atmel/samcd.script")
-            atmel_device() 
+            atmel_device()
             break
 
 		case 3: // Cortex-M 3
