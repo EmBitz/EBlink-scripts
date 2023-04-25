@@ -91,23 +91,23 @@ function findDevice()
             atmel_device()
             break
 
-		case 3: // Cortex-M 3
+        case 3: // Cortex-M 3
 
             _n_throw(intrfApi.readMem32(SAM3_CHIPID))
             deviceId = intrfApi.value32
 
-			if (deviceId >= 0x28000961 && deviceId <= 0x29AB0A60)
-			{
-				require("atmel/sam3.script")
-				atmel_device()
-			}
-			else
-				throw ERROR_NOT_FOUND
-			break
+            if (deviceId >= 0x28000961 && deviceId <= 0x29AB0A60)
+            {
+                require("atmel/sam3.script")
+                atmel_device()
+            }
+            else
+                throw ERROR_NOT_FOUND
+            break
 
-        // Todo: Other Atmel families
-             // intrfApi.readMem32(0x400E0740)
-             // intrfApi.readMem32(0x400E0940)
+            // Todo: Other Atmel families
+            // intrfApi.readMem32(0x400E0740)
+            // intrfApi.readMem32(0x400E0940)
 
         default:
             throw ERROR_NOT_FOUND

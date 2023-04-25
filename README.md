@@ -1,6 +1,6 @@
 # Cortex-M tool e.g. STlink V2 & V3 support
 ## Win32, Linux_x86_64 and Raspberry 
-### Auto detects Silabs, STmicro and Atmel
+### Auto detects Silabs, STmicro, Atmel and NXP
 
 EBlink ARM Cortex-M debug tool with squirrel scripting device support
 
@@ -31,9 +31,10 @@ __Project bucket list__
 - Integrated target stack frame UNWIND in case of exception with message box popup in windows.
 - GDB (**MultiCore**) server with flash caching, with EmBitz live variables/expression support!
 - Full Semi-hosting support
+- Target voltage CLI override (e.g. 3 wire debugging or clone probes)
 - Execute (user) script functions from CLI e.g. option bytes reading/writing etc.
 - Execute (user) script functions from GDB terminal with the "monitor exec_script" command e.g. Special setups on GDB connect or on user request during runtime.
-- Supports Hotplug current Embitz 2.0 (monitor command "IsRunning" for target state query)
+- Supports Hotplug current Embitz 2.x (monitor command "IsRunning" for target state query)
 - Inplace memory (flash or ram) modifications of any length byte array from the command line (e.g. serials or checksum programming)
 - Any length byte array memory reading also on running target from the command line (automated testing)
 - **MultiCore** Core control (halt, reset and resume) from the command line (automated testing) 
@@ -93,6 +94,7 @@ name: ***STlink*** - STmicro V2/3 interface driver
         speed=<speed>   : Interface speed (default max possible)
         swd             : use SWD (default)
         jtag            : use Jtag
+        vcc=<voltage>   : Set explicit target voltage (like 3.3)
         ap=<port>       : Select target DAP_AP port (default 0)        
         serial=<serial> : Select probe explicit with serial#
         device=<usb_bus>:<usb_addr> : Select probe explicit on bus
