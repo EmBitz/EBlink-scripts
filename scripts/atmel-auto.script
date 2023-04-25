@@ -21,6 +21,7 @@ const SAMD_DSU_PID1 0x41003FE4
 const SAMD_DSU_PID2 0x41003FE8
 const ATMEL_JEP106  0x1F
 
+const SAM3_CHIPID	0x400E0740
 
 // Used by script to denote a not found devcie
 const ERROR_NOT_FOUND -100
@@ -66,18 +67,28 @@ function findDevice()
     switch(targetApi.cpuType)
     {
         case 0: // Cortex-M 0
+        
+            // Get the JEP106 code and check if it's Atmel
+            _n_throw(intrfApi.readMem32(SAMD_DSU_PID1))
+            local JEP106 =  (intrfApi.value32 >> 4)
 
-            _n_throw(intrfApi.readMem32(SAMD_DSU + SAMD_DSU_DID))
+             _n_throw(intrfApi.readMem32(SAMD_DSU_PID2))
+            JEP106 += ((intrfApi.value32 & 7) << 4)
+
+            debugf("Atmel JEP106: %x\n", JEP106)
+            if( JEP106 != ATMEL_JEP106)
+                   throw ERROR_NOT_FOUND
+
+            // Get the part info from the DSU
+            _n_throw(intrfApi.readMem32(SAMD_DSU_ID))
             deviceId = intrfApi.value32
 
             // Check if we have a meaningful device ID
-            if(deviceId >= 0x10000000 && deviceId <= 0x1001FFFF)
-            {
-                require("atmel/samcd.script")
-                atmel_device()
-            }
-            else
+            if(deviceId == 0)
                 throw ERROR_NOT_FOUND
+            
+            require("atmel/samcd.script")
+            atmel_device() 
             break
 
 		case 3: // Cortex-M 3
