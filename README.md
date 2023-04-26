@@ -150,7 +150,7 @@ name: ***cortex-m***
 
 ==== **Services**
      
-name: ***GDB-target***
+name: ***GDB-server***
 
      Usage -G [options]
 
