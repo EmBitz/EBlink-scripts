@@ -29,6 +29,22 @@ const mem_template = @@"
  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x100000\"/>
 </memory-map>"
 
+// Chip ID, description, flash size, page size, ram size, additional flash, page size
+
+NXPCONFIG <- [
+[ 0x00008021, "802M001JDH20", 0x3C00, 0x400,  0x800, 0x380, 0x40 ],
+[ 0x00008022, "802M011JDH20", 0x3C00, 0x400,  0x800, 0x380, 0x40 ],
+[ 0x00008023, "802M001JDH16", 0x3C00, 0x400,  0x800, 0x380, 0x40 ],
+[ 0x00008024, "802M001JHI33", 0x3C00, 0x400,  0x800, 0x380, 0x40 ],
+
+[ 0x00008040, "804M101JBD64", 0x7C00, 0x400, 0x1000, 0x380, 0x40 ],
+[ 0x00008041, "804M101JDH20", 0x7C00, 0x400, 0x1000, 0x380, 0x40 ],
+[ 0x00008042, "804M101JDH24", 0x7C00, 0x400, 0x1000, 0x380, 0x40 ],
+[ 0x00008043, "804M111JDH24", 0x7C00, 0x400, 0x1000, 0x380, 0x40 ],
+[ 0x00008044, "804M101JHI33", 0x7C00, 0x400, 0x1000, 0x380, 0x40 ],
+[ 0x00008041, "804UK",        0x7C00, 0x400, 0x1000, 0x380, 0x40 ],
+]
+
 /////////////////////////////////////////////////////
 //
 //  Entry point of this script called by parent script
@@ -43,24 +59,20 @@ function lpc_device()
     local ram_size
     local deviceStr
 
-    switch(deviceId) {
-        case 0x00008021 : // CHIPID_LPC802
-		case 0x00008022 :
-		case 0x00008023 :
-		case 0x00008024 :
-            deviceStr  = "802"
-			flash_size = 0x3C00
-			page_size = 0x400
-            ram_size = 0x800
-			flash1_size = 0x380
-			page1_size = 0x40
-			flash1_secstart = 15
-			DeviceAPI().setFlashEraseValue(0x00)
-            break
+  	for (local i=0;i<NXPCONFIG.len();i++) {
+		if (deviceId == NXPCONFIG[i][0]) {
+			deviceStr = NXPCONFIG[i][1]
+			flash_size = NXPCONFIG[i][2]
+			page_size = NXPCONFIG[i][3]
+			ram_size = NXPCONFIG[i][4]
+		    flash1_size = NXPCONFIG[i][5]
+			page1_size = NXPCONFIG[i][6]
+		}
+	}
 
-        default:
-            throw ERROR_NOT_FOUND
-    }
+	if (deviceStr == "") throw ERROR_NOT_FOUND
+
+	flash1_secstart = flash_size/page_size;
 
     // Inform user of the device found
     printf("NXP LPC family : LPC%s\n", deviceStr)

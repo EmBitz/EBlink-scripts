@@ -26,6 +26,7 @@ const ERROR_NOT_FOUND -100
 
 const BKPT		   0xBEAABEAA	// Breakpoint instruction
 const IAP_SIG	   0xF7FEB510	// Signature to identify that IAP entry point exists
+const IAP_SIG_176X 0xBA72F700	// Signature to identify that IAP entry point exists for LPC176x devices
 const IAP_ADDR     0x1FFF1FF1	// IAP entry point
 const IAP_ADDR_800 0x0F001FF1	// IAP entry point for LPC800 series
 const RETURN_ADDR  0x10000010
@@ -43,7 +44,7 @@ function main()
 {
 
     try {
-        findLPCDevice()
+        findDevice()
     }
     catch(e)
     {
@@ -65,7 +66,7 @@ function main()
 //
 //
 //
-function findLPCDevice()
+function findDevice()
 {
     // Check if the right script API is supported
     if( VERSION < 4.7) {
@@ -90,9 +91,13 @@ function readLPCDeviceID()
 
    // Check to make sure we're dealing with an NXP LPC device by
    // looking for the IAP signature at the IAP routine memory locations
+    
    _n_throw(intrfApi.readMem32(IAP_ADDR))
-   if (intrfApi.value32 != IAP_SIG) _n_throw(intrfApi.readMem32(IAP_ADDR_800))
-   if (intrfApi.value32 != IAP_SIG) return(0)
+
+   if (intrfApi.value32 != IAP_SIG && intrfApi.value32 != IAP_SIG_176X) {
+	 _n_throw(intrfApi.readMem32(IAP_ADDR_800))
+	 if (intrfApi.value32 != IAP_SIG) return(0)
+   }
 
    // Write params to data ram space
    _n_throw( intrfApi.writeMem32(PARAM_ADDR, IAP_READPARTID) )
@@ -119,6 +124,8 @@ function readLPCDeviceID()
    // Read result
    _n_throw( intrfApi.readMem32(RESULT_ADDR+4) )
 
+// Return result
+   
    return(intrfApi.value32)
 
 }
@@ -130,57 +137,16 @@ function readLPCDeviceID()
 function set_target()
 {
     noticef("NXP LPC device : 0x%X\n", deviceId)
+	printf("DeviceId %d\n",deviceId)
+	if (deviceId >= 0x00008021 && deviceId <= 0x00008044) 
+		require("nxp/lpc800.script")
 
-    switch(deviceId) {
-        
-        // LPC800
-        case 0x00008021 : // CHIPID_LPC802
-        case 0x00008022 :
-        case 0x00008023 :
-        case 0x00008024 :
+	else if ((deviceId >= 0x25001110 && deviceId <= 0x25113737) ||
+			  (deviceId >= 0x26011922 && deviceId <= 0x26113F37)) 
+        require("nxp/lpc1700.script")
 
-            require("nxp/lpc800.script")
-            break
-
-        // LPC1100
-        case 0x0A40902B : // CHIPID_LPC1114
-        case 0x1A40902B :
-        case 0x4440502B :
-        case 0x2540902B :
-        case 0x0444102B :
-        case 0x2540102B :
-        case 0x00040040 :
-        case 0x00040042 :
-        case 0x00040060 :
-        case 0x00040070 :
-        case 0x00050080 : // CHIPID_LPC1115
-
-            require("nxp/lpc1100.script")
-            break
-
-        // LPC1700
-        case 0x26113F37 : // CHIPID_1769
-        case 0x26013F37 : // CHIPID_1768
-        case 0x26012837 : // CHIPID_1767
-        case 0x26013F33 : // CHIPID_1766
-        case 0x26013733 : // CHIPID_1765
-        case 0x26011922 : // CHIPID_1766
-        case 0x26012033 : // CHIPID_1763
-        case 0x25113737 : // CHIPID_1759
-        case 0x25013F37 : // CHIPID_1758
-        case 0x25011723 : // CHIPID_1756
-        case 0x25011722 : // CHIPID_1754
-        case 0x25001121 : // CHIPID_1752
-        case 0x25001118 : // CHIPID_1751
-        case 0x25001110 : // CHIPID_1751 (no CRP)
-
-            require("nxp/lpc1700.script")
-            break
-
-        // ---------- Not supported ChipId yet -----------
-        default:
-            throw ERROR_NOT_FOUND
-    }
+	else
+        require("nxp/lpc1100.script")
 
     // Call our generic entry point of the device script we just loaded
     lpc_device()
