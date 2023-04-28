@@ -29,6 +29,25 @@ const mem_template = @@"
  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x100000\"/>
 </memory-map>"
 
+// Chip ID, description, flash size, page size, ram size, additional flash, page, ram sizes
+
+NXPCONFIG <- [
+[ 0x26113F37, "69", 0x10000, 0x1000, 0x4000, 0x70000, 0x8000, 0x10000],
+[ 0x26013F37, "68", 0x10000, 0x1000, 0x4000, 0x70000, 0x8000, 0x10000],
+[ 0x26012837, "67", 0x10000, 0x1000, 0x4000, 0x70000, 0x8000, 0x10000],
+[ 0x26013F33, "66", 0x10000, 0x1000, 0x4000, 0x30000, 0x8000, 0x10000],
+[ 0x26013733, "65", 0x10000, 0x1000, 0x4000, 0x30000, 0x8000, 0x10000],
+[ 0x26011922, "64", 0x10000, 0x1000, 0x4000, 0x10000, 0x8000,       0],
+[ 0x26012033, "63", 0x10000, 0x1000, 0x4000, 0x30000, 0x8000, 0x10000],
+[ 0x25113737, "59", 0x10000, 0x1000, 0x4000, 0x70000, 0x8000, 0x10000],
+[ 0x25013F37, "58", 0x10000, 0x1000, 0x4000, 0x70000, 0x8000, 0x10000],
+[ 0x25011723, "56", 0x10000, 0x1000, 0x4000, 0x30000, 0x8000,       0],
+[ 0x25011722, "54", 0x10000, 0x1000, 0x4000, 0x10000, 0x8000,       0],
+[ 0x25001121, "52", 0x10000, 0x1000, 0x4000,       0,      0,       0],
+[ 0x25001118, "51", 0x10000, 0x1000, 0x2000,       0,      0,       0],
+[ 0x25001110, "51",  0x8000, 0x1000, 0x2000,       0,      0,       0],
+]
+
 /////////////////////////////////////////////////////
 //
 //  Entry point of this script called by parent script
@@ -37,9 +56,9 @@ const mem_template = @@"
 //
 flash_size <- 0
 page_size <- 0
+ram_size <- 0
 flash1_size <- 0
 page1_size <-0
-ram_size <- 0
 ram1_size <- 0
 
 function lpc_device()
@@ -48,20 +67,20 @@ function lpc_device()
   //  _n_throw(intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY  ))
 
     local deviceStr
-    switch(deviceId) {
-        case 0x26113F37 : // CHIPID_1769
-            deviceStr = "69"
-			flash_size = 0x10000
-            page_size = 0x1000
-			flash1_size = 0x70000
-			page1_size = 0x8000
-            ram_size = 0x8000
-			ram1_size = 0x8000
-            break
+	
+	for (local i=0;i<NXPCONFIG.len();i++) {
+		if (deviceId == NXPCONFIG[i][0]) {
+			deviceStr = NXPCONFIG[i][1]
+			flash_size = NXPCONFIG[i][2]
+			page_size = NXPCONFIG[i][3]
+			ram_size = NXPCONFIG[i][4]
+		    flash1_size = NXPCONFIG[i][5]
+			page1_size = NXPCONFIG[i][6]
+			ram1_size = NXPCONFIG[i][7]
+		}
+	}
 
-        default:
-            throw ERROR_NOT_FOUND
-    }
+	if (deviceStr == "") throw ERROR_NOT_FOUND
 
     // Inform user of the device found
     printf("NXP LPC17xx family : LPC17%s\n", deviceStr)
