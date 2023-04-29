@@ -91,7 +91,7 @@ function readLPCDeviceID()
 
    // Check to make sure we're dealing with an NXP LPC device by
    // looking for the IAP signature at the IAP routine memory locations
-    
+
    _n_throw(intrfApi.readMem32(IAP_ADDR))
 
    if (intrfApi.value32 != IAP_SIG && intrfApi.value32 != IAP_SIG_176X) {
@@ -125,7 +125,7 @@ function readLPCDeviceID()
    _n_throw( intrfApi.readMem32(RESULT_ADDR+4) )
 
 // Return result
-   
+
    return(intrfApi.value32)
 
 }
@@ -138,11 +138,11 @@ function set_target()
 {
     noticef("NXP LPC device : 0x%X\n", deviceId)
 	printf("DeviceId %d\n",deviceId)
-	if (deviceId >= 0x00008021 && deviceId <= 0x00008044) 
+	if (deviceId >= 0x00008021 && deviceId <= 0x00008044)
 		require("nxp/lpc800.script")
 
 	else if ((deviceId >= 0x25001110 && deviceId <= 0x25113737) ||
-			  (deviceId >= 0x26011922 && deviceId <= 0x26113F37)) 
+			  (deviceId >= 0x26011922 && deviceId <= 0x26113F37))
         require("nxp/lpc1700.script")
 
 	else

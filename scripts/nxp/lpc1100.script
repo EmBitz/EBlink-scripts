@@ -101,7 +101,7 @@ NXPCONFIG <- [
 
 [ 0x2714302B, "1101LVUK",        0x8000, 0x1000,  0x800 ,0,0],
 [ 0x2724002B, "1102LVUK",        0x8000, 0x1000, 0x2000 ,0,0],
-[ 0x2744202B, "1112LVFHN24/003", 0x4000, 0x1000,  0x800 ,0,0],     // Part ID same as 1114LVFHN24/103 in user manual, 
+[ 0x2744202B, "1112LVFHN24/003", 0x4000, 0x1000,  0x800 ,0,0],     // Part ID same as 1114LVFHN24/103 in user manual,
 //[ 0x2744202B, "1114LVFHN24/103", 0x8000, 0x1000,  0x1000 ,0,0],  // but parts have different flash & ram sizes!
 [ 0x2744002B, "1114LVFHxxx/303", 0x8000, 0x1000, 0x2000 ,0,0],
 [ 0x2722202B, "1112LVFHI33/103", 0x8000, 0x1000, 0x1000 ,0,0],
@@ -131,7 +131,7 @@ function lpc_device()
     local deviceStr = ""
 	local ram1_size = 0
 	local ram2_size = 0
-	
+
 	for (local i=0;i<NXPCONFIG.len();i++) {
 		if (deviceId == NXPCONFIG[i][0]) {
 			deviceStr = NXPCONFIG[i][1]
@@ -139,12 +139,12 @@ function lpc_device()
 			page_size = NXPCONFIG[i][3]
 			ram_size = NXPCONFIG[i][4]
 			if (NXPCONFIG[i][5] != 0) ram1_size = NXPCONFIG[i][5]
-			if (NXPCONFIG[i][6] != 0) ram2_size = NXPCONFIG[i][6]			
+			if (NXPCONFIG[i][6] != 0) ram2_size = NXPCONFIG[i][6]
 		}
 	}
-	
+
 	if (deviceStr == "") throw ERROR_NOT_FOUND
-	
+
     // Inform user of the device found
     printf("NXP LPC family : LPC%s\n", deviceStr)
 
@@ -164,12 +164,12 @@ function lpc_device()
     }
 
 	_n_throw(intrfApi.writeMem32(0x40048000, 0x02))
-			
+
 	if (ram1_size > 0 || ram2_size > 0)
 		DeviceAPI().memmap( format( mem_template,  ram_size,flash_size,page_size))
 	else
 		DeviceAPI().memmap( format( mem_template_multiram,  ram_size,ram1_size,ram2_size,flash_size,page_size))
-		
+
     // Flash loader script
     require("nxp/flash/lpc1100.script")
 }

@@ -67,7 +67,7 @@ function lpc_device()
   //  _n_throw(intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY  ))
 
     local deviceStr
-	
+
 	for (local i=0;i<NXPCONFIG.len();i++) {
 		if (deviceId == NXPCONFIG[i][0]) {
 			deviceStr = NXPCONFIG[i][1]
