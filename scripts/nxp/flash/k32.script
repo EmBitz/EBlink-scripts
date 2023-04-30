@@ -1,149 +1,130 @@
-/////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////
 //
-//                   K32 Kinetis chips
+//          K32 Kinetis 
+//
+//          _n_throw is a built-in function which throws an exception if argument < 0
 //
 // J.DuBois at Thermalogic Corporation (jer@thlogic.com)
 
-/////////////////////////////////////////////////////
+// Generic Flash Script errors
+require("nxp/flash/errors.script")
+
+
+/////////////////////////////////////////////////////////////////////////////////
 //
-//   Memory map template of this device(s)
-//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//   Called by EBlink to initialize upcoming flash operations.
 //
-const mem_template = @@"
-<?xml version=\"1.0\"?>
-<memory-map>
- <memory type=\"rom\" start=\"0x1C000000\" length=\"0x8000\"/>
- <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
- <memory type=\"flash\" start=\"0x00000000\" length=\"0x%x\">
-  <property name=\"blocksize\">0x%x</property>
-  <property name=\"secstart\">0</property>
- </memory>
- <memory type=\"ram\" start=\"0x40000000\" length=\"0x180000\"/>
- <memory type=\"ram\" start=\"0x44000000\" length=\"0x1600000\"/>
- <memory type=\"ram\" start=\"0xE0000000\" length=\"0xC00000\"/>
- <memory type=\"ram\" start=\"0xF0000000\" length=\"0x10000\"/>
- <memory type=\"ram\" start=\"0xF1100000\" length=\"0x100000\"/>
- <memory type=\"ram\" start=\"0xF8000000\" length=\"0x100000\"/>
-</memory-map>"
-
-ram_size <- 0
-flash_size <- 0
-page_size <- 2048
-
-// Device Type
-K32CONFIG <- [
-	[0x00000000, "L3A"],
-	[0x20000000, "L2A"],
-	[0x40000000, "L2B"],
-]
-
-// RAM size
-RAMCONFIG <- [
-	[0x00080000, 96*1024],
-	[0x00090000, 128*1024],
-]
-
-// FLASH size
-FLASHCONFIG <- [
-	[0x05000000, 64*1024],
-	[0x06000000, 128*1024],
-	[0x09000000, 256*1024],
-	[0x0B000000, 512*1024]
-]
-
-CONST SIM_FCFG1 0x4007504C	// Flash Configuration Register 1
-
-/////////////////////////////////////////////////////
-//
-//  Entry point of this script called by parent script
-//
-//      Remark: The intrfApi is a global object from parent
-//
-function k32_device()
+function flash_start()
 {
-    local deviceStr = ""
+    try {
+        // Be sure that the core is halted
+        _n_throw( targetApi.halt() )
 
-	// Read device type
-	for (local i=0;i<K32CONFIG.len();i++) {
-		if ((deviceId & 0xF0000000) == NXPCONFIG[i][0]) NXPCONFIG[i][1]
-	}
-	
-	if (deviceStr == "") throw ERROR_NOT_FOUND
-
-	// Read RAM size
-	for (local i=0;i<RAMCONFIG.len();i++) {
-		if ((deviceId & 0x000F0000) == RAMCONFIG[i][0]) ram_size = RAMCONFIG[i][1]
-	}
-	
-	if (ram_size == 0) throw ERROR_NOT_FOUND
-	
-	// Read FLASH size
-	_n_throw(intrfApi.readMem32(SIM_FCFG1))
-
-	for (local i=0;i<FLASHCONFIG.len();i++) {
-		if ((intrfApi.value32 & 0x0F000000) == FLASHCONFIG[i][0]) flash_size = FLASHCONFIG[i][1]
-	}
-	
-	if (flash_size == 0) throw ERROR_NOT_FOUND
-	
-    // Inform user of the device found
-    printf("NXP K32 family : K32%s\n", deviceStr)
-
-    // Inform the user
-    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
-
-    // The user specified the size of flash memory
-    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0) {
-      flash_size = (FLASH_SIZE & 0xffff) * 1024
-      printf("CLI set  FLASH : 0x%X\n", flash_size)
+        return ERROR_OK
     }
 
-    // The user specified the size of ram memory
-    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0) {
-      ram_size = (RAM_SIZE & 0xffff) * 1024
-      printf("CLI set    RAM : 0x%X\n", ram_size)
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
     }
-
-	DeviceAPI().memmap( format( mem_template,  ram_size,flash_size,page_size) )
-
-    // Flash loader script
-    require("nxp/flash/k32.script")
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-// We overrule the default reset_post function
+//   Called by EBlink to erase a sector
+//    - flash_start() is already called
+//    - flash_done() will be called if all flash operations are ready
 //
-// resetType:
-//        SYSTEM_RESET
-//        CORE_RESET
-//        JTAG_RESET
-//        USER_RESET
-//
-function  reset_post_hook(resetType)
+function flash_erase(sector, address)
 {
-	local tmp
 
-    // We don't use this if the reset is a user_script type. In that
-    // case, the user is responsible for the initialization.
-    //
+    try {
 
-    if( resetType != USER_RESET )
-    {
-        try {
-
-        }
-
-        // Catch the errors
-        catch(e){
-            if(e < ERROR_NOTIFIED)
-                errorf("\nError: Resetting! %d\n", e )
-            return ERROR_NOTIFIED
-        }
-
-		printf("Reset done\n")
-
+		return ERROR_OK
     }
 
-    return ERROR_OK
+    // Catch all the sector erase errors
+    catch(e){
+	   flash_done()
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink to write a sector.
+//
+function flash_write(sector, address, buffer)
+{
+
+    try {
+
+ 	    return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+	   flash_done()
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Called by EBlink if all flash operations are ready
+//
+function flash_done()
+{
+
+  return ERROR_OK
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//
+
+function flash_erase_chip()
+{
+
+    try {
+
+		return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing chip failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+function executeFTFA(cmd,...)
+{
+
+	try {
+
+		return ERROR_OK
+	}
+	catch(e) {
+	   flash_done()
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing chip failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+	}
 }
