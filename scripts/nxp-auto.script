@@ -24,7 +24,8 @@ deviceType <- 0			 // Global deviceType
 // Used by script to denote a not found devcie
 const ERROR_NOT_FOUND -100
 
-const BKPT		   0xBEAABEAA	// Breakpoint instruction
+const K32_DEV_ID   0x40075024	// Device Id Register on K32 devices
+const BKPT	   0xBEAABEAA	// Breakpoint instruction
 const IAP_SIG	   0xF7FEB510	// Signature to identify that IAP entry point exists
 const IAP_SIG_176X 0xBA72F700	// Signature to identify that IAP entry point exists for LPC176x devices
 const IAP_ADDR     0x1FFF1FF1	// IAP entry point
@@ -35,6 +36,8 @@ const RESULT_ADDR  0x100000D0
 
 const IAP_READPARTID 54
 
+const NXP_LPC 0
+const NXP_K32 1
 /////////////////////////////////////////////////////
 //
 //  EBlink called Entry point
@@ -74,17 +77,42 @@ function findDevice()
        throw ERROR_NOTIFIED
     }
 
-	// Read the Device ID
-    deviceId = readLPCDeviceID()
+    // Read the K32 Deivce ID
+    deviceId = readK32DeviceID()
+    
+    // If zero, read the LPC Device ID
+    if (deviceId == 0) 
+        deviceId = readLPCDeviceID()
 
-    if(deviceId == 0)
-        throw ERROR_NOT_FOUND
+	if(deviceId == 0)
+        	throw ERROR_NOT_FOUND
 
-    // We have valid device ID which will be used to load the right scripts
-    set_target()
+	// We have valid device LPC ID which will be used to load the right scripts
+	set_target(NXP_LPC)
+    }
+    
+    // We have valid device K32 ID which will be used to load the right scripts
+    else set_target(NXP_K32)
 }
 
+/////////////////////////////////////////////////////
+//
+//
+//
+function readK32DeviceID()
+{
 
+  _n_throw(intrfApi.readMem32(K32_DEV_ID))
+  
+  if (!(intrfApi.value32 & 0x10000)) return(0)
+  
+  return(intrfApi.value32)
+}
+
+/////////////////////////////////////////////////////
+//
+//
+//
 function readLPCDeviceID()
 {
    _n_throw( targetApi.halt() )
@@ -134,22 +162,30 @@ function readLPCDeviceID()
 //
 //
 //
-function set_target()
+function set_target(type)
 {
-    noticef("NXP LPC device : 0x%X\n", deviceId)
-	printf("DeviceId %d\n",deviceId)
-	if (deviceId >= 0x00008021 && deviceId <= 0x00008044)
+    noticef("NXP device : 0x%X\n", deviceId)
+
+    if (type == NXP_LPC) {
+    
+    	if (deviceId >= 0x00008021 && deviceId <= 0x00008044)
 		require("nxp/lpc800.script")
 
-	else if ((deviceId >= 0x25001110 && deviceId <= 0x25113737) ||
-			  (deviceId >= 0x26011922 && deviceId <= 0x26113F37))
-        require("nxp/lpc1700.script")
+    	else if ((deviceId >= 0x25001110 && deviceId <= 0x25113737) ||
+		     (deviceId >= 0x26011922 && deviceId <= 0x26113F37))
+        	require("nxp/lpc1700.script")
 
-	else
-        require("nxp/lpc1100.script")
+    	else
+        	require("nxp/lpc1100.script")
 
-    // Call our generic entry point of the device script we just loaded
-    lpc_device()
+	// Call our generic entry point of the device script we just loaded
+    	lpc_device()
+    }
+    else {
+    
+    	require("nxp/k32.script")
+	k32_device()
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////
