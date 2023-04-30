@@ -9,6 +9,13 @@
 // Generic Flash Script errors
 require("nxp/flash/errors.script")
 
+const FTFA_FSTAT 0x40020000
+const 	FSTAT_CCIF 0x80
+const FTFA_FCCOB 0x40020004
+
+const FCMD_PROGRAMLWORD  (0x06 << 24)
+const FCMD_ERASEFLASHSEC (0x09 << 24)
+cosnt FCMD_ERASEALLBLKSU (0x49 << 24)
 
 /////////////////////////////////////////////////////////////////////////////////
 //
@@ -42,6 +49,8 @@ function flash_erase(sector, address)
 
     try {
 
+		executeFTFA(FCMD_ERASEFLASHSEC | (address & 0x0FFFFF)
+
 		return ERROR_OK
     }
 
@@ -61,9 +70,14 @@ function flash_erase(sector, address)
 //
 function flash_write(sector, address, buffer)
 {
-
+	local len = buffer.getSize();
+	
     try {
 
+		for (local i=0;len > 0;i++,len-=4) {
+			executeFTFA(FCMD_PROGRAMLWORD | address+i*4,buffer.un32(i))
+		}
+		
  	    return ERROR_OK
     }
 
@@ -100,6 +114,8 @@ function flash_erase_chip()
 
     try {
 
+		executeFTFA(FCMD_ERASEALLBLKSU)
+		
 		return ERROR_OK
     }
 
@@ -111,20 +127,37 @@ function flash_erase_chip()
     }
 }
 
-
 /////////////////////////////////////////////////////////////////////////////////////////
 //
 function executeFTFA(cmd,...)
 {
 
-	try {
+	// Check for busy
+	do {
+		_n_throw( intrfApi.readMem8(FTFA_FSTAT) )			
+	} while(!(intrfApi.value8 & FSTAT_CCIF))
+		
+	// Clear any old errors
+	_n_throw( intrfApi.writeMem8(FTFA_FSTAT,0x30) )
+		
+	// Write command to FCCOB
+	_n_throw( intrfApi.writeMem32(FTFA_FCCOB, cmd)) )
 
-		return ERROR_OK
+	// Write params to FCCOB
+	for (i=0;i < 2 && i < vargv.len();i++) {
+		_n_throw( intrfApi.writeMem32(FTFA_FCCOB+(i+1)*4, vargv[i]) )
 	}
-	catch(e) {
-	   flash_done()
-       if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing chip failed! %s\n", flashError(e) )
-       return ERROR_NOTIFIED
-	}
+		
+	// Execute
+	_n_throw( intrfApi.writeMem32(FTFA_FSTAT, FSTAT_CCIF) )
+		
+	// Check for busy
+	do {
+		_n_throw( intrfApi.readMem8(FTFA_FSTAT) )			
+	} while(!(intrfApi.value8 & FSTAT_CCIF))
+		
+	if (intrfApi.value8 & 0x31) throw ERROR_FLASH
+				
+	return ERROR_OK
+
 }
