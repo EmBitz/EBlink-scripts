@@ -26,9 +26,8 @@ const ERROR_NOT_FOUND -100
 
 const K32_DEV_ID   0x40075024	// Device Id Register on K32 devices
 const BKPT	   0xBEAABEAA	// Breakpoint instruction
-const NXP_DEVICEID 0x400483F8	// Device ID register
-const IAP_SIG_176X 0xBA72F700	// Signature to identify that IAP entry point exists on 176x devices
-const IAP_SIG	   0xF7FEB510	// Signature to identify that IAP entry point exists on 1100XL devices
+const IAP_SIG	   0xF7FEB510	// Signature to identify that IAP entry point exists
+const IAP_SIG_176X 0xBA72F700	// Signature to identify that IAP entry point exists for LPC176x devices
 const IAP_ADDR     0x1FFF1FF1	// IAP entry point
 const IAP_ADDR_800 0x0F001FF1	// IAP entry point for LPC800 series
 const RETURN_ADDR  0x10000010
@@ -82,13 +81,14 @@ function findDevice()
     deviceId = readK32DeviceID()
     
     // If zero, read the LPC Device ID
-    if (deviceId == 0) {
+    if (deviceId == 0) 
         deviceId = readLPCDeviceID()
 
-		if(deviceId == 0) throw ERROR_NOT_FOUND
+	if(deviceId == 0)
+        	throw ERROR_NOT_FOUND
 
-		// We have valid device LPC ID which will be used to load the right scripts
-		set_target(NXP_LPC)
+	// We have valid device LPC ID which will be used to load the right scripts
+	set_target(NXP_LPC)
     }
     
     // We have valid device K32 ID which will be used to load the right scripts
@@ -117,12 +117,7 @@ function readLPCDeviceID()
 {
    _n_throw( targetApi.halt() )
 
-   // Try to read the DEVICE_ID register
-	
-   _n_throw(intrfApi.readMem32(NXP_DEVICEID))	
-   if (intrfApi.value32 >= 0x00007000 && intrfApi.value32 <= 46000000) return(intrfApi.value32)
-
-   // Otherwise, check to make sure we're dealing with an NXP LPC device by
+   // Check to make sure we're dealing with an NXP LPC device by
    // looking for the IAP signature at the IAP routine memory locations
 
    _n_throw(intrfApi.readMem32(IAP_ADDR))
