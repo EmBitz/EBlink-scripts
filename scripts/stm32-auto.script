@@ -113,6 +113,7 @@ function set_target()
         break
 
     // Cortex M0+
+	case 0x443 : // STM32C011x4/x6
     case 0x466 : // STM32G03xxx/04xxx
     case 0x456 : // STM32G05xxx/06xxx
     case 0x460 : // STM32G07xxx/08xxx
