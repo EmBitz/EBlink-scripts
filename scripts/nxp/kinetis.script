@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////
 //
-//                   K32 Kinetis chips
+//                   Kinetis chips
 //
 // J.DuBois at Thermalogic Corporation (jer@thlogic.com)
 
@@ -31,14 +31,27 @@ flash_size <- 0
 page_size <- 2048
 
 // Device Type
-K32CONFIG <- [
-	[0x00000000, "L3A"],
-	[0x20000000, "L2A"],
-	[0x40000000, "L2B"],
+KINETISLCONFIG <- [
+	[0x00000000, "32L3A"],
+	[0x20000000, "32L2A"],
+	[0x40000000, "32L2B"],
+]
+
+KINETISKCONFIG <- [
+	[0x0, "0"],
+	[0x1, "1"],
+	[0x2, "2"],
+	[0x3, "3"],
+	[0x4, "4"],
+	[0x6, "6"],
+	[0x7, "7"],
+	[0x8, "8"],
 ]
 
 // RAM size
 RAMCONFIG <- [
+	[0x00050000, 16*1024],
+	[0x00060000, 32*1024],
 	[0x00080000, 96*1024],
 	[0x00090000, 128*1024],
 ]
@@ -48,10 +61,11 @@ FLASHCONFIG <- [
 	[0x05000000, 64*1024],
 	[0x06000000, 128*1024],
 	[0x09000000, 256*1024],
-	[0x0B000000, 512*1024]
+	[0x0B000000, 512*1024],
 ]
 
-CONST SIM_FCFG1 0x4007504C	// Flash Configuration Register 1
+const SIM_FCFG1     0x4007504C	// Flash Configuration Register 1
+const SIM_FCFG1_L2B 0x4004804C  // Flash Configuration Register 1 on K32L2B chips
 
 /////////////////////////////////////////////////////
 //
@@ -59,26 +73,48 @@ CONST SIM_FCFG1 0x4007504C	// Flash Configuration Register 1
 //
 //      Remark: The intrfApi is a global object from parent
 //
-function k32_device()
+function kinetis_device()
 {
     local deviceStr = ""
 
 	// Read device type
-	for (local i=0;i<K32CONFIG.len();i++) {
-		if ((deviceId & 0xF0000000) == NXPCONFIG[i][0]) NXPCONFIG[i][1]
+	if ((deviceId & 0x00F00000) == 0x0) {
+		for (local i=0;i<KINETISKCONFIG.len();i++) {
+			if (((deviceId & 0xF0000000) >> 28) == KINETISKCONFIG[i][0]) {
+				deviceStr = KINETISKCONFIG[i][1]
+				for (local j=0;i<KINETISKCONFIG.len();i++) {
+					if (((deviceId & 0x0F0000000) >> 24) == KINETISKCONFIG[i][0]) {
+						deviceStr += KINETISKCONFIG[i][1];
+						break;
+					}
+				}
+				break
+			}
+		}
 	}
-	
+	else {
+		for (local i=0;i<KINETISLCONFIG.len();i++) {
+			if ((deviceId & 0xF0000000) == KINETISLCONFIG[i][0]) {
+				deviceStr = KINETISLCONFIG[i][1]
+				break
+			}
+		}
+	}
 	if (deviceStr == "") throw ERROR_NOT_FOUND
 
 	// Read RAM size
 	for (local i=0;i<RAMCONFIG.len();i++) {
-		if ((deviceId & 0x000F0000) == RAMCONFIG[i][0]) ram_size = RAMCONFIG[i][1]
+		if ((deviceId & 0x000F0000) == RAMCONFIG[i][0]) {
+			ram_size = RAMCONFIG[i][1]
+			break;
+		}
 	}
 	
 	if (ram_size == 0) throw ERROR_NOT_FOUND
 	
 	// Read FLASH size
-	_n_throw(intrfApi.readMem32(SIM_FCFG1))
+	if (deviceStr == "32L2B") _n_throw(intrfApi.readMem32(SIM_FCFG1_L2B))
+	else _n_throw(intrfApi.readMem32(SIM_FCFG1))
 
 	for (local i=0;i<FLASHCONFIG.len();i++) {
 		if ((intrfApi.value32 & 0x0F000000) == FLASHCONFIG[i][0]) flash_size = FLASHCONFIG[i][1]
@@ -87,7 +123,7 @@ function k32_device()
 	if (flash_size == 0) throw ERROR_NOT_FOUND
 	
     // Inform user of the device found
-    printf("NXP K32 family : K32%s\n", deviceStr)
+    printf("NXP Kinetis family : K%s\n", deviceStr)
 
     // Inform the user
     printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
@@ -107,7 +143,7 @@ function k32_device()
 	DeviceAPI().memmap( format( mem_template,  ram_size,flash_size,page_size) )
 
     // Flash loader script
-    require("nxp/flash/k32.script")
+    require("nxp/flash/kinetis.script")
 }
 
 /////////////////////////////////////////////////////////////////////////////////

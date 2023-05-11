@@ -15,7 +15,7 @@ const FTFA_FCCOB 0x40020004
 
 const FCMD_PROGRAMLWORD  (0x06 << 24)
 const FCMD_ERASEFLASHSEC (0x09 << 24)
-cosnt FCMD_ERASEALLBLKSU (0x49 << 24)
+const FCMD_ERASEALLBLKSU (0x49 << 24)
 
 /////////////////////////////////////////////////////////////////////////////////
 //
@@ -49,7 +49,7 @@ function flash_erase(sector, address)
 
     try {
 
-		executeFTFA(FCMD_ERASEFLASHSEC | (address & 0x0FFFFF)
+		executeFTFA(FCMD_ERASEFLASHSEC | (address & 0x0FFFFF))
 
 		return ERROR_OK
     }
@@ -75,7 +75,7 @@ function flash_write(sector, address, buffer)
     try {
 
 		for (local i=0;len > 0;i++,len-=4) {
-			executeFTFA(FCMD_PROGRAMLWORD | address+i*4,buffer.un32(i))
+			executeFTFA(FCMD_PROGRAMLWORD | address+i*4,buffer.un32(i*4))
 		}
 		
  	    return ERROR_OK
@@ -111,7 +111,6 @@ function flash_done()
 
 function flash_erase_chip()
 {
-
     try {
 
 		executeFTFA(FCMD_ERASEALLBLKSU)
@@ -134,17 +133,17 @@ function executeFTFA(cmd,...)
 
 	// Check for busy
 	do {
-		_n_throw( intrfApi.readMem8(FTFA_FSTAT) )			
-	} while(!(intrfApi.value8 & FSTAT_CCIF))
+		_n_throw( intrfApi.readMem32(FTFA_FSTAT) )		
+	} while(!(intrfApi.value32 & FSTAT_CCIF))
 		
 	// Clear any old errors
-	_n_throw( intrfApi.writeMem8(FTFA_FSTAT,0x30) )
+	_n_throw( intrfApi.writeMem32(FTFA_FSTAT,0x30) )
 		
 	// Write command to FCCOB
-	_n_throw( intrfApi.writeMem32(FTFA_FCCOB, cmd)) )
+	_n_throw( intrfApi.writeMem32(FTFA_FCCOB, cmd) )
 
 	// Write params to FCCOB
-	for (i=0;i < 2 && i < vargv.len();i++) {
+	for (local i=0;i < 2 && i < vargv.len();i++) {
 		_n_throw( intrfApi.writeMem32(FTFA_FCCOB+(i+1)*4, vargv[i]) )
 	}
 		
@@ -153,10 +152,10 @@ function executeFTFA(cmd,...)
 		
 	// Check for busy
 	do {
-		_n_throw( intrfApi.readMem8(FTFA_FSTAT) )			
-	} while(!(intrfApi.value8 & FSTAT_CCIF))
+		_n_throw( intrfApi.readMem32(FTFA_FSTAT) )			
+	} while(!(intrfApi.value32 & FSTAT_CCIF))
 		
-	if (intrfApi.value8 & 0x31) throw ERROR_FLASH
+	if (intrfApi.value32 & 0x31) throw ERROR_FLASH
 				
 	return ERROR_OK
 
