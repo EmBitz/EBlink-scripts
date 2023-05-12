@@ -1,0 +1,162 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//          K32 Kinetis 
+//
+//          _n_throw is a built-in function which throws an exception if argument < 0
+//
+// J.DuBois at Thermalogic Corporation (jer@thlogic.com)
+
+// Generic Flash Script errors
+require("nxp/flash/errors.script")
+
+const FTFA_FSTAT 0x40020000
+const 	FSTAT_CCIF 0x80
+const FTFA_FCCOB 0x40020004
+
+const FCMD_PROGRAMLWORD  (0x06 << 24)
+const FCMD_ERASEFLASHSEC (0x09 << 24)
+const FCMD_ERASEALLBLKSU (0x49 << 24)
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to initialize upcoming flash operations.
+//
+function flash_start()
+{
+    try {
+        // Be sure that the core is halted
+        _n_throw( targetApi.halt() )
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink to erase a sector
+//    - flash_start() is already called
+//    - flash_done() will be called if all flash operations are ready
+//
+function flash_erase(sector, address)
+{
+
+    try {
+
+		executeFTFA(FCMD_ERASEFLASHSEC | (address & 0x0FFFFF))
+
+		return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+	   flash_done()
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink to write a sector.
+//
+function flash_write(sector, address, buffer)
+{
+	local len = buffer.getSize();
+	
+    try {
+
+		for (local i=0;len > 0;i++,len-=4) {
+			executeFTFA(FCMD_PROGRAMLWORD | address+i*4,buffer.un32(i*4))
+		}
+		
+ 	    return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+	   flash_done()
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Called by EBlink if all flash operations are ready
+//
+function flash_done()
+{
+
+  return ERROR_OK
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//
+
+function flash_erase_chip()
+{
+    try {
+
+		executeFTFA(FCMD_ERASEALLBLKSU)
+		
+		return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing chip failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+//
+function executeFTFA(cmd,...)
+{
+
+	// Check for busy
+	do {
+		_n_throw( intrfApi.readMem32(FTFA_FSTAT) )		
+	} while(!(intrfApi.value32 & FSTAT_CCIF))
+		
+	// Clear any old errors
+	_n_throw( intrfApi.writeMem32(FTFA_FSTAT,0x30) )
+		
+	// Write command to FCCOB
+	_n_throw( intrfApi.writeMem32(FTFA_FCCOB, cmd) )
+
+	// Write params to FCCOB
+	for (local i=0;i < 2 && i < vargv.len();i++) {
+		_n_throw( intrfApi.writeMem32(FTFA_FCCOB+(i+1)*4, vargv[i]) )
+	}
+		
+	// Execute
+	_n_throw( intrfApi.writeMem32(FTFA_FSTAT, FSTAT_CCIF) )
+		
+	// Check for busy
+	do {
+		_n_throw( intrfApi.readMem32(FTFA_FSTAT) )			
+	} while(!(intrfApi.value32 & FSTAT_CCIF))
+		
+	if (intrfApi.value32 & 0x31) throw ERROR_FLASH
+				
+	return ERROR_OK
+
+}
