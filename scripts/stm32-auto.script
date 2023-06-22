@@ -192,6 +192,7 @@ function set_target()
     // Cortex M4
     case 0x468 : // STM32G431xx/441xx
     case 0x469 : // STM32G47xxx/48xxx
+    case 0x479 : // STM32G49xxx
         require("stmicro/stm32gx.script")
         break
 

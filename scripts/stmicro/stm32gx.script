@@ -152,6 +152,14 @@ function stm32_device()
                 flash_size = flash_size/2
             }
             break
+            
+    case 0x479 :  
+            deviceStr = "49x"
+            page_size = 0x1000  // 4K single bank
+            cram_size = 0x4000  // 16K
+            sram_size = 0x20000 // 96K
+            hasDualBank = false
+            break            
 
     default:
             throw ERROR_NOT_FOUND
