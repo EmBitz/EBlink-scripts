@@ -86,7 +86,7 @@ function stm32_device()
     local flash_size
     local page_size
     local sram_size
-	local bank2_start_address = 0x08020000
+    local bank2_start_address = 0x08020000
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
     _n_throw(intrfApi.writeMem32(0x40015804, 6))
@@ -126,10 +126,10 @@ function stm32_device()
             if(hasDualBank)
             {
                 flash_size = flash_size/2
-				if(flash_size > 0x20000) // 128Kbyte
-				{
-					bank2_start_address = 0x08040000
-				}
+                if(flash_size > 0x20000) // 128Kbyte
+                {
+                    bank2_start_address = 0x08040000
+                }
             }
             break
 
@@ -152,14 +152,16 @@ function stm32_device()
                 flash_size = flash_size/2
             }
             break
-            
-    case 0x479 :  
+
+    case 0x479 :
             deviceStr = "49x"
-            page_size = 0x1000  // 4K single bank
+            page_size = 0x800   // 2K single and dual bank
             cram_size = 0x4000  // 16K
-            sram_size = 0x20000 // 96K
-            hasDualBank = false
-            break            
+            sram_size = 0x18000 // 96K
+            hasDualBank = readDualBankOption()
+            if(hasDualBank)
+                flash_size = flash_size/2
+            break
 
     default:
             throw ERROR_NOT_FOUND
@@ -187,16 +189,16 @@ function stm32_device()
 
     if(hasDualBank)
     {
-		if(cram_size ==0)
-			DeviceAPI().memmap( format( mem_dual_no_cram,   flash_size,
+        if(cram_size ==0)
+            DeviceAPI().memmap( format( mem_dual_no_cram,   flash_size,
                                                 sram_size,
                                                 flash_size,
                                                 page_size,
-												bank2_start_address,
+                                                bank2_start_address,
                                                 flash_size,
                                                 page_size) )
-		else
-			DeviceAPI().memmap( format( mem_dual_cram,   flash_size,
+        else
+            DeviceAPI().memmap( format( mem_dual_cram,   flash_size,
                                                 cram_size,
                                                 sram_size,
                                                 flash_size,
