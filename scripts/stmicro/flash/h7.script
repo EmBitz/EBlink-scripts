@@ -71,6 +71,11 @@ const FLASH_BANK1_ADDRESS     0x08100000
 const FLASH_REG_BASE_B0       0x52002000
 const FLASH_REG_BASE_B1       0x52002100
 
+// Target reset register and options
+const NVIC_AIRCR		0xE000ED0C
+const AIRCR_VECTKEY		(0x5FA << 16)
+const AIRCR_SYSRESETREQ	(1 << 2)
+
 // Mask of all the errors
 FLASH_ERROR <- (FLASH_WRPERR | FLASH_PGSERR | FLASH_STRBERR | FLASH_INCERR | FLASH_OPERR |
                       FLASH_RDPERR | FLASH_RDSERR | FLASH_SNECCERR | FLASH_DBECCERR)
@@ -98,8 +103,8 @@ function flash_start()
         maxFlashSpeed = intrfApi.getSpeed()
 
     try{
-        // Be sure that the core is halted
-        _n_throw( targetApi.halt() )
+        // We reset the system so all clocks are at default values (HSI 64)
+        _n_throw( intrfApi.writeMem32(NVIC_AIRCR, AIRCR_VECTKEY | AIRCR_SYSRESETREQ))
 
         // Wait for halt
         local time = GetTickCount();
@@ -150,14 +155,14 @@ function flash_erase(sector, address)
             bnkSector = sector-8
         }
 
+        // After the reset at flash_start we have core clock HSI 64 MHz, adapt FLASH_ACR.
+        _n_throw( intrfApi.writeMem32(regbase + FLASH_ACR, 0) )
+
         // 1)  Check and clear (optional) all the error flags due to previous programming/erase
         flash_get_clear_status(regbase)
 
         // 2) Unlock the flash bank
         flash_unlock(regbase)
-
-        // Not sure: We come out of reset with HSI 64 MHz. Adapt FLASH_ACR.
-        //_n_throw( intrfApi.writeMem32(regbase, 0) )
 
         // (3) Set the SER bit and select the sector out of the 8 in the main memory block) you wish to erase (SNB) in the FLASH_CR register
         // (4) Set the STRT bit in the FLASH_CR register also

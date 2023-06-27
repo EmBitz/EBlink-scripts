@@ -160,7 +160,9 @@ function stm32_device()
             sram_size = 0x18000 // 96K
             hasDualBank = readDualBankOption()
             if(hasDualBank)
+            {
                 flash_size = flash_size/2
+            }
             break
 
     default:
