@@ -73,8 +73,19 @@ function flash_start()
         maxFlashSpeed = intrfApi.getSpeed()
 
     try{
-        // Be sure that the core is halted
-        _n_throw( targetApi.halt() )
+        // Be sure that the core is halted and all clocks are reset
+        _n_throw( targetApi.reset(SYSTEM_RESET)
+
+        // Wait for halt
+        local time = GetTickCount();
+        do{
+            _n_throw( targetApi.poll() )
+
+          // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+              _n_throw(ERROR_TIMEOUT)
+
+        } while(targetApi.getState() != TARGET_HALTED )
 
         // Read flash lock status
         _n_throw( intrfApi.readMem32(FLASH_BASE|FLASH_CR) )

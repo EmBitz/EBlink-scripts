@@ -72,9 +72,9 @@ const FLASH_REG_BASE_B0       0x52002000
 const FLASH_REG_BASE_B1       0x52002100
 
 // Target reset register and options
-const NVIC_AIRCR		0xE000ED0C
-const AIRCR_VECTKEY		(0x5FA << 16)
-const AIRCR_SYSRESETREQ	(1 << 2)
+const NVIC_AIRCR        0xE000ED0C
+const AIRCR_VECTKEY     (0x5FA << 16)
+const AIRCR_SYSRESETREQ (1 << 2)
 
 // Mask of all the errors
 FLASH_ERROR <- (FLASH_WRPERR | FLASH_PGSERR | FLASH_STRBERR | FLASH_INCERR | FLASH_OPERR |
@@ -104,7 +104,7 @@ function flash_start()
 
     try{
         // We reset the system so all clocks are at default values (HSI 64)
-        _n_throw( intrfApi.writeMem32(NVIC_AIRCR, AIRCR_VECTKEY | AIRCR_SYSRESETREQ))
+        _n_throw( targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount();
