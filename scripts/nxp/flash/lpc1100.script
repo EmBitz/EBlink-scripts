@@ -35,7 +35,17 @@ function flash_start()
 {
     try {
         // Be sure that the core is halted
-        _n_throw( targetApi.halt() )
+        _n_throw( targetApi.reset(SYSTEM_RESET) )
+
+        // Wait for halt
+        local time = GetTickCount()
+        do{
+            // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+                _n_throw(ERROR_TIMEOUT)
+
+            _n_throw( targetApi.poll() )
+        } while(targetApi.getState() != TARGET_HALTED )
 
 		// Make sure boot ROM routines are mapped
 		_n_throw(intrfApi.writeMem32(0x40048000,0x0))

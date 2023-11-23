@@ -104,7 +104,7 @@ function flash_start()
 
     try{
         // We reset the system so all clocks are at default values (HSI 64)
-        _n_throw( targetApi.reset(SYSTEM_RESET)
+        _n_throw( targetApi.reset(SYSTEM_RESET) )
 
         // Wait for halt
         local time = GetTickCount();

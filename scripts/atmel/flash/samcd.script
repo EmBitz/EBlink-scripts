@@ -100,7 +100,17 @@ function flash_start()
 
     try{
         // Be sure that the core is halted
-        _n_throw( targetApi.halt() )
+        _n_throw( targetApi.reset(SYSTEM_RESET) )
+
+        // Wait for halt
+        local time = GetTickCount()
+        do{
+            // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+                _n_throw(ERROR_TIMEOUT)
+
+            _n_throw( targetApi.poll() )
+        } while(targetApi.getState() != TARGET_HALTED )
 
         // Unlock Flash
         _n_throw(intrfApi.writeMem32( NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_UNLOCK))
