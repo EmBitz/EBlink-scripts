@@ -172,21 +172,21 @@ function stm32_device()
     // Inform user of the device found
     printf("STmicro family : STM32G%s\n", deviceStr)
 
-    // Inform the user
-    printf("Detected FLASH : 0x%X%s\nConfigured RAM : 0x%X\n", flash_size, (hasDualBank ? " - Dualbank" :""), sram_size)
+    // Inform the user   
+    printf("Detected FLASH : %dKB%s\nConfigured RAM : %dKB\n", flash_size/1024, (hasDualBank ? " - Dualbank" :""), sram_size/1024)
 
     // The user specified the size of flash memory
     if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
     {
+      printf("CLI set  FLASH : %dKB\n", flash_size)
       flash_size = (FLASH_SIZE & 0xffff) * 1024
-      printf("CLI set  FLASH : 0x%X\n", flash_size)
     }
 
     // The user specified the size of ram memory
     if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
     {
-      sram_size = (RAM_SIZE & 0xffff) * 1024
-      printf("CLI set    RAM : 0x%X\n", sram_size)
+      printf("CLI set    RAM : %dKB\n", ram_size)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
     if(hasDualBank)

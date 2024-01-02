@@ -30,6 +30,8 @@ const mem_template_U5 = @@"
   <memory type=\"rom\" start=\"0x0bf90000\" length=\"0x8000\"/>
  </memory-map>"
 
+// Used for restoreDualBankMode function
+default_optr_value  <- 0x1FEFF8AA
 
 /////////////////////////////////////////////////////
 //
@@ -42,34 +44,34 @@ function stm32_device()
     local flash_size
     local page_size
     local ram_size
-
+    
     // Get the flash size in KB
     _n_throw(intrfApi.readMem32(0x0bfa07a0))
     flash_size = (intrfApi.value32 &0xFFFF)*1024
-
+        
     // Set the memory map according the device ID
       local deviceStr
       switch(deviceId) {
-
+      
         case 0x455 : // CHIPID_STM32U535/545
             deviceStr = "U535/545"
             ram_size = 0x44800 // 274KB
             page_size = 0x2000
             break
-
+            
         case 0x476 : // CHIPID_STM32U5F/Gx5
             deviceStr = "U5F/Gx5"
             ram_size = 0x2F4800 // 3026B
             page_size = 0x2000
             break
-
-        case 0x481 : // CHIPID_STM32U59x/5Ax
+            
+        case 0x481 : // CHIPID_STM32U59x/5Ax    
             deviceStr = "U59x/5Ax"
             ram_size = 0x274800 // 2514KB
             page_size = 0x2000
             break
-
-        case 0x482 : // CHIPID_STM32U575/585
+            
+        case 0x482 : // CHIPID_STM32U575/585      
             deviceStr = "U575/585"
             ram_size = 0xC4800 // 786KB
             page_size = 0x2000

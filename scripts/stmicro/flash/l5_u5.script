@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////////
 //
-//                   STM32 /L5 /U5
+//                   STM32 /L5 /U5 / H5
 //
 //  ToDo:  - option programming
 //
@@ -365,7 +365,11 @@ function checkDualBankOption()
     _n_throw(intrfApi.readMem32(FLASH_BASE+FLASH_OPTR))
 
     if( !(intrfApi.value32 & DBANK) ){
-         errorf("This script only supports Dual-bank mode\nTo restore use \"EBlink -E restoreDualBankMode()\"\n")
+        // Do we have a valid default OPT value?
+        if(default_optr_value)
+            errorf("This script only supports Dual-bank mode\nTo restore use \"EBlink -E restoreDualBankMode()\"\n")
+        else
+            errorf("This script only supports Dual-bank mode\n")
          _n_throw(ERROR_NOTIFIED)
     }
 }
@@ -381,6 +385,11 @@ function checkDualBankOption()
 //
 function restoreDualBankMode()
 {
+    if(!default_optr_value) {
+        errorf("This script doesn't support restore for this chip\n")
+        return ERROR_NOTIFIED
+    }
+
     try {
 
         // Be sure that the core is halted
@@ -409,20 +418,22 @@ function restoreDualBankMode()
             _n_throw(ERROR_UNLOCK)
         }
 
-        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  0x7FEFF8AA))
+        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  default_optr_value))
         _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT))
 
         flash_check_busy(10000)
         _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH))
 
         flash_lock()
+
+        printf("Flash option restore (0x%X) done\n", default_optr_value)
     }
 
     // Catch all the sector write errors
     catch(e){
         if(e < ERROR_NOTIFIED)
         {
-           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+           errorf("ERROR: flash option restire! %s\n", flashError(e) )
         }
         return ERROR_NOTIFIED
     }

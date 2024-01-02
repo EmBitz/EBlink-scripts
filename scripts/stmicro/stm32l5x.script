@@ -32,8 +32,10 @@ const mem_template_L5 = @@"
   <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
   <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
   <memory type=\"rom\" start=\"0x0bf90000\" length=\"0x8000\"/>
- </memory-map>"
+</memory-map>"
 
+// Used for restoreDualBankMode function
+default_optr_value  <- 0x7FEFF8AA
 
 /////////////////////////////////////////////////////
 //
