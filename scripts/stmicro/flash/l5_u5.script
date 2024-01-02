@@ -385,6 +385,7 @@ function checkDualBankOption()
 //
 function restoreDualBankMode()
 {
+    // If the default value is not set then we can't use this function
     if(!default_optr_value) {
         errorf("This script doesn't support restore for this chip\n")
         return ERROR_NOTIFIED
@@ -411,16 +412,17 @@ function restoreDualBankMode()
         _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 ) )
         _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY2 ) )
 
-        //
+        // Check if the flash option register is unlocked
         _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
-        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK){
-            printf("Unlock error!\n")
-            _n_throw(ERROR_UNLOCK)
-        }
+        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK)
+            _n_throw(ERROR_UNLOCK)        
 
+        // Set the factory default back in the flash option register
         _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  default_optr_value))
+        // Start the flashing operation
         _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT))
 
+        // Wait for program done and make it active
         flash_check_busy(10000)
         _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH))
 
@@ -433,7 +435,7 @@ function restoreDualBankMode()
     catch(e){
         if(e < ERROR_NOTIFIED)
         {
-           errorf("ERROR: flash option restire! %s\n", flashError(e) )
+           errorf("ERROR: flash option restore! %s\n", flashError(e) )
         }
         return ERROR_NOTIFIED
     }
