@@ -217,6 +217,18 @@ function set_target()
         require("stmicro/stm32h7x.script")
         break
 
+    // Cortex M33
+    case 0x472 : // CHIPID_STM32L5x2xx
+        require("stmicro/stm32l5x.script")
+        break
+
+    // Cortex M33
+    case 0x455 : // CHIPID_STM32U535/545
+    case 0x476 : // CHIPID_STM32U5F/Gx5
+    case 0x481 : // CHIPID_STM32U59x/5Ax
+    case 0x482 : // CHIPID_STM32U575/585
+        require("stmicro/stm32u5x.script")
+        break
 
     // ---------- Not supported ChipId yet -----------
     default:
