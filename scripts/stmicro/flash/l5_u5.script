@@ -1,12 +1,14 @@
 /////////////////////////////////////////////////////////////////////////////////
 //
-//                   STM32 /L5 /U5 / H5
+//                   STM32L5/U5 (only non-secure memory)
 //
 //  ToDo:  - option programming
+//         - secure memory programming
 //
 
 
 // The definitions below are already defined by upper device script
+//
 // const FLASH_BASE  : Base address of the flash controller
 // const FLASH_OPTR  : Flash option register offset
 // hasDualBank       : True if dual bank otherwise false
@@ -175,9 +177,7 @@ function flash_erase(sector, address)
 function flash_write(sector, address, buffer)
 {
     try{
-
-        // Check if the buffer size is multiple of 64bits
-        // Flash loader works with multiple of 8 bytes.
+        // Trim the output buffer to match the program width
         buffer.trim(pgmBitsWidth/8)
 
         // 1. Check that no Flash memory operation is ongoing by checking the NSBSY bit in the FLASH_NSSR register.
@@ -191,7 +191,7 @@ function flash_write(sector, address, buffer)
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
-        // 4. Perform the data write operation at the desired memory non-secure address, or in the
+        // 4. Perform the data write operation at the desired memory non-secure address
         _n_throw( intrfApi.writeBuf(address, buffer, 32) )
 
         // Restore probe speed
@@ -379,10 +379,8 @@ function setDualBank(dmode)
 
         //
         _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
-        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK){
-            printf("Unlock error!\n")
+        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK)
             _n_throw(ERROR_UNLOCK)
-        }
 
         _n_throw(intrfApi.readMem32(FLASH_BASE + FLASH_OPTR))
         local newValue = dmode ? intrfApi.value32 | DBANK : intrfApi.value32 & ~DBANK
@@ -402,7 +400,7 @@ function setDualBank(dmode)
     catch(e){
         if(e < ERROR_NOTIFIED)
         {
-           errorf("ERROR: flash option restire! %s\n", flashError(e) )
+           errorf("ERROR: set dual bank mode! %s\n", flashError(e) )
         }
         return ERROR_NOTIFIED
     }
@@ -418,7 +416,7 @@ function setDualBank(dmode)
 //
 function restoreDualBankMode()
 {
-    if(!defaultOptrValue) {
+    if( !isScriptObject(defaultOptrValue) || !defaultOptrValue) {
         errorf("This script doesn't support restore for this chip\n")
         return ERROR_NOTIFIED
     }
@@ -466,7 +464,7 @@ function restoreDualBankMode()
     catch(e){
         if(e < ERROR_NOTIFIED)
         {
-           errorf("ERROR: flash option restire! %s\n", flashError(e) )
+           errorf("ERROR: flash option restore! %s\n", flashError(e) )
         }
         return ERROR_NOTIFIED
     }
