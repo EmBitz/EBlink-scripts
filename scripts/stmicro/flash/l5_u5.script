@@ -6,8 +6,11 @@
 //
 
 
-// The parameters for the flash script
-const FLASH_BASE 0x40022000
+// The definitions below are already defined by upper device script
+// const FLASH_BASE  : Base address of the flash controller
+// const FLASH_OPTR  : Flash option register offset
+// hasDualBank       : True if dual bank otherwise false
+// defaultOptrValue  : The default factory flash option value (used for option reset)
 
 // Register offsets of the flash controller
 const FLASH_ACR     0x00
@@ -17,7 +20,7 @@ const FLASH_OPTKEYR 0x10
 const FLASH_NSSR    0x20
 const FLASH_NSCR    0x28
 const FLASH_ECCR    0x30
-const FLASH_OPTR    0x40
+
 
 // FLASH_NSCR control bit flags
 const FLASH_NSCR_NSPG       (1<< 0) // Program
@@ -47,7 +50,7 @@ const FLASH_NSSR_NSBSY      (1<<16) // Busy
 const FLASH_NSSR_ERROR_MASK 0x20FA
 
 // The FLASH_OPTR bit flags
-const DBANK      (1<<22) // Dualbank bit
+//const DBANK      (1<<22) // Dualbank bit
 
 const FLASH_KEY1      0x45670123
 const FLASH_KEY2      0xCDEF89AB
@@ -60,8 +63,12 @@ FLASH_ERROR <- ( FLASH_NSSR_NSPROGERR | FLASH_NSSR_NSWRPERR | FLASH_NSSR_NSPGAER
                  FLASH_NSSR_NSSIZERR | FLASH_NSSR_NSPGSERR)
 
 
-maxFlashSpeed   <- 16000 // 4MHz is max speed (we only tested it with V2 )
-halfOfSectors   <- 0    // The half of the number of sectors of the current device
+maxFlashSpeed   <- 16000 // The max speed tested with (can be changed from cli)
+
+// The half of the number of sectors (pages) of the current device. In Dualbank mode we have
+// twice the number of the actual pages per bank so if the erase sector count is above the
+// half size of the total page count then we are in the second bank.
+halfOfSectors   <- 0
 
 
 // Generic Flash Script errors
@@ -75,6 +82,9 @@ require("stmicro/flash/errors.script")
 //
 function flash_start()
 {
+    // Set the half sector size global
+    halfOfSectors = DeviceAPI().sectorCount()/2
+
     // Override the maximum flash speed from cli
     if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
     {
@@ -100,10 +110,7 @@ function flash_start()
             _n_throw( targetApi.poll() )
         } while(targetApi.getState() != TARGET_HALTED )
 
-        checkDualBankOption()
-
         flash_unlock()
-
         return ERROR_OK
     }
 
@@ -115,19 +122,6 @@ function flash_start()
     }
 }
 
-////////////////////////////////////////
-//
-//  Helper function to get the dual bank
-//  option state
-//
-function readDualBankOption()
-{
-    intrfApi.readMem32(FLASH_BASE+FLASH_OPTR)
-    printf("Dualbank = 0x%X\n", intrfApi.value32)
-    return (intrfApi.value32 & DBANK ? true: false)
-}
-
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 // EBlink callback
@@ -137,11 +131,10 @@ function readDualBankOption()
 function flash_erase(sector, address)
 {
     try{
-
         local eraseFlags = FLASH_NSCR_NSPER | FLASH_NSCR_NSSTRT
 
-        // Check if we are in the second bank
-        if(sector >= halfOfSectors)
+        // Check if we are in the second bank in case of dual bank
+        if(hasDualBank && sector >= halfOfSectors)
             eraseFlags  = eraseFlags | ( (sector-halfOfSectors) << 3 | FLASH_NSCR_NSBKER )
         else
             eraseFlags  = eraseFlags | (sector << 3 )
@@ -185,7 +178,7 @@ function flash_write(sector, address, buffer)
 
         // Check if the buffer size is multiple of 64bits
         // Flash loader works with multiple of 8 bytes.
-        buffer.trim(8)
+        buffer.trim(pgmBitsWidth/8)
 
         // 1. Check that no Flash memory operation is ongoing by checking the NSBSY bit in the FLASH_NSSR register.
         // 2. Check and clear all non-secure error programming flags due to a previous programming. If not, NSPGSERR is set.
@@ -301,7 +294,7 @@ function flash_unlock()
 //
 function flash_lock()
 {
-    // Lock Flash
+    // Lock Flash and option register
     _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSLOCK ) )
     _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OPTLOCK ) )
 }
@@ -320,8 +313,6 @@ function flash_erase_chip()
         // Be sure that the target is halted
         _n_throw( targetApi.halt() )
 
-        checkDualBankOption()
-
         // Unlock flash
         flash_unlock()
 
@@ -337,7 +328,7 @@ function flash_erase_chip()
         flash_check_busy(10000)
 
         // 6. The NSMER1 and NSMER2 bit can be cleared if no more non-secure mass erase is requested.
-        //_n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, 0 ) )
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, 0 ) )
 
         // Lock the flash again
         flash_lock()
@@ -355,25 +346,67 @@ function flash_erase_chip()
     }
 }
 
+
 ////////////////////////////////////////
 //
-//  Helper function to get the dual bank
-//  option state
+//  Set the dualbank mode from CLI
 //
-function checkDualBankOption()
+//  This function can be called from cli:
+//     eblink -E setDualBank(0|1)
+//
+function setDualBank(dmode)
 {
-    _n_throw(intrfApi.readMem32(FLASH_BASE+FLASH_OPTR))
+    try {
 
-    if( !(intrfApi.value32 & DBANK) ){
-        // Do we have a valid default OPT value?
-        if(default_optr_value)
-            errorf("This script only supports Dual-bank mode\nTo restore use \"EBlink -E restoreDualBankMode()\"\n")
-        else
-            errorf("This script only supports Dual-bank mode\n")
-         _n_throw(ERROR_NOTIFIED)
+        // Be sure that the core is halted
+        _n_throw( targetApi.reset(SYSTEM_RESET) )
+
+        // Wait for halt
+        local time = GetTickCount()
+        do{
+            // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+                _n_throw(ERROR_TIMEOUT)
+
+            _n_throw( targetApi.poll() )
+        } while(targetApi.getState() != TARGET_HALTED )
+
+        flash_unlock()
+
+        // Unlock flash options
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 ) )
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY2 ) )
+
+        //
+        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
+        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK){
+            printf("Unlock error!\n")
+            _n_throw(ERROR_UNLOCK)
+        }
+
+        _n_throw(intrfApi.readMem32(FLASH_BASE + FLASH_OPTR))
+        local newValue = dmode ? intrfApi.value32 | DBANK : intrfApi.value32 & ~DBANK
+
+        printf("Flash option 0x%X -> 0x%X\n", intrfApi.value32, newValue)
+        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  newValue))
+
+        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT))
+
+        flash_check_busy(10000)
+        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH))
+
+        flash_lock()
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+        if(e < ERROR_NOTIFIED)
+        {
+           errorf("ERROR: flash option restire! %s\n", flashError(e) )
+        }
+        return ERROR_NOTIFIED
     }
 }
-
 
 
 ////////////////////////////////////////
@@ -385,8 +418,7 @@ function checkDualBankOption()
 //
 function restoreDualBankMode()
 {
-    // If the default value is not set then we can't use this function
-    if(!default_optr_value) {
+    if(!defaultOptrValue) {
         errorf("This script doesn't support restore for this chip\n")
         return ERROR_NOTIFIED
     }
@@ -412,30 +444,29 @@ function restoreDualBankMode()
         _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 ) )
         _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY2 ) )
 
-        // Check if the flash option register is unlocked
+        //
         _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
-        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK)
-            _n_throw(ERROR_UNLOCK)        
+        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK){
+            printf("Unlock error!\n")
+            _n_throw(ERROR_UNLOCK)
+        }
 
-        // Set the factory default back in the flash option register
-        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  default_optr_value))
-        // Start the flashing operation
+        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  defaultOptrValue))
         _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT))
 
-        // Wait for program done and make it active
         flash_check_busy(10000)
         _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH))
 
         flash_lock()
 
-        printf("Flash option restore (0x%X) done\n", default_optr_value)
+        printf("Flash option restore (0x%X) done\n", defaultOptrValue)
     }
 
     // Catch all the sector write errors
     catch(e){
         if(e < ERROR_NOTIFIED)
         {
-           errorf("ERROR: flash option restore! %s\n", flashError(e) )
+           errorf("ERROR: flash option restire! %s\n", flashError(e) )
         }
         return ERROR_NOTIFIED
     }
