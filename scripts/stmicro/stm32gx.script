@@ -172,7 +172,7 @@ function stm32_device()
     // Inform user of the device found
     printf("STmicro family : STM32G%s\n", deviceStr)
 
-    // Inform the user   
+    // Inform the user
     printf("Detected FLASH : %dKB%s\nConfigured RAM : %dKB\n", flash_size/1024, (hasDualBank ? " - Dualbank" :""), sram_size/1024)
 
     // The user specified the size of flash memory
@@ -225,7 +225,7 @@ function stm32_device()
     }
 
     // Flash loader script
-    require("stmicro/flash/wx_l4_gx.script")
+    require("stmicro/flash/c0_l4_gx_wx.script")
 }
 
 

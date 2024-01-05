@@ -95,6 +95,12 @@ function set_target()
     switch(deviceId)
     {
 
+    // Cortex M0+
+    case 0x443:
+    case 0x453:
+        require("stmicro/stm32C0x.script")
+        break    
+
     // Cortex M0
     case 0x440 : // CHIPID_F0
     case 0x442 : // CHIPID_F09X
@@ -228,7 +234,7 @@ function set_target()
     case 0x481 : // CHIPID_STM32U59x/5Ax
     case 0x482 : // CHIPID_STM32U575/585
         require("stmicro/stm32u5x.script")
-        break
+        break 
 
     // ---------- Not supported ChipId yet -----------
     default:
