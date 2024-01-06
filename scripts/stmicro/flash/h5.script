@@ -1,0 +1,272 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//                   STM32H5
+//
+//  ToDo:  - option programming
+//
+
+const FLASH_BASE 0x40022000
+
+// Register offsets of the flash controller
+const FLASH_ACCESS_CTRL (0x00)
+const FLASH_KEYR        (0x04)
+const FLASH_OPTION_KEY  (0x0c)
+const FLASH_STATUS      (0x20)
+const FLASH_CR          (0x28)
+const FLASH_CLEAR_CTRL  (0x30)
+
+// FLASH_NSCR control bit flags
+const FLASH_CR_LOCK         (1 << 0)
+const FLASH_CR_PROGRAM      (1 << 1)
+const FLASH_CR_SECTOR_ERASE (1 << 2)
+const FLASH_CR_BANK_ERASE   (1 << 3)
+const FLASH_CR_START        (1 << 5)
+const FLASH_CR_MASS_ERASE   (1 << 15)
+const FLASH_CR_BKSEL        (1 << 31)
+
+const FLASH_CR_PAGE_SHIFT   (6)
+
+// FLASH status bit flags
+const FLASH_STATUS_BUSY       (1 << 0)
+const FLASH_STATUS_EOP        (1 << 16)
+
+// All the possible errors mask
+const FLASH_STATUS_ERROR_MASK 0xFC0000
+
+const FLASH_KEYR1  0x45670123
+const FLASH_KEYR2  0xCDEF89AB
+
+maxFlashSpeed   <- 24000 // Can be changed from CLI
+halfOfSectors   <- 0     // The half of the number of sectors of the current device
+
+// Generic Flash Script errors
+require("stmicro/flash/errors.script")
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+//   Unlock the flash
+//
+function flash_start()
+{
+    halfOfSectors = DeviceAPI().sectorCount()/2
+
+    // Override the maximum flash speed from cli
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
+    {
+        maxFlashSpeed = FLASH_SPEED
+        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+    }
+
+    // Check that we don't go faster than the user selected on the cli
+    if(maxFlashSpeed > intrfApi.getSpeed())
+        maxFlashSpeed = intrfApi.getSpeed()
+
+    try{
+        // Be sure that the core is halted
+        _n_throw( targetApi.reset(SYSTEM_RESET) )
+
+        // Wait for halt
+        local time = GetTickCount()
+        do{
+            // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+                _n_throw(ERROR_TIMEOUT)
+
+            _n_throw( targetApi.poll() )
+        } while(targetApi.getState() != TARGET_HALTED )
+
+        flash_unlock()
+        return ERROR_OK
+    }
+
+    // Catch all the lock errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: target initializing! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+//   Erase sequence according ST user manual
+//
+function flash_erase(sector, address)
+{
+    try{
+
+        local eraseFlags = FLASH_CR_SECTOR_ERASE | FLASH_CR_START
+
+        if(sector >= halfOfSectors)
+            eraseFlags  = eraseFlags | ( (sector-halfOfSectors)<< FLASH_CR_PAGE_SHIFT | FLASH_CR_BKSEL )
+        else
+            eraseFlags  = eraseFlags | (sector<< FLASH_CR_PAGE_SHIFT )
+
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, eraseFlags ) )
+
+        flash_check_busy(10000)
+        return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+//  We don't use a flash loader here. We just write the pages word by word.
+//  Because every word needs to be transported by USB, we don't check the busy
+//  flag in between because we are not that fast.
+//
+function flash_write(sector, address, buffer)
+{
+    try{
+        // Flash loader works with multiple of 16 bytes.
+        buffer.trim(16)
+
+        // Check and clear all error programming flags due to a previous programming. If not, PGSERR is set.
+        clear_flash_errors()
+
+        // Set the PG bit of the FLASH control register (FLASH_CR)
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR,  FLASH_CR_PROGRAM ) )
+
+        // Adjust the probe speed to the maximum for direct write
+        local probeSpeed = intrfApi.getSpeed()
+        intrfApi.setSpeed(maxFlashSpeed)
+
+        // Program the flash with 32 bit width memory access
+        _n_throw( intrfApi.writeBuf(address, buffer, 32) )
+
+        // Restore probe speed
+        intrfApi.setSpeed(probeSpeed)
+
+        flash_check_busy(10000)
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+function flash_done()
+{
+    try{
+        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, intrfApi.value32 | FLASH_CR_LOCK) )
+        return ERROR_OK
+    }
+    catch(e) {
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: locking device\n")
+        return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Clear error's
+//
+function clear_flash_errors()
+{
+    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CLEAR_CTRL, intrfApi.value32 & (FLASH_STATUS_ERROR_MASK | FLASH_STATUS_EOP)  ) )
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Lock the flash
+//
+function flash_check_busy(timeout)
+{
+    local time = GetTickCount()
+    do
+    {
+        AnimateCursor()
+        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_STATUS) )
+
+        if(GetTickCount() - time > timeout)
+            _n_throw(ERROR_TIMEOUT)
+
+    }while ( (intrfApi.value32 & FLASH_STATUS_BUSY) && !( intrfApi.value32 & FLASH_STATUS_EOP))
+
+    AnimateDone()
+
+    if( intrfApi.value32 & FLASH_STATUS_ERROR_MASK)
+            _n_throw( ERROR_FLASH )
+
+    clear_flash_errors()
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Unlock the flash
+//
+function flash_unlock()
+{
+    // Unlock Flash
+    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEYR1 ) )
+    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEYR2 ) )
+
+    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
+    if(intrfApi.value32 & FLASH_CR_LOCK )
+       _n_throw(ERROR_UNLOCK)
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//
+function flash_erase_chip()
+{
+    try{
+        printf("Flash chip erase ")
+
+        _n_throw( targetApi.halt() )
+        flash_unlock()
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MASS_ERASE |  FLASH_CR_START ) )
+
+        flash_check_busy(10000)
+        flash_done()
+
+        printf("done\n")
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+        if(e < ERROR_NOTIFIED)
+        {
+           printf("failed\n")
+           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+        }
+        return ERROR_NOTIFIED
+    }
+}
+
+

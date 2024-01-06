@@ -166,7 +166,10 @@ function stm32_device()
 {
     local flash_size
     local ram_size
-
+    
+    // Check the CPU family
+    if( targetApi.getCpuName() != "M7" )
+        throw ERROR_NOT_FOUND
 
     // Enable debug clocks
     _n_throw( intrfApi.readMem32(DBGMCU_CR) )

@@ -1,9 +1,6 @@
 /////////////////////////////////////////////////////
 //
-//                   STM32L5x
-//
-// This script is using dual bank mode as flash algorithm so we have to define
-// the chip as in this mode
+//                   STM32H5x
 //
 
 /////////////////////////////////////////////////////
@@ -13,10 +10,9 @@
 //
 
 //*************************************************************
-//*****             Memory map of the L5                   ****
+//*****             Memory map of the H5                   ****
 //*************************************************************
-
-const mem_template_L5 = @@"
+const mem_template_H5 = @@"
 <?xml version=\"1.0\"?>
 <memory-map>
   <memory type=\"rom\" start=\"0x00000000\" length=\"0x100000\"/>
@@ -32,24 +28,8 @@ const mem_template_L5 = @@"
   <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
   <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
   <memory type=\"rom\" start=\"0x0bf90000\" length=\"0x8000\"/>
-</memory-map>"
+ </memory-map>"
 
-
-// The parameters for the flash script
-const FLASH_BASE 0x40022000
-const FLASH_OPTR    0x40
-
-// The FLASH_OPTR bit flags
-const DBANK      (1<<22) // Dualbank bit
-
-// Global variable to hold the dual mode status
-hasDualBank <- false
-
-// The L5 has a 64 width program word
-const pgmBitsWidth 64
-
-// Used for restoreDualBankMode function
-const defaultOptrValue 0x7FEFF8AA
 
 /////////////////////////////////////////////////////
 //
@@ -67,20 +47,18 @@ function stm32_device()
     if( targetApi.getCpuName() != "M33" )
         throw ERROR_NOT_FOUND
 
-    hasDualBank = getDualBankOption()
-
     // Get the flash size in KB
-    _n_throw(intrfApi.readMem32(0x0bfa05e0))
-    flash_size = (intrfApi.value32 &0xFFFF)*1024
-
+    _n_throw(intrfApi.readMem32(0x08fff80c))
+    flash_size = (intrfApi.value32 &0xFFFF) *1024
 
     // Set the memory map according the device ID
       local deviceStr
       switch(deviceId) {
-        case 0x472 : // CHIPID_STM32L5x2xx
-            deviceStr = "L5x2xx"
+
+        case 0x484 : // CHIPID_STM32H5x3
+            deviceStr = "H5x3"
             ram_size = 0x40000 // 256KB
-            page_size = hasDualBank ? 0x800 : 0x1000 // dual = 2KB, single = 4KB
+            page_size = 0x2000
             break
 
         default:
@@ -91,7 +69,7 @@ function stm32_device()
     printf("STmicro family : STM32%s\n", deviceStr)
 
     // Inform the user
-    printf("Detected FLASH : %dKB %s\nConfigured RAM : %dKB\n", flash_size/1024,hasDualBank ? "(Dual bank)" : "(Single bank)", ram_size/1024)
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
 
     // The user specified the size of flash memory
     if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
@@ -107,19 +85,9 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    DeviceAPI().memmap(format( mem_template_L5, ram_size, flash_size, page_size))
+    DeviceAPI().memmap(format( mem_template_H5, ram_size, flash_size, page_size))
 
     // Include flash loader script
-    require("stmicro/flash/l5_u5.script")
+    require("stmicro/flash/h5.script")
 }
 
-////////////////////////////////////////
-//
-//  Helper function to get the dual bank
-//  option state
-//
-function getDualBankOption()
-{
-    _n_throw(intrfApi.readMem32(FLASH_BASE+FLASH_OPTR))
-    return intrfApi.value32 & DBANK
-}

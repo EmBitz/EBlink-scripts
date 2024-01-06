@@ -50,7 +50,7 @@ function main()
 function findDevice()
 {
     // Check if the right script API is supported
-    if( VERSION < 4.7)
+    if( VERSION < 5.0)
     {
        errorf("Error:\n\nIncompatiable EBlink version %.1f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
@@ -60,16 +60,20 @@ function findDevice()
     local result = intrfApi.readMem32(0xE0042000)
 
     //Otherwise.. try Corex M0 DBGMCU_IDCODE register address
-    if( (result >=0) && (intrfApi.value32 == 0) )
+    if( (result < 0) || (intrfApi.value32 == 0) )
         result = intrfApi.readMem32(0x40015800)
 
     //Otherwise.. Perhaps H7
-    if( (result >=0) && (intrfApi.value32 == 0) )
+    if( (result < 0) || (intrfApi.value32 == 0) )
         result = intrfApi.readMem32(0x5C001000)
 
     //Otherwise.. Perhaps L5
-    if( (result >=0) && (intrfApi.value32 == 0) )
+    if( (result < 0) || (intrfApi.value32 == 0) )
         result = intrfApi.readMem32(0xE0044000)
+
+     //Otherwise.. Perhaps H5
+    if( (result < 0) || (intrfApi.value32 == 0) )
+        result = intrfApi.readMem32(0x44024000)
 
     //Set our global device ID
     deviceId = intrfApi.value32
@@ -99,7 +103,7 @@ function set_target()
     case 0x443:
     case 0x453:
         require("stmicro/stm32C0x.script")
-        break    
+        break
 
     // Cortex M0
     case 0x440 : // CHIPID_F0
@@ -234,7 +238,12 @@ function set_target()
     case 0x481 : // CHIPID_STM32U59x/5Ax
     case 0x482 : // CHIPID_STM32U575/585
         require("stmicro/stm32u5x.script")
-        break 
+        break
+
+    // Cortex M33
+    case 0x484 : // CHIPID_STM32H5xx
+        require("stmicro/stm32h5x.script")
+        break
 
     // ---------- Not supported ChipId yet -----------
     default:

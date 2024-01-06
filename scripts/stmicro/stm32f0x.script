@@ -43,6 +43,10 @@ function stm32_device()
     local page_size
     local ram_size
 
+    // Check the CPU family
+    if( targetApi.getCpuName() != "M0" )
+        throw ERROR_NOT_FOUND
+
     _n_throw(intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY  ))
 
     // Get the flash size by reading the info register

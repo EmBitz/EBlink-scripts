@@ -58,15 +58,15 @@ function main( )
 function findDevice()
 {
     // Check if the right script API is supported
-    if( VERSION < 4.7)
+    if( VERSION < 5.0)
     {
        errorf("Error:\nIncompatiable EBlink version %.1f\nPlease update EBlink in order to use this script file\n", VERSION)
        throw ERROR_NOTIFIED
     }
 
-    switch(targetApi.cpuType)
+    switch(targetApi.getCpuName())
     {
-        case 0: // Cortex-M 0
+        case "M0+":
 
             // Get the JEP106 code and check if it's Atmel
             _n_throw(intrfApi.readMem32(SAMD_DSU_PID1))
@@ -91,7 +91,7 @@ function findDevice()
             atmel_device()
             break
 
-        case 3: // Cortex-M 3
+        case "M3":
 
             _n_throw(intrfApi.readMem32(SAM3_CHIPID))
             deviceId = intrfApi.value32

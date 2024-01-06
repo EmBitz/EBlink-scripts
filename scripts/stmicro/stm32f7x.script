@@ -111,6 +111,10 @@ function stm32_device()
     local flash_size
     local page_size
     local ram_size
+    
+    // Check the CPU family
+    if( targetApi.getCpuName() != "M7" )
+        throw ERROR_NOT_FOUND    
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
     _n_throw(intrfApi.writeMem32(0xE0042004, 7))

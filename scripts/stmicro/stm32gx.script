@@ -88,6 +88,10 @@ function stm32_device()
     local sram_size
     local bank2_start_address = 0x08020000
 
+    // Check the CPU family
+    if( targetApi.getCpuName() != "M0+" )
+        throw ERROR_NOT_FOUND
+
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
     _n_throw(intrfApi.writeMem32(0x40015804, 6))
 
