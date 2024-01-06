@@ -33,7 +33,7 @@ STMICRO <- [
          ["stm32h5x", [ 0x484 ]]]]
 ]
 
- 
+
 intrfApi <- InterfAPI()  // Global so that all included script files also have access
 targetApi<- TargetAPI()  // Global interface to the target class
 deviceId <- 0            // Global deviceId
