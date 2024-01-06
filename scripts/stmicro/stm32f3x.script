@@ -49,10 +49,6 @@ function stm32_device()
     local ram_size
     local page_size = 0x800 // Default page size
 
-    // Check the CPU family
-    if( targetApi.getCpuName() != "M4" )
-        throw ERROR_NOT_FOUND
-
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP
     _n_throw(intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY | DBG_STOP | DBG_SLEEP  ))
 

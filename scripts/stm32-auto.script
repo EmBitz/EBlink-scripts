@@ -9,6 +9,30 @@
 //
 //         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx
 //
+//     Fix chip_id for F4 rev A errata , Read CPU ID, as CoreID is the same for F2/F4 - 0x411
+//     so we have 0x411 also as a cortex-M4 in the list (see patch).
+//
+
+STMICRO <- [
+["M0+", [["stmicro/stm32l0x.script", [ 0x417, 0x425, 0x447, 0x457 ]],
+         ["stmicro/stm32gx.script",  [ 0x466, 0x456, 0x460, 0x467 ]],
+         ["stmicro/stm32C0x.script", [ 0x443, 0x453 ]]]],
+["M0",  [["stmicro/stm32f0x.script", [ 0x440, 0x442, 0x444, 0x445, 0x448 ]]]],
+["M3",  [["stmicro/stm32f1x.script", [ 0x410, 0x412, 0x414, 0x418, 0x420, 0x428, 0x430 ]],
+         ["stmicro/stm32f2x.script", [ 0x411 ]],
+         ["stmicro/stm32l1x.script", [ 0x416, 0x427, 0x429, 0x436, 0x437 ]]]],
+["M4",  [["stmicro/stm32f4x.script", [ 0x413, 0x419, 0x421, 0x423, 0x431, 0x433, 0x434, 0x441, 0x458, 0x411 /*patch*/ ]],
+         ["stmicro/stm32f3x.script", [ 0x422, 0x432, 0x438, 0x439, 0x446 ]],
+         ["stmicro/stm32l4x.script", [ 0x415, 0x435, 0x461, 0x462, 0x464, 0x470, 0x471 ]],
+         ["stmicro/stm32gx.script",  [ 0x468, 0x469, 0x479 ]],
+         ["stmicro/stm32wxxx.script",[ 0x495, 0x496, 0x497 ]]]],
+["M7",  [["stmicro/stm32f7x.script", [ 0x449, 0x451, 0x452 ]],
+         ["stmicro/stm32h7x.script", [ 0x450, 0x480, 0x483 ]]]],
+["M33", [["stmicro/stm32u5x.script", [ 0x455, 0x476, 0x481, 0x482 ]],
+         ["stmicro/stm32l5x.script", [ 0x472 ]],
+         ["stmicro/stm32h5x.script", [ 0x484 ]]]]
+]
+
 
 intrfApi <- InterfAPI()  // Global so that all included script files also have access
 targetApi<- TargetAPI()  // Global interface to the target class
@@ -57,7 +81,7 @@ function findDevice()
     }
 
     // Default device ID register
-    local result = intrfApi.readMem32(0xE0042000)
+  local result = intrfApi.readMem32(0xE0042000)
 
     //Otherwise.. try Corex M0 DBGMCU_IDCODE register address
     if( (result < 0) || (intrfApi.value32 == 0) )
@@ -81,178 +105,40 @@ function findDevice()
     if(deviceId == 0)
         throw ERROR_NOT_FOUND
 
-    // We have valid device ID which will be used to load the right scripts
-    set_target()
+    // We have a device id, try to find a device with it
+    dev_lookup()
 }
-
-
 
 /////////////////////////////////////////////////////
 //
 //
 //
-function set_target()
+function dev_lookup()
 {
-    deviceId = deviceId & 0xfff // Filter device ID part
+    deviceId = deviceId & 0xfff
     noticef("STmicro device : 0x%X\n", deviceId)
 
-    switch(deviceId)
-    {
-
-    // Cortex M0+
-    case 0x443:
-    case 0x453:
-        require("stmicro/stm32C0x.script")
-        break
-
-    // Cortex M0
-    case 0x440 : // CHIPID_F0
-    case 0x442 : // CHIPID_F09X
-    case 0x444 : // CHIPID_STM32_F0_SMALL
-    case 0x445 : // CHIPID_STM32_F04
-    case 0x448 : // STM32_CHIPID_F0_CAN
-        require("stmicro/stm32f0x.script")
-        break
-
-    // Cortex M0+
-    case 0x417 : // CHIPID_STM32_L0
-    case 0x425 : // CHIPID_STM32_L0_CAT2
-    case 0x447 : // CHIPID_STM32_L0_CAT5
-    case 0x457 : // CHIPID_STM32_L0_CAT1
-        require("stmicro/stm32l0x.script")
-        break
-
-    // Cortex M0+
-	case 0x443 : // STM32C011x4/x6
-    case 0x466 : // STM32G03xxx/04xxx
-    case 0x456 : // STM32G05xxx/06xxx
-    case 0x460 : // STM32G07xxx/08xxx
-    case 0x467 : // STM32G0B1xx/0C1xx
-        require("stmicro/stm32gx.script")
-        break
-
-    // Cortex M3
-    case 0x410 : // CHIPID_STM32_F1_MEDIUM
-    case 0x412 : // CHIPID_STM32_F1_LOW
-    case 0x414 : // CHIPID_STM32_F1_HIGH
-    case 0x418 : // CHIPID_STM32_F1_CONN
-    case 0x420 : // CHIPID_STM32_F1_VL_MEDIUM_LOW
-    case 0x428 : // CHIPID_STM32_F1_VL_HIGH
-    case 0x430 : // CHIPID_STM32_F1_XL
-        require("stmicro/stm32f1x.script")
-        break
-
-    // Cortex M3 XXXXXXXXXXXX
-    case 0x416 : // CHIPID_STM32_L1_MEDIUM
-    case 0x427 : // CHIPID_STM32_L1_MEDIUM_PLUS
-    case 0x429 : // CHIPID_STM32_L1_CAT2
-    case 0x436 : // CHIPID_STM32_L1_HIGH
-    case 0x437 : // CHIPID_STM32_L152_RE
-        require("stmicro/stm32l1x.script")
-        break
-
-    // Cortex M3
-    case 0x411 : // CHIPID_STM32_F2
-
-        // Fix chip_id for F4 rev A errata , Read CPU ID, as CoreID is the same for F2/F4
-        _n_throw(intrfApi.readMem32(0xE000ED00))
-        if ((intrfApi.value32  & 0xfff0) == 0xc240)
-        {
-            deviceId = 0x413
-            require("stmicro/stm32f4x.script")
-            break
-        }
-
-        require("stmicro/stm32f2x.script")
-        break
-
-    // Cortex M4
-    case 0x422 : // CHIPID_STM32_F3
-    case 0x432 : // CHIPID_STM32_F37x
-    case 0x438 : // CHIPID_STM32_F334
-    case 0x439 : // CHIPID_STM32_F3_SMALL
-    case 0x446 : // CHIPID_STM32_F303_HIGH
-        require("stmicro/stm32f3x.script")
-        break
-
-
-    // Cortex M4
-    case 0x413 : // CHIPID_STM32_F4
-    case 0x419 : // CHIPID_STM32_F4_HD
-    case 0x421 : // CHIPID_STM32_F446
-    case 0x423 : // CHIPID_STM32_F4_LP
-    case 0x431 : // CHIPID_STM32_F411RE
-    case 0x433 : // CHIPID_STM32_F4_DE
-    case 0x434 : // CHIPID_STM32_F4_DSI
-    case 0x441 : // CHIPID_STM32_F412
-    case 0x458 : // CHIPID_STM32_F410
-        require("stmicro/stm32f4x.script")
-        break
-
-    // Cortex M4
-    case 0x415 : // CHIPID_STM32_L4
-    case 0x435 : // CHIPID_STM32_L43X
-    case 0x461 : // CHIPID_STM32_L49X/L4A
-    case 0x462 : // CHIPID_STM32_L45X/L46X
-    case 0x464 : // CHIPID_STM32_L41X/L42X
-    case 0x470 : // CHIPID_STM32_L4R/L4S
-    case 0x471 : // CHIPID_STM32_L4P5/L4Q5x
-        require("stmicro/stm32l4x.script")
-        break
-
-    // Cortex M4
-    case 0x468 : // STM32G431xx/441xx
-    case 0x469 : // STM32G47xxx/48xxx
-    case 0x479 : // STM32G49xxx
-        require("stmicro/stm32gx.script")
-        break
-
-    // Cortex M4
-    case 0x495 : // CHIPID_STM32_WB5x
-    case 0x496 : // CHIPID_STM32_WB3x
-    case 0x497 : // CHIPID_STM32_WLEx
-        require("stmicro/stm32wxxx.script")
-        break
-
-    // Cortex M7
-    case 0x449 : // CHIPID_STM32_F7
-    case 0x451 : // CHIPID_STM32_F7xx
-    case 0x452 : // CHIPID_STM32_F72x
-        require("stmicro/stm32f7x.script")
-        break
-
-    // Cortex M7
-    case 0x450 : // CHIPID_STM32H74/5
-    case 0x480 : // CHIPID_STM32H7A/B
-    case 0x483 : // CHIPID_STM32H72/3
-        require("stmicro/stm32h7x.script")
-        break
-
-    // Cortex M33
-    case 0x472 : // CHIPID_STM32L5x2xx
-        require("stmicro/stm32l5x.script")
-        break
-
-    // Cortex M33
-    case 0x455 : // CHIPID_STM32U535/545
-    case 0x476 : // CHIPID_STM32U5F/Gx5
-    case 0x481 : // CHIPID_STM32U59x/5Ax
-    case 0x482 : // CHIPID_STM32U575/585
-        require("stmicro/stm32u5x.script")
-        break
-
-    // Cortex M33
-    case 0x484 : // CHIPID_STM32H5xx
-        require("stmicro/stm32h5x.script")
-        break
+    // Search our device ID in the list and load/execute corresponding device script
+    local targetName = targetApi.getCpuName()
+  	for (local i=0;i<STMICRO.len();i++)
+      if(STMICRO[i][0] == targetName)
+      {
+          local devs = STMICRO[i][1]
+          for (local p=0; p<devs.len();p++)
+              for (local d=0; d<devs[p][1].len();d++)
+                  if( devs[p][1][d] == deviceId)
+                  {
+                    // Load the required script file
+                    noticef("STmicro script : %s\n", devs[p][0])
+                    require(devs[p][0])
+                    // Call the generic entry point of that script
+                    stm32_device()
+                    return
+                  }
+      }
 
     // ---------- Not supported ChipId yet -----------
-    default:
-        throw ERROR_NOT_FOUND
-    }
-
-    // Call our generic entry point of the device script we just loaded
-    stm32_device()
+    throw ERROR_NOT_FOUND
 }
 
 /////////////////////////////////////////////////////////////////////////////////

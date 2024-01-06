@@ -35,10 +35,6 @@ function stm32_device()
     local page_size
     local ram_size
 
-    // Check the CPU family
-    if( targetApi.getCpuName() != "M3" )
-        throw ERROR_NOT_FOUND
-
     // Get the flash size by reading the info register
     _n_throw(intrfApi.readMem32(0x1ffff7e0))
     flash_size = intrfApi.value32 & 0xFFFF

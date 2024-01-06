@@ -63,10 +63,6 @@ function stm32_device()
     local page_size
     local ram_size
 
-    // Check the CPU family
-    if( targetApi.getCpuName() != "M33" )
-        throw ERROR_NOT_FOUND
-
     hasDualBank = getDualBankOption()
 
     // Get the flash size in KB

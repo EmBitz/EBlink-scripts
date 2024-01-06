@@ -98,10 +98,6 @@ function stm32_device()
     local flash_size
     local ram_size
 
-    // Check the CPU family
-    if( targetApi.getCpuName() != "M4" )
-        throw ERROR_NOT_FOUND
-
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
     _n_throw(intrfApi.writeMem32(0xE0042004, 7))
 
@@ -118,6 +114,7 @@ function stm32_device()
     // Set the memory map argument(s) according the device ID
     local deviceStr
     switch(deviceId) {
+        case 0x411 : // Fix chip_id for F4 rev A errata , Read CPU ID, as CoreID is the same for F2/F4
         case 0x413 : // CHIPID_STM32_F4
             deviceStr = "05/407/415/417"
             ram_size = 0x30000
