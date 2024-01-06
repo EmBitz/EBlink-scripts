@@ -105,20 +105,10 @@ function findDevice()
     if(deviceId == 0)
         throw ERROR_NOT_FOUND
 
-    // We have a device id, try to find a device with it
-    dev_lookup()
-}
-
-/////////////////////////////////////////////////////
-//
-//
-//
-function dev_lookup()
-{
     deviceId = deviceId & 0xfff
     noticef("STmicro device : 0x%X\n", deviceId)
 
-    // Search our device ID in the list and load/execute corresponding device script
+    // Search our device ID in the matrix and load/execute corresponding device script
     local targetName = targetApi.getCpuName()
     for (local i=0;i<STMICRO.len();i++)
       if(STMICRO[i][0] == targetName)
