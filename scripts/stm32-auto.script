@@ -21,7 +21,7 @@ STMICRO <- [
 ["M3",  [["stm32f1x", [ 0x410, 0x412, 0x414, 0x418, 0x420, 0x428, 0x430 ]],
          ["stm32f2x", [ 0x411 ]],
          ["stm32l1x", [ 0x416, 0x427, 0x429, 0x436, 0x437 ]]]],
-["M4",  [["stm32f4x", [ 0x413, 0x419, 0x421, 0x423, 0x431, 0x433, 0x434, 0x441, 0x458, 0x411 /*patch*/ ]],
+["M4",  [["stm32f4x", [ 0x413, 0x419, 0x421, 0x423, 0x431, 0x433, 0x434, 0x441, 0x458, 0x411 /* <- patch*/ ]],
          ["stm32f3x", [ 0x422, 0x432, 0x438, 0x439, 0x446 ]],
          ["stm32l4x", [ 0x415, 0x435, 0x461, 0x462, 0x464, 0x470, 0x471 ]],
          ["stm32gx",  [ 0x468, 0x469, 0x479 ]],
@@ -38,7 +38,7 @@ intrfApi <- InterfAPI()  // Global so that all included script files also have a
 targetApi<- TargetAPI()  // Global interface to the target class
 deviceId <- 0            // Global deviceId
 
-// Used by script to denote a not found devcie
+// Used by script to denote a not found device
 const ERROR_NOT_FOUND -100
 
 /////////////////////////////////////////////////////
@@ -100,12 +100,11 @@ function findDevice()
         result = intrfApi.readMem32(0x44024000)
 
     //Set our global device ID
-    deviceId = intrfApi.value32
+    deviceId = intrfApi.value32 & 0xfff
 
     if(deviceId == 0)
         throw ERROR_NOT_FOUND
 
-    deviceId = deviceId & 0xfff
     noticef("STmicro device : 0x%X\n", deviceId)
 
     // Search our device ID in the matrix and load/execute corresponding device script
