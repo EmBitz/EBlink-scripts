@@ -104,26 +104,33 @@ function stm32_device()
     local deviceStr
     switch(deviceId)
     {
+	case 0x443 :
+            deviceStr = "C011x4"
+            page_size = 0x800
+            sram_size = 0x1800 // 6Kbyte
+			flash_size = (flash_size >> 12) + 1
+            break
+	
     case 0x456 :
-            deviceStr = "05/06xx"
+            deviceStr = "G05/06xx"
             page_size = 0x800
             sram_size = 0x4800 // 18Kbyte
             break
 
     case 0x460 :
-            deviceStr = "07/08xx"
+            deviceStr = "G07/08xx"
             page_size = 0x800
             sram_size = 0x9000 // 36Kbyte
             break
 
     case 0x466 :
-            deviceStr = "03/04xx"
+            deviceStr = "G03/04xx"
             page_size = 0x800
             sram_size = 0x2000 // 8Kbyte
             break
 
     case 0x467 :
-            deviceStr = "0B1xx/0C1xx"
+            deviceStr = "G0B1xx/0C1xx"
             page_size = 0x800   // 2K single bank
             sram_size = 0x20000 // 144K
             hasDualBank = readDualBankOption()
@@ -138,14 +145,14 @@ function stm32_device()
             break
 
     case 0x468 :
-            deviceStr = "43/44xx"
+            deviceStr = "G43/44xx"
             page_size = 0x800
             cram_size = 0x2800 // 10K
             sram_size = 0x8000 // 32K
             break
 
     case 0x469 :
-            deviceStr = "47/48xx"
+            deviceStr = "G47/48xx"
             page_size = 0x1000  // 4K single bank
             cram_size = 0x8000  // 32K
             sram_size = 0x20000 // 128K
@@ -174,7 +181,7 @@ function stm32_device()
     }
 
     // Inform user of the device found
-    printf("STmicro family : STM32G%s\n", deviceStr)
+    printf("STmicro family : STM32%s\n", deviceStr)
 
     // Inform the user
     printf("Detected FLASH : %dKB%s\nConfigured RAM : %dKB\n", flash_size/1024, (hasDualBank ? " - Dualbank" :""), sram_size/1024)
