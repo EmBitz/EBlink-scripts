@@ -135,6 +135,7 @@ function dev_lookup()
                     stm32_device()
                     return
                   }
+          break
       }
 
     // ---------- Not supported ChipId yet -----------
