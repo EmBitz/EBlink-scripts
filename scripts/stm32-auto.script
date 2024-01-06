@@ -120,7 +120,7 @@ function dev_lookup()
 
     // Search our device ID in the list and load/execute corresponding device script
     local targetName = targetApi.getCpuName()
-  	for (local i=0;i<STMICRO.len();i++)
+    for (local i=0;i<STMICRO.len();i++)
       if(STMICRO[i][0] == targetName)
       {
           local devs = STMICRO[i][1]
