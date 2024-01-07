@@ -92,8 +92,7 @@ require("stmicro/flash/errors.script")
 function flash_start()
 {
     // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
-    {
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
         maxFlashSpeed = FLASH_SPEED
         printf("Flash speed set: %d KHz\n", maxFlashSpeed)
     }
@@ -277,8 +276,7 @@ function option_write(buffer)
     local regbase = FLASH_REG_BASE_B0 // first flash bank
 
     // Check if the buffer is valid
-    if(buffer.getSize() != 32)
-    {
+    if(buffer.getSize() != 32){
        errorf("Error: Option program length is %d, should be 32 bytes\n", buffer.getSize())
        return ERROR_NOTIFIED
     }
@@ -291,8 +289,7 @@ function option_write(buffer)
         _n_throw( intrfApi.readMem32(regbase + FLASH_OPTCR) )
 
         // Check if options are locked by the FLASH_OPTCR_OPTLOCK flag
-        if( intrfApi.value32 & OPT_LOCK  )
-        {
+        if( intrfApi.value32 & OPT_LOCK  ){
             // Write FLASH_OPTKEYR to unlock
             _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY1) )
             _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY2) )
@@ -462,8 +459,7 @@ function flash_unlock(regbase)
     _n_throw( intrfApi.readMem32(regbase + FLASH_CR) )
 
     // Check if it's locked by the FLASH_CR_LOCK flag
-    if( intrfApi.value32 & FLASH_LOCK )
-    {
+    if( intrfApi.value32 & FLASH_LOCK ){
         // Write flash KEYR
         _n_throw( intrfApi.writeMem32(regbase + FLASH_KEYR, KEY1) )
         _n_throw( intrfApi.writeMem32(regbase + FLASH_KEYR, KEY2) )

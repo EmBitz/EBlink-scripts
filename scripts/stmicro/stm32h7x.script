@@ -225,22 +225,19 @@ function stm32_device()
     printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
 
     // The user specified the size of flash memory
-    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
-    {
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
       printf("CLI set  FLASH : %dKB\n", flash_size)
       flash_size = (FLASH_SIZE & 0xffff) * 1024
     }
 
     // The user specified the size of ram memory
-    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
-    {
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
       printf("CLI set    RAM : %dKB\n", ram_size)
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
     // If we have more then 1MB, add the second bank
-    if(flash_size > 0x100000)
-    {
+    if(flash_size > 0x100000){
         flash_size = 0x100000
         hasSecondBank = true
     }
@@ -267,10 +264,8 @@ function  reset_post_hook(resetType)
     // We don't use this if the reset is a user_script type. In that
     // case, the user is responsible for the initialization.
     //
-    if( resetType != USER_RESET )
-    {
-        try
-        {
+    if( resetType != USER_RESET ){
+        try{
             // CM7  vector table start as default
             local cpuVector = CM7_VEC
 
@@ -317,8 +312,7 @@ function services_setup()
     if(!hasDualCore)
         return ERROR_OK
 
-    try
-    {
+    try{
         local servicesApi = :: ServicesAPI()  // API to the services manager
 
         //                                 service        Name                  service-options

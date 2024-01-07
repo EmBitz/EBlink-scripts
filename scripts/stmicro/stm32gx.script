@@ -98,71 +98,64 @@ function stm32_device()
     flash_size = (flash_size & 0xffff) * 1024
 
     local deviceStr
-    switch(deviceId)
-    {
-    case 0x456 :
+    switch(deviceId){
+        case 0x456 :
             deviceStr = "05/06xx"
             page_size = 0x800
             sram_size = 0x4800 // 18Kbyte
             break
 
-    case 0x460 :
+        case 0x460 :
             deviceStr = "07/08xx"
             page_size = 0x800
             sram_size = 0x9000 // 36Kbyte
             break
 
-    case 0x466 :
+        case 0x466 :
             deviceStr = "03/04xx"
             page_size = 0x800
             sram_size = 0x2000 // 8Kbyte
             break
 
-    case 0x467 :
+        case 0x467 :
             deviceStr = "0B1xx/0C1xx"
             page_size = 0x800   // 2K single bank
             sram_size = 0x20000 // 144K
             hasDualBank = readDualBankOption()
-            if(hasDualBank)
-            {
+            if(hasDualBank){
                 flash_size = flash_size/2
                 if(flash_size > 0x20000) // 128Kbyte
-                {
                     bank2_start_address = 0x08040000
-                }
             }
             break
 
-    case 0x468 :
+        case 0x468 :
             deviceStr = "43/44xx"
             page_size = 0x800
             cram_size = 0x2800 // 10K
             sram_size = 0x8000 // 32K
             break
 
-    case 0x469 :
+        case 0x469 :
             deviceStr = "47/48xx"
             page_size = 0x1000  // 4K single bank
             cram_size = 0x8000  // 32K
             sram_size = 0x20000 // 128K
             hasDualBank = readDualBankOption()
-            if(hasDualBank)
-            {
+            if(hasDualBank){
                 page_size =  0x800  // 2K
                 flash_size = flash_size/2
             }
             break
 
-    case 0x479 :
+        case 0x479 :
             deviceStr = "49x"
             page_size = 0x800   // 2K single and dual bank
             cram_size = 0x4000  // 16K
             sram_size = 0x18000 // 96K
             hasDualBank = readDualBankOption()
             if(hasDualBank)
-            {
                 flash_size = flash_size/2
-            }
             break
 
     default:
@@ -176,21 +169,18 @@ function stm32_device()
     printf("Detected FLASH : %dKB%s\nConfigured RAM : %dKB\n", flash_size/1024, (hasDualBank ? " - Dualbank" :""), sram_size/1024)
 
     // The user specified the size of flash memory
-    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
-    {
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
       printf("CLI set  FLASH : %dKB\n", flash_size)
       flash_size = (FLASH_SIZE & 0xffff) * 1024
     }
 
     // The user specified the size of ram memory
-    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
-    {
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
       printf("CLI set    RAM : %dKB\n", ram_size)
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    if(hasDualBank)
-    {
+    if(hasDualBank){
         if(cram_size ==0)
             DeviceAPI().memmap( format( mem_dual_no_cram,   flash_size,
                                                 sram_size,
@@ -208,8 +198,7 @@ function stm32_device()
                                                 flash_size,
                                                 page_size) )
     }
-    else
-    {
+    else{
         if(cram_size ==0)
             DeviceAPI().memmap( format( mem_single_no_cram, flash_size,
                                                        sram_size,

@@ -24,14 +24,13 @@ mcuVendorList <- [
 //
 function main()
 {
-    for( local i=0; i < mcuVendorList.len(); i++)
-    {
+    for( local i=0; i < mcuVendorList.len(); i++){
         try {
             require(mcuVendorList[i])  // Load the script file
             findDevice()               // Try to find a valid device
             return ERROR_OK            // We succeed so return OK
         }
-        catch(e) {
+        catch(e){
             if(e == ERROR_NOTIFIED)    // Notified errors will stop searching
                return e
         }

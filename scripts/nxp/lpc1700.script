@@ -86,18 +86,19 @@ function lpc_device()
     printf("NXP LPC17xx family : LPC17%s\n", deviceStr)
 
     // Inform the user
-    printf("Detected FLASH : 0x%X+0x%X\nConfigured RAM : 0x%X+0x%X\n", flash_size, flash1_size,ram_size,ram1_size)
+    printf("Detected FLASH : %dKB+%dKB\nConfigured RAM : %dKB+%dKB\n",
+                flash_size/1024, flash1_size/1024,ram_size/1024,ram1_size/1024)
 
     // The user specified the size of flash memory
-    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0) {
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", flash_size)
       flash_size = (FLASH_SIZE & 0xffff) * 1024
-      printf("CLI set  FLASH : 0x%X\n", flash_size)
     }
 
     // The user specified the size of ram memory
-    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0) {
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", ram_size)
       ram_size = (RAM_SIZE & 0xffff) * 1024
-      printf("CLI set    RAM : 0x%X\n", ram_size)
     }
 
 	_n_throw(intrfApi.writeMem32(0x400FC040, 0x01))

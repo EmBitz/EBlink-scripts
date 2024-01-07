@@ -55,11 +55,9 @@ function main()
     try{
         findDevice()
     }
-    catch(e)
-    {
+    catch(e){
         if( e == ERROR_NOT_FOUND)
-            if(deviceId)
-            {
+            if(deviceId){
                 printf("\n\nPlease report this ID so that we can add it.\n")
                 errorf("Error unsupported STM32 ID: 0x%X\n", deviceId)
             }
@@ -79,8 +77,7 @@ function main()
 function findDevice()
 {
     // Check if the right script API is supported
-    if( VERSION < 5.0)
-    {
+    if( VERSION < 5.0){
        errorf("Error:\n\nIncompatiable EBlink version %.1f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
     }
@@ -114,13 +111,11 @@ function findDevice()
 
     // Search our device ID in the matrix and load/execute corresponding device script
     for (local i=0;i<STMICRO.len();i++)
-      if(STMICRO[i][0] == targetApi.getCpuName())
-      {
+      if(STMICRO[i][0] == targetApi.getCpuName()){
           local scrpts = STMICRO[i][1]
           for (local s=0;s<scrpts.len();s++)
               for (local d=0;d<scrpts[s][1].len();d++)
-                  if( scrpts[s][1][d] == deviceId)
-                  {
+                  if( scrpts[s][1][d] == deviceId){
                     // Load the required script file
                     noticef("STmicro script : %s\n", scrpts[s][0])
                     require("stmicro/"+scrpts[s][0]+".script")
@@ -156,8 +151,7 @@ function  reset_post(resetType)
     // We don't use this if the reset is a user_script type. In that
     // case, the user is responsible for the initialization.
     //
-    if( resetType != USER_RESET )
-    {
+    if( resetType != USER_RESET ){
         // Set the Stack pointer according the Vector table entry
         intrfApi.readMem32(0x08000000)
         targetApi.writeReg("SP", intrfApi.value32)

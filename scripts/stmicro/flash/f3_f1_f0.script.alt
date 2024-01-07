@@ -61,8 +61,7 @@ require("stmicro/flash/errors.script")
 function flash_start()
 {
     // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
-    {
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
         maxFlashSpeed = FLASH_SPEED
         printf("Flash speed set: %d KHz\n", maxFlashSpeed)
     }
@@ -179,8 +178,7 @@ function flash_write(sector, address, buffer)
         // back to external flash loader
         // Remark: This part can be replaced by user warning to update the STlink firmware. This is only here
         //         to support older STlink/V2 firmware versions not capable of 16bit memory access.
-        if(result == INTERFACE_NOT_SUPPORTED)
-        {
+        if(result == INTERFACE_NOT_SUPPORTED){
             // Write buffer to data ram space
             _n_throw( intrfApi.writeBuf(SCRATCH_ADDR, buffer, 32) )
 
@@ -238,8 +236,7 @@ function flash_done()
 function flash_unlock()
 {
     _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
-    if(intrfApi.value32 & FLASH_CR_LOCK )
-    {
+    if(intrfApi.value32 & FLASH_CR_LOCK ){
         // Unlock Flash
         _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY1 ) )
         _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY2 ) )
