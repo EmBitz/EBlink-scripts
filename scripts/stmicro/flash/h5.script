@@ -53,8 +53,7 @@ function flash_start()
     halfOfSectors = DeviceAPI().sectorCount()/2
 
     // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
-    {
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
         maxFlashSpeed = FLASH_SPEED
         printf("Flash speed set: %d KHz\n", maxFlashSpeed)
     }
@@ -199,8 +198,7 @@ function clear_flash_errors()
 function flash_check_busy(timeout)
 {
     local time = GetTickCount()
-    do
-    {
+    do{
         AnimateCursor()
         _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_STATUS) )
 
@@ -261,10 +259,7 @@ function flash_erase_chip()
     // Catch all the sector write errors
     catch(e){
         if(e < ERROR_NOTIFIED)
-        {
-           printf("failed\n")
            errorf("ERROR: mass erase failed! %s\n", flashError(e) )
-        }
         return ERROR_NOTIFIED
     }
 }

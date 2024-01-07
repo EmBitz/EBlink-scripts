@@ -57,8 +57,7 @@ function main()
         findDevice()
         return ERROR_OK
     }
-    catch(e)
-    {
+    catch(e){
         if( e == ERROR_NOT_FOUND)
             if(deviceId)
                 errorf("ERROR: Unknown family ID %d. (Please add it)\n", deviceId)
@@ -77,15 +76,13 @@ function main()
 function findDevice()
 {
     // Check if the right script API is supported
-    if( VERSION < 4.7)
-    {
+    if( VERSION < 4.7){
        errorf("Error:\nIncompatiable EBlink version %.1f\nPlease update EBlink\n", VERSION)
        throw ERROR_NOTIFIED
     }
 
     _n_throw(intrfApi.readMem32(0x0FE081FC))
-    if( intrfApi.value32)
-    {
+    if( intrfApi.value32){
         deviceId = intrfApi.value32
         set_target()
         return
@@ -109,8 +106,7 @@ function set_target()
 
     // Now that we have the family ID, print the info on screen
     local deviceStr
-    switch(famId)
-    {
+    switch(famId){
     case 16 : // EFR32MG1P EFR32 Mighty Gecko Gen1 Device Family
         deviceStr = "EFR32MG1P%d - Mighty Gecko\n"
         break
@@ -248,15 +244,15 @@ function set_target()
     local ramSize = (intrfApi.value32 >> 16) & 0xFFFF
 
     // The user specified the size of flash memory
-    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0)
-    {
-      flashSize = FLASH_SIZE & 0xffff
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", flash_size)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
     }
 
     // The user specified the size of ram memory
-    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0)
-    {
-      ramSize = RAM_SIZE & 0xffff
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", ram_size)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
     printf("Detected FLASH %d Kbyte - Page %d bytes\n", flashSize, pageSize)
@@ -267,21 +263,18 @@ function set_target()
 
     // Find the rigth base address of the MSC by reading the status register and check WDATAREADY.
     noticef("Silabs-auto.script: Check MSC base address 0x%X\n", mscBase )
-    {
-        local result = intrfApi.readMem32(mscBase|0x1C)
-        if( (result < ERROR_OK ) || !(intrfApi.value32 &0x08))
-        {
-            mscBase    = 0x400C0000
-            mscLockOff = 0x3C
 
-            // Check WDATAREADY again on this MSC base address
-            result = intrfApi.readMem32(mscBase|0x1C)
-            noticef("Silabs-auto.script: Check MSC base address 0x%X\n", mscBase )
-            if( (result < ERROR_OK ) || !(intrfApi.value32 &0x08))
-            {
-                errorf("ERROR: Can't find Silabs MSC base address\n");
-                return ERROR_NOTIFIED
-            }
+    local result = intrfApi.readMem32(mscBase|0x1C)
+    if( (result < ERROR_OK ) || !(intrfApi.value32 &0x08)){
+        mscBase    = 0x400C0000
+        mscLockOff = 0x3C
+
+        // Check WDATAREADY again on this MSC base address
+        result = intrfApi.readMem32(mscBase|0x1C)
+        noticef("Silabs-auto.script: Check MSC base address 0x%X\n", mscBase )
+        if( (result < ERROR_OK ) || !(intrfApi.value32 &0x08)){
+            errorf("ERROR: Can't find Silabs MSC base address\n");
+            return ERROR_NOTIFIED
         }
     }
 
@@ -305,8 +298,7 @@ function  reset_post(resetType)
     // We don't use this if the reset is an user_script type. In that
     // case, the user is responsible to initialize the chip and we don't
     // gonna intervene with it.
-    if( resetType != USER_RESET)
-    {
+    if( resetType != USER_RESET){
         // Set the Stack pointer according the Vector table entry
         intrfApi.readMem32(0x00000000)
         targetApi.writeReg("SP", intrfApi.value32)

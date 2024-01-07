@@ -36,8 +36,7 @@ function main( )
         debugf("Looking for Atmel\n")
         findDevice()
     }
-    catch(e)
-    {
+    catch(e){
         if( e == ERROR_NOT_FOUND)
             if(deviceId)
                 errorf("ERROR: Atmel device [%x] is missing in table\n", deviceId)
@@ -58,14 +57,12 @@ function main( )
 function findDevice()
 {
     // Check if the right script API is supported
-    if( VERSION < 5.0)
-    {
+    if( VERSION < 5.0){
        errorf("Error:\nIncompatiable EBlink version %.1f\nPlease update EBlink in order to use this script file\n", VERSION)
        throw ERROR_NOTIFIED
     }
 
-    switch(targetApi.getCpuName())
-    {
+    switch(targetApi.getCpuName()){
         case "M0+":
 
             // Get the JEP106 code and check if it's Atmel
@@ -96,8 +93,7 @@ function findDevice()
             _n_throw(intrfApi.readMem32(SAM3_CHIPID))
             deviceId = intrfApi.value32
 
-            if (deviceId >= 0x28000961 && deviceId <= 0x29AB0A60)
-            {
+            if (deviceId >= 0x28000961 && deviceId <= 0x29AB0A60){
                 require("atmel/sam3.script")
                 atmel_device()
             }
@@ -134,8 +130,7 @@ function  reset_post(resetType)
 
     // We don't use this if the reset is a user_script type. In that
     // case, the user is responsible for the initialization.
-    if( resetType != USER_RESET )
-    {
+    if( resetType != USER_RESET ){
         // Set the Stack pointer according the Vector table entry
         intrfApi.readMem32(0x00000000)
         targetApi.writeReg("SP", intrfApi.value32)

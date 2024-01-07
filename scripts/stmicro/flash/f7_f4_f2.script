@@ -77,8 +77,7 @@ function flash_start()
     local voltage
 
     // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
-    {
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
         maxFlashSpeed = FLASH_SPEED
         printf("Flash speed set: %d KHz\n", maxFlashSpeed)
     }
@@ -105,8 +104,7 @@ function flash_start()
         flash_unlock()
 
         // Check the voltage and set the right flash strategy
-        if (isScriptObject("VCC_VOLTAGE") && VCC_VOLTAGE>0)
-        {
+        if (isScriptObject("VCC_VOLTAGE") && VCC_VOLTAGE>0){
             voltage = VCC_VOLTAGE
             printf("CLI vcc voltage: %f \n", voltage)
         }
@@ -114,25 +112,20 @@ function flash_start()
             voltage = intrfApi.targetVoltage()
 
         if(voltage  < 1.8)
-        {
            _n_throw(ERROR_VOLTAGE)
-        }
-        else if(voltage  < 2.1)
-        {
+        else if(voltage  < 2.1){
             // Low voltage is 8 bits
             pgWidth = 8
             pgSize  = FLASH_CR_PSIZE8
         }
-        else if(voltage  < 2.7)
-        {
+        else if(voltage  < 2.7){
             // Mid voltage is 16 bits
             // REMARK: some probes don't support 16bit direct memory access
             //         you could change this part to use the lower 8 bits voltage instead
             pgWidth = 16
             pgSize  = FLASH_CR_PSIZE16
         }
-        else
-        {
+        else{
             // Higher voltage is 32 bits
             pgWidth = 32
             pgSize  = FLASH_CR_PSIZE32
@@ -317,8 +310,7 @@ function flash_erase_chip()
 function flash_check_busy(timeout)
 {
     local time = GetTickCount()
-    do
-    {
+    do{
         AnimateCursor();
 
         // Check timeout
@@ -342,8 +334,7 @@ function flash_unlock()
     _n_throw( intrfApi.readMem32(FLASH_CR) )
 
     // Check if it's locked by the FLASH_CR_LOCK flag
-    if( intrfApi.value32 & FLASH_CR_LOCK )
-    {
+    if( intrfApi.value32 & FLASH_CR_LOCK ){
         // Write flash KEYR
         _n_throw( intrfApi.writeMem32(FLASH_KEYR,KEY1) )
         _n_throw( intrfApi.writeMem32(FLASH_KEYR,KEY2) )

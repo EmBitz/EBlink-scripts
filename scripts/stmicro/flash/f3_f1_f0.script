@@ -45,8 +45,7 @@ require("stmicro/flash/errors.script")
 function flash_start()
 {
     // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
-    {
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
         maxFlashSpeed = FLASH_SPEED
         printf("Flash speed set: %d KHz\n", maxFlashSpeed)
     }

@@ -109,9 +109,9 @@ function kinetis_device()
 			break;
 		}
 	}
-	
+
 	if (ram_size == 0) throw ERROR_NOT_FOUND
-	
+
 	// Read FLASH size
 	if (deviceStr == "32L2B") _n_throw(intrfApi.readMem32(SIM_FCFG1_L2B))
 	else _n_throw(intrfApi.readMem32(SIM_FCFG1))
@@ -119,25 +119,25 @@ function kinetis_device()
 	for (local i=0;i<FLASHCONFIG.len();i++) {
 		if ((intrfApi.value32 & 0x0F000000) == FLASHCONFIG[i][0]) flash_size = FLASHCONFIG[i][1]
 	}
-	
+
 	if (flash_size == 0) throw ERROR_NOT_FOUND
-	
+
     // Inform user of the device found
     printf("NXP Kinetis family : K%s\n", deviceStr)
 
     // Inform the user
-    printf("Detected FLASH : 0x%X\nConfigured RAM : 0x%X\n", flash_size, ram_size)
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
 
     // The user specified the size of flash memory
-    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0) {
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", flash_size)
       flash_size = (FLASH_SIZE & 0xffff) * 1024
-      printf("CLI set  FLASH : 0x%X\n", flash_size)
     }
 
     // The user specified the size of ram memory
-    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0) {
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", ram_size)
       ram_size = (RAM_SIZE & 0xffff) * 1024
-      printf("CLI set    RAM : 0x%X\n", ram_size)
     }
 
 	DeviceAPI().memmap( format( mem_template,  ram_size,flash_size,page_size) )
