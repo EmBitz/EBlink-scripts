@@ -13,6 +13,7 @@
 //     so we have 0x411 also as a cortex-M4 in the list (see patch).
 //
 
+// The supported device matrix
 STMICRO <- [
 ["M0+", [["stm32l0x", [ 0x417, 0x425, 0x447, 0x457 ]],
          ["stm32gx",  [ 0x466, 0x456, 0x460, 0x467 ]],
@@ -38,6 +39,14 @@ STMICRO <- [
          ["stm32h5x", [ 0x484 ]]]]
 ]
 
+// The register scan list for the CPU ID
+STMICRO_REG <- [
+    0xE0042000,
+    0x40015800,
+    0x5C001000,
+    0xE0044000,
+    0x44024000
+]
 
 intrfApi <- InterfAPI()  // Global so that all included script files also have access
 targetApi<- TargetAPI()  // Global interface to the target class
@@ -82,27 +91,11 @@ function findDevice()
        throw ERROR_NOTIFIED
     }
 
-    // Default device ID register
-  local result = intrfApi.readMem32(0xE0042000)
-
-    //Otherwise.. try Corex M0 DBGMCU_IDCODE register address
-    if( (result < 0) || (intrfApi.value32 == 0) )
-        result = intrfApi.readMem32(0x40015800)
-
-    //Otherwise.. Perhaps H7
-    if( (result < 0) || (intrfApi.value32 == 0) )
-        result = intrfApi.readMem32(0x5C001000)
-
-    //Otherwise.. Perhaps L5
-    if( (result < 0) || (intrfApi.value32 == 0) )
-        result = intrfApi.readMem32(0xE0044000)
-
-     //Otherwise.. Perhaps H5
-    if( (result < 0) || (intrfApi.value32 == 0) )
-        result = intrfApi.readMem32(0x44024000)
-
-    //Set our global device ID
-    deviceId = intrfApi.value32 & 0xfff
+    for(local r=0;r<STMICRO_REG.len();r++)
+        if( (intrfApi.readMem32(STMICRO_REG[r])>=0) && intrfApi.value32){
+            deviceId = intrfApi.value32 & 0xfff
+            break;
+        }
 
     if(deviceId == 0)
         throw ERROR_NOT_FOUND
@@ -163,5 +156,3 @@ function  reset_post(resetType)
 
     return ERROR_OK
 }
-
-
