@@ -113,18 +113,17 @@ function findDevice()
     noticef("STmicro device : 0x%X\n", deviceId)
 
     // Search our device ID in the matrix and load/execute corresponding device script
-    local targetName = targetApi.getCpuName()
     for (local i=0;i<STMICRO.len();i++)
-      if(STMICRO[i][0] == targetName)
+      if(STMICRO[i][0] == targetApi.getCpuName())
       {
-          local devs = STMICRO[i][1]
-          for (local p=0; p<devs.len();p++)
-              for (local d=0; d<devs[p][1].len();d++)
-                  if( devs[p][1][d] == deviceId)
+          local scrpts = STMICRO[i][1]
+          for (local s=0;s<scrpts.len();s++)
+              for (local d=0;d<scrpts[s][1].len();d++)
+                  if( scrpts[s][1][d] == deviceId)
                   {
                     // Load the required script file
-                    noticef("STmicro script : %s\n", devs[p][0])
-                    require("stmicro/"+devs[p][0]+".script")
+                    noticef("STmicro script : %s\n", scrpts[s][0])
+                    require("stmicro/"+scrpts[s][0]+".script")
                     // Call the generic entry point of that script
                     stm32_device()
                     return
@@ -132,7 +131,7 @@ function findDevice()
           break
       }
 
-    // ---------- Not supported ChipId yet -----------
+    // Unsupported ChipId
     throw ERROR_NOT_FOUND
 }
 
