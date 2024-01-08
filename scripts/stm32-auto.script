@@ -52,7 +52,7 @@ intrfApi <- InterfAPI()  // Global so that all included script files also have a
 targetApi<- TargetAPI()  // Global interface to the target class
 deviceId <- 0            // Global deviceId
 
-// Used by script to denote a not found device
+// Used by scripts to denote a not found device
 const ERROR_NOT_FOUND -100
 
 /////////////////////////////////////////////////////
@@ -74,7 +74,7 @@ function main()
                 errorf("ERROR: No valid STmicro device ID found\n")
         else
             errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
-        return ERROR_NOTIFIED  // We have already thrown an error so use -1 (otherwise < -1)
+        return ERROR_NOTIFIED
     }
     return ERROR_OK
 }
@@ -85,7 +85,6 @@ function main()
 //
 function findDevice()
 {
-    // Check if the right script API is supported
     if( VERSION < 5.0){
        errorf("Error:\n\nIncompatiable EBlink version %.1f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
@@ -94,7 +93,7 @@ function findDevice()
     for(local r=0;r<STMICRO_REG.len();r++)
         if( (intrfApi.readMem32(STMICRO_REG[r])>=0) && intrfApi.value32){
             deviceId = intrfApi.value32 & 0xfff
-            break;
+            break
         }
 
     if(deviceId == 0)
@@ -102,24 +101,20 @@ function findDevice()
 
     noticef("STmicro device : 0x%X\n", deviceId)
 
-    // Search our device ID in the matrix and load/execute corresponding device script
     for (local i=0;i<STMICRO.len();i++)
       if(STMICRO[i][0] == targetApi.getCpuName()){
           local scrpts = STMICRO[i][1]
           for (local s=0;s<scrpts.len();s++)
               for (local d=0;d<scrpts[s][1].len();d++)
                   if( scrpts[s][1][d] == deviceId){
-                    // Load the required script file
                     noticef("STmicro script : %s\n", scrpts[s][0])
                     require("stmicro/"+scrpts[s][0]+".script")
-                    // Call the generic entry point of that script
                     stm32_device()
                     return
                   }
           break
       }
 
-    // Unsupported ChipId
     throw ERROR_NOT_FOUND
 }
 
