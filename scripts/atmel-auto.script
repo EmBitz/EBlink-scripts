@@ -58,7 +58,7 @@ function findDevice()
 {
     // Check if the right script API is supported
     if( VERSION < 5.0){
-       errorf("Error:\nIncompatiable EBlink version %.1f\nPlease update EBlink in order to use this script file\n", VERSION)
+       errorf("Error:\nIncompatiable EBlink version %.2f\nPlease update EBlink in order to use this script file\n", VERSION)
        throw ERROR_NOTIFIED
     }
 
