@@ -1,0 +1,164 @@
+//! Renesas
+/////////////////////////////////////////////////////
+//
+//            Renesas cortex-M devices
+//
+//     The script tries to detect the right memory sizes
+//     however, if this is not correct you can set the sizes
+//     in kilobytes on the command line as:
+//
+//         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx
+//
+//     Fix chip_id for F4 rev A errata , Read CPU ID, as CoreID is the same for F2/F4 - 0x411
+//     so we have 0x411 also as a cortex-M4 in the list (see patch).
+//
+
+// The supported device matrix
+RENESAS <- [
+["M23", [ "A2L1", "A2E1", "A2E2", "A2E3", "A2A1" ]],
+["M4",  [ "A4M1", "A4W1", "A6M1", "A6M2", "A6M3", "A6T1" ]],
+["M33", [ "A4M2", "A4M3", "A4E1", "A4E2", "A4T1", "A6M4", "A6M5", "A6E1", "A6E2", "A6T2", "A6T3" ]],
+//["M85", [ "A8D1", "A8M1" ]],
+]
+
+// The register scan list for the CPU ID
+RENESAS_REG <- [
+    0x010080f0,    
+    0x01001c10,
+]
+
+// Script wide globals
+intrfApi <- InterfAPI() 
+targetApi<- TargetAPI() 
+deviceStr <- ""          
+familyStr <- ""
+
+const RENESAS_FMIFRT 0x407fb19c
+
+// Used by scripts to denote a not found device
+const ERROR_NOT_FOUND -100
+
+/////////////////////////////////////////////////////
+//
+//  EBlink called Entry point
+//
+function main()
+{
+    try{
+        findDevice()
+    }
+    catch(e){
+        if( e == ERROR_NOT_FOUND)
+            if(deviceStr.len()){
+                printf("\n\nPlease report this ID so that we can add it.\n")
+                errorf("Error unsupported RENESAS part: %s\n", deviceStr)
+            }
+            else
+                errorf("ERROR: No valid deviceStr device part found\n")
+        else
+            errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
+        return ERROR_NOTIFIED
+    }
+    return ERROR_OK
+}
+
+/////////////////////////////////////////////////////
+//
+//
+//
+function findDevice()
+{
+    if( VERSION < 5.0){
+       errorf("Error:\n\nIncompatiable EBlink version %.2f\n\tPlease update\n", VERSION)
+       throw ERROR_NOTIFIED
+    }
+
+    for(local r=0;r<RENESAS_REG.len();r++)
+        if( getPartString(RENESAS_REG[r]))
+            break   
+        
+    if(!deviceStr.len() && (intrfApi.readMem32(RENESAS_FMIFRT)==ERROR_OK))
+        getPartString(intrfApi.value32+24)
+    
+    if(!deviceStr.len())
+        throw ERROR_NOT_FOUND
+          
+    noticef("Renesas part   : %s\n", deviceStr)
+    
+    familyStr = deviceStr.slice(3,7)
+    for (local i=0;i<RENESAS.len();i++)
+      if(RENESAS[i][0] == targetApi.getCpuName()){
+          for (local f=0;f<RENESAS[i][1].len();f++)
+             if( RENESAS[i][1][f] == familyStr){         
+                    require("renesas/renesas.script")
+                    renesas_device()
+                    return
+                  }
+          break
+      }
+
+    throw ERROR_NOT_FOUND
+}
+
+/////////////////////////////////////////////////////
+//
+//
+//
+function getPartString(addr)
+{
+    local preg = []
+    deviceStr=""
+    try{
+        for (local i=0;i<4;i++){
+            _n_throw(intrfApi.readMem32(addr+(i*4)))
+           if(intrfApi.value32==0)
+               return false           
+           preg.append(intrfApi.value32)           
+        }
+        
+        if(addr == 0x01001c10)
+          for (local i=0;i<13;i++)
+             deviceStr += format("%c",(preg[3-(i+3)/4]>>(24-((i+3)&3)*8)))        
+        else    
+          for (local i=0;i<16;i++)
+             deviceStr += format("%c",(preg[i/4]>>(i&3)*8))       
+    }
+    catch(e) {
+        return false        
+    }    
+    return true;
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Additional commands after reset (optional) called by EBlink
+//
+// resetType:
+//        SYSTEM_RESET
+//        CORE_RESET
+//        JTAG_RESET
+//        USER_RESET
+//
+function  reset_post(resetType)
+{
+    // Check if there is an user defined post reset hook, the user
+    // can add his own reset strategy with -S <myscript> as last
+    // defined script on the cli.
+    if (isScriptObject("reset_post_hook"))
+        return reset_post_hook(resetType);
+
+    // We don't use this if the reset is a user_script type. In that
+    // case, the user is responsible for the initialization.
+    //
+    if( resetType != USER_RESET ){
+        // Set the Stack pointer according the Vector table entry
+        intrfApi.readMem32(0x00000000)
+        targetApi.writeReg("SP", intrfApi.value32)
+
+        // Set the Program pointer according the Vector table entry
+        intrfApi.readMem32(0x08000004)
+        targetApi.writeReg("PC", intrfApi.value32)
+    }
+
+    return ERROR_OK
+}
