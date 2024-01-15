@@ -23,14 +23,14 @@ RENESAS <- [
 
 // The register scan list for the CPU ID
 RENESAS_REG <- [
-    0x010080f0,    
+    0x010080f0,
     0x01001c10,
 ]
 
 // Script wide globals
-intrfApi <- InterfAPI() 
-targetApi<- TargetAPI() 
-deviceStr <- ""          
+intrfApi <- InterfAPI()
+targetApi<- TargetAPI()
+deviceStr <- ""
 familyStr <- ""
 
 const RENESAS_FMIFRT 0x407fb19c
@@ -75,21 +75,21 @@ function findDevice()
 
     for(local r=0;r<RENESAS_REG.len();r++)
         if( getPartString(RENESAS_REG[r]))
-            break   
-        
+            break
+
     if(!deviceStr.len() && (intrfApi.readMem32(RENESAS_FMIFRT)==ERROR_OK))
         getPartString(intrfApi.value32+24)
-    
+
     if(!deviceStr.len())
         throw ERROR_NOT_FOUND
-          
+
     noticef("Renesas part   : %s\n", deviceStr)
-    
+
     familyStr = deviceStr.slice(3,7)
     for (local i=0;i<RENESAS.len();i++)
       if(RENESAS[i][0] == targetApi.getCpuName()){
           for (local f=0;f<RENESAS[i][1].len();f++)
-             if( RENESAS[i][1][f] == familyStr){         
+             if( RENESAS[i][1][f] == familyStr){
                     require("renesas/renesas.script")
                     renesas_device()
                     return
@@ -112,20 +112,20 @@ function getPartString(addr)
         for (local i=0;i<4;i++){
             _n_throw(intrfApi.readMem32(addr+(i*4)))
            if(intrfApi.value32==0)
-               return false           
-           preg.append(intrfApi.value32)           
+               return false
+           preg.append(intrfApi.value32)
         }
-        
+
         if(addr == 0x01001c10)
           for (local i=0;i<13;i++)
-             deviceStr += format("%c",(preg[3-(i+3)/4]>>(24-((i+3)&3)*8)))        
-        else    
+             deviceStr += format("%c",(preg[3-(i+3)/4]>>(24-((i+3)&3)*8)))
+        else
           for (local i=0;i<16;i++)
-             deviceStr += format("%c",(preg[i/4]>>(i&3)*8))       
+             deviceStr += format("%c",(preg[i/4]>>(i&3)*8))
     }
     catch(e) {
-        return false        
-    }    
+        return false
+    }
     return true;
 }
 
@@ -156,7 +156,7 @@ function  reset_post(resetType)
         targetApi.writeReg("SP", intrfApi.value32)
 
         // Set the Program pointer according the Vector table entry
-        intrfApi.readMem32(0x08000004)
+        intrfApi.readMem32(0x00000004)
         targetApi.writeReg("PC", intrfApi.value32)
     }
 

@@ -88,7 +88,7 @@ function findDevice()
 
     // Read the Kinetis Deivce ID
     deviceId = readKinetisDeviceID()
-    
+
     // If zero, read the LPC Device ID
     if (deviceId == 0) {
         deviceId = readLPCDeviceID()
@@ -98,7 +98,7 @@ function findDevice()
 		// We have valid device LPC ID which will be used to load the right scripts
 		set_target(NXP_LPC)
     }
-    
+
     // We have valid device Kinetis ID which will be used to load the right scripts
     else set_target(NXP_KINETIS)
 }
@@ -111,12 +111,12 @@ function readKinetisDeviceID()
 {
 
   // Try to read a DEVICE_ID register
-  
+
   for (local i=0;i<NXP_KINETIS_DEVICEID.len();i++) {
    	_n_throw(intrfApi.readMem32(NXP_KINETIS_DEVICEID[i]))
 	if (intrfApi.value32 > 0x1002 || (intrfApi.value32 < 0 || intrfApi.value32 > 0x90000000)) return(intrfApi.value32)
   }
-  
+
   // No Kinetis device detected
   return(0)
 }
@@ -130,7 +130,7 @@ function readLPCDeviceID()
    _n_throw( targetApi.halt() )
 
    // Try to read a DEVICE_ID register
-	
+
    for (local i=0;i<NXP_DEVICEID.len();i++) {
    	_n_throw(intrfApi.readMem32(NXP_DEVICEID[i]))
 	if (intrfApi.value32 >= 0x00007000 && intrfApi.value32 <= 0x46000000) {
@@ -189,7 +189,7 @@ function set_target(type)
     noticef("NXP device : 0x%X\n", deviceId)
 
     if (type == NXP_LPC) {
-    
+
     	if (deviceId >= 0x00008021 && deviceId <= 0x00008044)
 		require("nxp/lpc800.script")
 
@@ -204,7 +204,7 @@ function set_target(type)
     	lpc_device()
     }
     else {
-    
+
     	require("nxp/kinetis.script")
 	kinetis_device()
     }
