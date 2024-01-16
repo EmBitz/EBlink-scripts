@@ -9,9 +9,6 @@
 //
 //         -D FLASH_SIZE=xxx  and -D RAM_SIZE=xxxx
 //
-//     Fix chip_id for F4 rev A errata , Read CPU ID, as CoreID is the same for F2/F4 - 0x411
-//     so we have 0x411 also as a cortex-M4 in the list (see patch).
-//
 
 // The supported device matrix
 RENESAS <- [
