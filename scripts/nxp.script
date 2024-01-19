@@ -4,10 +4,7 @@
 //
 /////////////////////////////////////////////////////
 //
-//     This is a virtual device for NXP LPC cortex's
-//     The real device type is checked by reading
-//     the device ID and include the corresponding
-//     device script's
+//            NXP cortex-M devices
 //
 //     The script tries to detect the right memory sizes
 //     however, if this is not correct you can set the sizes

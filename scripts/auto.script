@@ -1,17 +1,12 @@
 //! Auto
 /////////////////////////////////////////////////////
 //
-//
-//  This is a virtual device and will try to detect the
-//  connected cortex-m vendor.
-//
 //  All the called vendor specific scripts don't depend on this
 //  script and can also be called directly to skip vendor detection.
 //
 
-// All the supported MCU vendors scripts
 // The order of this list is important!!
-mcuVendorList <- [
+MCU_VENDORS <- [
     "atmel.script",
     "stm32.script",
     "silabs.script",
@@ -25,9 +20,9 @@ mcuVendorList <- [
 //
 function main()
 {
-    for( local i=0; i < mcuVendorList.len(); i++){
+    for( local i=0; i < MCU_VENDORS.len(); i++){
         try {
-            require(mcuVendorList[i])  // Load the script file
+            require(MCU_VENDORS[i])  // Load the script file
             findDevice()               // Try to find a valid device
             return ERROR_OK            // We succeed so return OK
         }
