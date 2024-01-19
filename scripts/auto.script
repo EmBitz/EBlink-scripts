@@ -12,11 +12,11 @@
 // All the supported MCU vendors scripts
 // The order of this list is important!!
 mcuVendorList <- [
-    "atmel-auto.script",
-    "stm32-auto.script",
-    "silabs-auto.script",
-    "renesas-auto.script",
-    "nxp-auto.script"
+    "atmel.script",
+    "stm32.script",
+    "silabs.script",
+    "renesas.script",
+    "nxp.script"
 ]
 
 /////////////////////////////////////////////////////
