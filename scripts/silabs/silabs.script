@@ -1,241 +1,146 @@
 /////////////////////////////////////////////////////
 //
-//      Generic Silabs flash routine
-//     According Silabs reference manual
+//                   Silabs
 //
-//  Device specific defines mscBase and mscLockOff needed from parent script
 //
 
-
-// Device generic
-const MSC_WRITECTRL 0x08
-const MSC_WRITECMD  0x0C
-const MSC_ADDRB     0x10
-const MSC_WDATA     0x18
-const MSC_STATUS    0x1C
-const MSC_MASSLOCK  0x54
-
-
-const MSC_UNLOCK_KEY  0x1B71
-const MSC_MASS_KEY    0x631A
-
-require("silabs/errors.script")
-
-/////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
 //
-//   Unlock the flash and prepare erasing and writing
+//   Generic Silabs memory map template
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
 //
-function flash_start()
+//   We use @@ to denote that it is a multi-line format string and not verbatim.
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"flash\" start=\"0x00000000\" length=\"0x%x\">
+    <property name=\"blocksize\">0x%x</property>
+ </memory>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+ <memory type=\"flash\" start=\"0x0fe00000\" length=\"0x14000\">
+   <property name=\"blocksize\">0x800</property>
+ </memory>
+</memory-map>"
+
+
+flashSize  <- 0          // Global flash size, is also used for mass erase
+mscBase    <- 0x400E0000 // Default base address for flash MSC
+mscLockOff <- 0x40       // Default offset of the unlock register
+
+SILABS <- [
+ [16,"EFR32MG1P%d - Mighty Gecko\n"],
+ [17,"EFR32MG1B%d - Mighty Gecko Gen1\n"],
+ [18,"EFR32MG1V%d - Mighty Gecko Gen1\n"],
+ [19,"EFR32BG1P%d - Blue Gecko Gen1\n"],
+ [20,"EFR32BG1B%d - Blue Gecko Gen1\n"],
+ [21,"EFR32BG1V%d - Blue Gecko Gen1\n"],
+ [25,"EFR32FG1P%d - Flex Gecko Gen1\n"],
+ [26,"EFR32FG1B%d - Flex Gecko Gen1\n"],
+ [27,"EFR32FG1V%d - Flex Gecko Gen1\n"],
+ [40,"EFR32MG13P%d - EFR32 Mighty Gecko Family Series 1 Config 3\n"],
+ [41,"EFR32MG13B%d - EFR32 Mighty Gecko Family Series 1 Config 3\n"],
+ [42,"EFR32MG13V%d - EFR32 Mighty Gecko Family Series 1 Config 3\n"],
+ [43,"EFR32BG13P%d - EFR32 Blue Gecko Family Series 1 Config 3\n"],
+ [44,"EFR32BG13B%d - EFR32 Blue Gecko Family Series 1 Config 3\n"],
+ [45,"EFR32BG13V%d - EFR32 Blue Gecko Family Series 1 Config 3\n"],
+ [49,"EFR32FG13P%d - EFR32 Flex Gecko Family Series 1 Config 3\n"],
+ [50,"EFR32FG13B%d - EFR32 Flex Gecko Family Series 1 Config 3\n"],
+ [51,"EFR32FG13V%d - EFR32 Flex Gecko Family Series 1 Config 3\n"],
+ [52,"EFR32MG14P%d - EFR32 Mighty Gecko Family Series 1 Config 4\n"],
+ [53,"EFR32MG14B%d - EFR32 Mighty Gecko Family Series 1 Config 4\n"],
+ [54,"EFR32MG14V%d - EFR32 Mighty Gecko Family Series 1 Config 4\n"],
+ [55,"EFR32BG14P%d - EFR32 Blue Gecko Family Series 1 Config 4\n"],
+ [56,"EFR32BG14B%d - EFR32 Blue Gecko Family Series 1 Config 4\n"],
+ [57,"EFR32BG14V%d - EFR32 Blue Gecko Family Series 1 Config 4\n"],
+ [61,"EFR32FG14P%d - EFR32 Flex Gecko Family Series 1 Config 4\n"],
+ [62,"EFR32FG14B%d - EFR32 Flex Gecko Family Series 1 Config 4\n"],
+ [63,"EFR32FG14V%d - EFR32 Flex Gecko Family Series 1 Config 4\n"],
+ [71,"EFM32G%d - Gecko\n"],
+ [72,"EFM32GG%d - Giant Gecko\n"],
+ [73,"EFM32TG%d - Tiny Gecko\n"],
+ [74,"EFM32LG%d - Leopard Gecko\n"],
+ [75,"EFM32WG%d - Wonder Gecko\n"],
+ [76,"EFM32ZG%d - Zero Gecko\n"],
+ [77,"EFM32HG%d - Happy Gecko\n"],
+ [81,"EFM32PG1B%d - Pearl Gecko Gen1\n"],
+ [83,"EFM32JG1B%d - Jade Gecko Gen1\n"],
+ [120,"EZR32LG%d - Leopard Gecko\n"],
+ [121,"EZR32WG%d - Wonder Gecko\n"],
+ [122,"EZR32HG%d - Happy Gecko\n"],
+]
+
+
+/////////////////////////////////////////////////////
+//
+//
+//
+function silabs_device()
 {
-    try{
-        // Be sure that the core is halted
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+    // Isolate the family ID and part number from the 32 bits register value
+    local famId     = (deviceId >> 16) & 0xFF
 
-        // Wait for halt
-        local time = GetTickCount()
-        do{
-            // Timeout of 1sec
-            if(GetTickCount() - time > 1000)
-                _n_throw(ERROR_TIMEOUT)
+    noticef("Silabs fam. ID : %d\n", famId)
 
-            _n_throw( targetApi.poll() )
-        } while(targetApi.getState() != TARGET_HALTED )
+    local deviceStr = ""
+    for (local i=0;i<SILABS.len();i++)
+      if(SILABS[i][0] == famId){
+          deviceStr = SILABS[i][1]
+          break
+       }
 
-        // Unlock MSC
-        _n_throw( intrfApi.writeMem32(mscBase|mscLockOff, MSC_UNLOCK_KEY) )
+    if(deviceStr.len() == 0)
+        throw ERROR_NOT_FOUND
 
-        // Enable WREN in  MSC_WRITECTRL
-        _n_throw( intrfApi.readMem32(mscBase|MSC_WRITECTRL) )
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECTRL, intrfApi.value32 | 0x01 ) )
+    // Inform user
+    printf("Silabs part    : ")
+    printf(deviceStr, deviceId & 0xFFFF)
 
-        return ERROR_OK
-    }
-    
-    // Catch all the sector write errors
-    catch(e){
-       if(e < ERROR_NOTIFIED)
-           errorf("Error unlocking flash! %s\n", flashError(e) )
-       return ERROR_NOTIFIED
-    }    
-}
+    // Get the MEM_INFO_PAGE_SIZE
+    _n_throw(intrfApi.readMem32(0x0FE081E4))
+    intrfApi.value32 = (intrfApi.value32 >> 24) & 0xFF
+    local pageSize = pow(2, ((intrfApi.value32+10) & 0xFF))
 
+    // Get the MEM_INFO_FLASH and MEM_INFO_RAM
+    _n_throw(intrfApi.readMem32(0x0FE081F8 ))
 
-/////////////////////////////////////////////////////////////////////////////////
-//
-//   Erase sequence of one sector
-//
-function flash_erase(sector, address)
-{    
-    try{
-        //MSC->ADDRB = address
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_ADDRB, address))
+    flashSize = intrfApi.value32 & 0xFFFF
+    local ramSize = (intrfApi.value32 >> 16) & 0xFFFF
 
-        // MSC->WRITECMD = MSC_WRITECMD_LADDRIM
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x01))
+    // Inform the user
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flashSize, ramSize)
 
-        //MSC->WRITECMD = MSC_WRITECMD_ERASEPAGE
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x02))
-
-        //while ( MSC->STATUS & MSC_STATUS_BUSY )
-        local time = GetTickCount()
-        do{
-            if(GetTickCount() - time > 2000)
-                _n_throw(ERROR_TIMEOUT)
-            
-            _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS))
-        }while (intrfApi.value32 &  0x01 )
-
-        return ERROR_OK
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
+      flashSize = (FLASH_SIZE & 0xffff) * 1024
     }
 
-    // Catch all the sector erase errors
-    catch(e){
-       if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
-       return ERROR_NOTIFIED
-    }    
-}
-
-
-/////////////////////////////////////////////////////////////////////////////////
-//
-//  The actual flash writing. The length is always 32 bits boundary but can be
-//  smaller than a sector size.
-//
-function flash_write(sector, address, buffer)
-{
-    try{
-        //while ( MSC->STATUS & MSC_STATUS_BUSY )
-        local time = GetTickCount()
-        do{
-            if(GetTickCount() - time > 2000)
-                _n_throw(ERROR_TIMEOUT)
-            
-            _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS) )
-        }while (intrfApi.value32 &  0x01 )
-
-        // Write the destination address in MSC_ADDRB
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_ADDRB, address) )
-
-        // MSC->WRITECMD = MSC_WRITECMD_LADDRIM
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x01) )
-
-        // Write the flash content and use the auto address increment
-        // of the MSC engine.
-        local idx = 0
-        while(idx < buffer.getSize() )
-        {
-            // Write word to MSC_DATA
-            _n_throw( intrfApi.writeMem32( mscBase|MSC_WDATA, buffer.un32(idx) ) )
-
-            // Initiate write with auto increment, 1 to WRITETRIG in MSC_WRITECMD
-            _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x10) )
-            idx += 4
-        }   
-
-        // End writing  MSC->WRITECMD = MSC_WRITECMD_WRITEEND
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x04) )
-        return ERROR_OK
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
+      ramSize = (RAM_SIZE & 0xffff) * 1024
     }
-    
-    // Catch all the sector write errors
-    catch(e){
-       if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
-       return ERROR_NOTIFIED
-    }    
-}
 
-/////////////////////////////////////////////////////////////////////////////////
-//
-//   Finalize the flash operations
-//
-function flash_done()
-{
-    try{
-        //while ( MSC->STATUS & MSC_STATUS_BUSY )
-        local time = GetTickCount()
-        do{
-            if(GetTickCount() - time > 2000)
-                _n_throw(ERROR_TIMEOUT)
-            
-            _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS) )
-        }while (intrfApi.value32 &  0x01 )
+    DeviceAPI().memmap( format( mem_template,  flashSize*1024, pageSize, ramSize*1024 ))
 
-        // Disable flash writing WREN in MSC_WRITECTRL
-        //intrfApi.readMem32(0x400E0008)
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECTRL, 0 ) )//intrfApi.value32 & 0xFFFFFFFE )
+    // Find the rigth base address of the MSC by reading the status register and check WDATAREADY.
+    noticef("Silabs.script: Check MSC base address 0x%X\n", mscBase )
 
-        // Lock MSC
-        _n_throw( intrfApi.writeMem32(mscBase|mscLockOff, 0x0 ))
+    if( (intrfApi.readMem32(mscBase|0x1C) < ERROR_OK ) || !(intrfApi.value32 &0x08)){
+        mscBase    = 0x400C0000
+        mscLockOff = 0x3C
 
-        return ERROR_OK
-    }
-    
-    // Catch all the sector write errors
-    catch(e){
-       return e
-    }    
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-//
-//   Erase the whole chip
-//   - If this function is not defined, sector by sector erase is used by EB-link.
-//   - This is an isolated function, flash_start and flash_done are not
-//     called by EB-link so we have to explicit unlock and lock in this function.
-//
-function flash_erase_chip()
-{
-
-    try{
-        // Unlock device, see above
-        _n_throw( flash_start() )
-
-        // MSC->MASSLOCK = MSC_MASSLOCK_LOCKKEY_UNLOCK
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_MASSLOCK, MSC_MASS_KEY))
-
-
-        // Erase first 512K block
-        //MSC->WRITECMD = MSC_WRITECMD_ERASEMAIN0
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x100) )
-
-        //while ( MSC->STATUS & MSC_STATUS_BUSY )
-        local time = GetTickCount()
-        do{
-            if(GetTickCount() - time > 2000)
-                _n_throw(ERROR_TIMEOUT)
-            _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS) )
-        }while ( intrfApi.value32 &  0x01 )
-
-        // Second 512K block if this is available
-        if( flashSize > 512 )
-        {
-            //MSC->WRITECMD = MSC_WRITECMD_ERASEMAIN1
-            _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x200) )
-
-            //while ( MSC->STATUS & MSC_STATUS_BUSY )
-            time = GetTickCount()
-            do{
-                if(GetTickCount() - time > 2000)
-                    _n_throw(ERROR_TIMEOUT)
-        
-                _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS))
-            }while ( intrfApi.value32 &  0x01 )
+        // Check WDATAREADY again on this MSC base address
+        noticef("Silabs-auto.script: Check MSC base address 0x%X\n", mscBase )
+        if( (intrfApi.readMem32(mscBase|0x1C) < ERROR_OK ) || !(intrfApi.value32 &0x08)){
+            errorf("ERROR: Can't find Silabs MSC base address\n");
+            return ERROR_NOTIFIED
         }
-
-        // Lock the flash, see above
-        _n_throw( flash_done() )
-
-        // Inform the user what we did
-        printf("Flash: -- chip erased --\n")
-        return ERROR_OK
     }
-    
-    // Catch all the sector write errors
-    catch(e){
-       if(e < ERROR_NOTIFIED)
-           errorf("ERROR: Chip erasing\n")
-       return ERROR_NOTIFIED
-    }    
+
+    // Generic flash algorithm
+    require("silabs/flash/silabs.script")
 }

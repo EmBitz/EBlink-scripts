@@ -105,13 +105,13 @@ function stm32_device()
 
     // The user specified the size of flash memory
     if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
-      printf("CLI set  FLASH : %dKB\n", flash_size)
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
       flash_size = (FLASH_SIZE & 0xffff) * 1024
     }
 
     // The user specified the size of ram memory
     if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
-      printf("CLI set    RAM : %dKB\n", ram_size)
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
