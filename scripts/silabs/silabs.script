@@ -25,11 +25,6 @@ const mem_template = @@"
  </memory>
 </memory-map>"
 
-
-flashSize  <- 0          // Global flash size, is also used for mass erase
-mscBase    <- 0x400E0000 // Default base address for flash MSC
-mscLockOff <- 0x40       // Default offset of the unlock register
-
 SILABS <- [
  [16,"EFR32MG1P%d - Mighty Gecko\n"],
  [17,"EFR32MG1B%d - Mighty Gecko Gen1\n"],
@@ -72,6 +67,9 @@ SILABS <- [
  [122,"EZR32HG%d - Happy Gecko\n"],
 ]
 
+flashSize  <- 0          // Global flash size, is also used for mass erase
+mscBase    <- 0x400E0000 // Default base address for flash MSC
+mscLockOff <- 0x40       // Default offset of the unlock register
 
 /////////////////////////////////////////////////////
 //
