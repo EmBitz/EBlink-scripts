@@ -1,0 +1,66 @@
+/////////////////////////////////////////////////////
+//
+//                   Renesas M23
+//
+//
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+</memory-map>"
+
+
+RNSS_DEV <- [
+// M23
+[ "A2L1"],
+[ "A2E1"],
+[ "A2E2"],
+[ "A2E3"],
+[ "A2A1"]
+]
+
+
+require("renesas/generic.script")
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function renesas_device()
+{
+    local flash_size = getFlashSize()
+    local ram_size = 0
+
+
+    printf("Renesas family : R%s (%s)\n", familyStr, deviceStr)
+
+
+    // Inform the user
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size)
+
+    errorf("\nThis Renesas part:\n %s\nis not support yet.\nVisit forum for help.", deviceStr)
+    throw ERROR_NOTIFIED
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", flash_size)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", ram_size)
+      ram_size = (RAM_SIZE & 0xffff)
+    }
+
+    errorf("\n Renesas support\nUnder construction!")
+    throw ERROR_NOTIFIED
+
+    //DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size))
+}

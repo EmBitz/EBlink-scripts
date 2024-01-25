@@ -52,7 +52,7 @@ function main()
             }
             else
                 errorf("ERROR: No valid deviceStr device part found\n")
-        else
+        else if( e != ERROR_NOTIFIED)
             errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
         return ERROR_NOTIFIED
     }
@@ -65,8 +65,8 @@ function main()
 //
 function findDevice()
 {
-    if( VERSION < 5.0){
-       errorf("Error:\n\nIncompatiable EBlink version %.2f\n\tPlease update\n", VERSION)
+    if( VERSION < 5.12){
+       errorf("Error:\n\nIncompatiable EBlink version %.2f\nPlease update to >= 5.12\n", VERSION)
        throw ERROR_NOTIFIED
     }
 
@@ -87,7 +87,7 @@ function findDevice()
       if(RENESAS[i][0] == targetApi.getCpuName()){
           for (local f=0;f<RENESAS[i][1].len();f++)
              if( RENESAS[i][1][f] == familyStr){
-                    require("renesas/renesas.script")
+                    require("renesas/renesas"+RENESAS[i][0]+".script")
                     renesas_device()
                     return
                   }
@@ -123,6 +123,8 @@ function getPartString(addr)
     catch(e) {
         return false
     }
+    
+    deviceStr = strip(deviceStr)
     return true;
 }
 

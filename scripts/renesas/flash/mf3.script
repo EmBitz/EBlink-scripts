@@ -1,0 +1,114 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//                   Renesas MF3 flash unit
+//
+//   Under construction!!!!
+//
+
+maxFlashSpeed   <- 4000 // 4MHz is max speed for direct programming (we think)
+
+// Generic Flash Script errors
+require("renesas/flash/errors.script")
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Unlock the flash
+//
+function flash_start()
+{
+    // Override the maximum flash speed from cli
+    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+        maxFlashSpeed = FLASH_SPEED
+        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+    }
+
+    // Check that we don't go faster than the user selected on the cli
+    if(maxFlashSpeed > intrfApi.getSpeed())
+        maxFlashSpeed = intrfApi.getSpeed()
+
+    try{
+        // Be sure that the core is halted and all clocks are reset
+        _n_throw( targetApi.reset(SYSTEM_RESET) )
+
+        // Wait for halt
+        local time = GetTickCount();
+        do{
+            _n_throw( targetApi.poll() )
+
+          // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+              _n_throw(ERROR_TIMEOUT)
+
+        } while(targetApi.getState() != TARGET_HALTED )
+
+        
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error unlocking flash! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Erase sequence according ST user manual
+//
+function flash_erase(sector, address)
+{
+    try{
+
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  The length is always equals to the page to be programmed in bytes because trim is
+//  set off by parent script.
+//
+function flash_write(sector, address, buffer)
+{
+    try{
+
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//
+//
+function flash_done()
+{
+    try{
+
+        return ERROR_OK
+    }
+
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error locking flash!\n")
+       return ERROR_NOTIFIED
+    }
+}
+
