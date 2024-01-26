@@ -21,8 +21,9 @@ const mem_template = @@"
  </memory>
 
  <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
-  <property name=\"blocksize\">0x40</property>
+  <property name=\"blocksize\">64</property>
   <property name=\"secstart\">1000</property>
+  <property name=\"sectype\">gdb_nc</property>  
  </memory>
 
  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>

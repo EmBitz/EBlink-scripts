@@ -2,10 +2,10 @@
 //
 //                   Renesas RV40 flash unit
 //
-//  With the cli define  "-D FLASH_DATA" the data flash is also cleared and programmed
+//  Beaware: erased data flash contains garbage by Renesas design
 //
 
-const FLASH_TIMEOUT   2000 // Generic 2sec flash timeout
+const FLASH_TIMEOUT     1500 // Generic 1.5sec flash timeout
 
 const CMD_REG           0x407E0000
 //---------------------------------
@@ -25,12 +25,12 @@ const CMD_LOCK_BIT_READ 0x71
 const CMD_FINAL         0xD0
 
 
-const BASE_REG 0x407FE000
+//BASE_REG 0x407FE000
 //--------------------------------------------------
-const FASTAT_OFFS    0x10     // Flash Access Status
-const FASTAT_CMDLK   (1 << 4) // Command Lock
+const FASTAT_REG       0x407FE010 // Flash Access Status
+const FASTAT_CMDLK     (1 << 4) // Command Lock
 
-const FSTATR_OFFS      0x80      // Flash Status
+const FSTATR_REG       0x407FE080  // Flash Status
 const FSTATR_FLWEERR   (1 <<  6) // Flash Write/Erase Protect Error Flag
 const FSTATR_PRGSPD    (1 <<  8) // Programming Suspend Status Flag
 const FSTATR_ERSSPD    (1 <<  9) // Erasure Suspend Status Flag
@@ -44,29 +44,32 @@ const FSTATR_SECERR    (1 << 21) // Security Error
 const FSTATR_FESETERR  (1 << 22) // FENTRY Setting Error
 const FSTATR_ILGCOMERR (1 << 23) // Illegal Command Error
 
-const FSADDR_OFFS     0x30
-
-const FMEPROT_OFFS    0x44
+const FMEPROT_REG     0x407FE044
 const FMEPROT_LOCK    0xD901
 const FMEPROT_UNLOCK  0xD900
 
-const FENTRYR_OFFS    0x84
+const FENTRYR_REG     0x407FE084
 const FENTRYR_KEY     (0xAA << 8)
 const FENTRYR_PE_CF   1
 const FENTRYR_PE_DF   (1 << 7)
 
-const FCPSR_OFFS     0xE0
+const FCPSR_REG      0x407FE0E0
 const FCPSR_ESUSPMD  1
 
 const FWEPROR_REG    0x4001E416
+const FWEPROR_PERMIT 0x01
+const FWEPROR_PROHIB 0x02
 
-// PE mode related variables
+const FSADDR_REG      0x407FE030
+
+// PE modes
 enum peMode {
     READ_PE,
     CODE_PE,
     DATA_PE
 }
 
+// Not actively used right now!!
 maxFlashSpeed   <- 4000 // 4MHz is max speed for direct programming (we think)
 
 // Generic Flash Script errors
@@ -96,22 +99,14 @@ function flash_start()
         local time = GetTickCount();
         do{
             _n_throw( targetApi.poll() )
-          // Timeout of 1sec
-            if(GetTickCount() - time > 1000)
-              _n_throw(ERROR_TIMEOUT)
+            if(GetTickCount() - time > FLASH_TIMEOUT) _n_throw(ERROR_TIMEOUT)
         } while(targetApi.getState() != TARGET_HALTED )
 
-        // Permit programming and erasing
-        _n_throw(intrfApi._readMem(FWEPROR_REG,8))
-        while(intrfApi.value32 != 1) {
-          _n_throw(intrfApi._writeMem(FWEPROR_REG, 1,8))
-          _n_throw(intrfApi._readMem(FWEPROR_REG,8))
-        }
+        _n_throw(intrfApi._writeMem(FWEPROR_REG, FWEPROR_PERMIT,8))
 
         return ERROR_OK
     }
 
-    // Catch all the sector write errors
     catch(e){
        if(e < ERROR_NOTIFIED)
            errorf("Error unlocking flash! %s\n", flashError(e) )
@@ -121,30 +116,32 @@ function flash_start()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//   Erase sequence according ST user manual
+//
 //
 function flash_erase(sector, address)
 {
     if(sector < 1000)
         switchPeMode(peMode.CODE_PE)
-    else {
-        if(!isScriptObject("FLASH_DATA"))
+    else  {
+        // We keep data intact for chip erase, otherwise comment this out
+        if(DeviceAPI().isChipErase()){
+            noticef("Skiped data by chip erase [0x%X]\n", address)
             return ERROR_OK
+        }
         switchPeMode(peMode.DATA_PE)
     }
 
     try{
-        _n_throw(intrfApi._writeMem(BASE_REG+FCPSR_OFFS, FCPSR_ESUSPMD, 16))
-        _n_throw(intrfApi.writeMem32(BASE_REG+FSADDR_OFFS, address))
+        _n_throw(intrfApi._writeMem(FCPSR_REG, FCPSR_ESUSPMD, 16))
+        _n_throw(intrfApi.writeMem32(FSADDR_REG, address))
 
         _n_throw(intrfApi._writeMem(CMD_REG, CMD_BLOCK_ERASE,8))
         _n_throw(intrfApi._writeMem(CMD_REG, CMD_FINAL,8))
-        checkBusy(1100)
+        checkBusy(FLASH_TIMEOUT)
         error_check(FSTATR_ERSERR | FSTATR_ILGLERR)
         return ERROR_OK
     }
 
-    // Catch all the sector erase errors
     catch(e){
        if(e < ERROR_NOTIFIED)
            errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
@@ -157,21 +154,17 @@ function flash_erase(sector, address)
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//  The length is always equals to the page to be programmed in bytes because trim is
-//  set off by parent script.
+//
 //
 function flash_write(sector, address, buffer)
 {
     local writeSize
     if(sector < 1000) {
         switchPeMode(peMode.CODE_PE)
-        writeSize = 0x80
+        writeSize = 128
     } else {
-        if(!isScriptObject("FLASH_DATA"))
-            return ERROR_OK
-        // Data flash
         switchPeMode(peMode.DATA_PE)
-        writeSize = 0x04
+        writeSize = 16
     }
 
     buffer.trim(writeSize)
@@ -183,26 +176,30 @@ function flash_write(sector, address, buffer)
            if( writeSize > len)
                writeSize = len
 
-            _n_throw(intrfApi.writeMem32(BASE_REG+FSADDR_OFFS, address))
+            //Set the first address of the target block to the FSADDR register
+            _n_throw(intrfApi.writeMem32(FSADDR_REG, address))
             address += writeSize
 
+            // Write E8h to the FACI command-issuing area
             _n_throw(intrfApi._writeMem(CMD_REG, CMD_PROGRAM, 8))
+
+            // Write N to the FACI command-issuing area
             _n_throw(intrfApi._writeMem(CMD_REG, writeSize/2, 8))
 
             for (local i= 0; i < (writeSize/2); i++) {
+                // Write next 2 bytes of data to the FACI commandissuing area
                 _n_throw(intrfApi._writeMem(CMD_REG, buffer.un16(idx),16))
                 idx += 2
                 len -= 2
             }
 
             _n_throw(intrfApi._writeMem(CMD_REG, CMD_FINAL,8))
-            checkBusy(1000)
+            checkBusy(FLASH_TIMEOUT)
         }
         error_check(FSTATR_PRGERR  | FSTATR_ILGLERR)
         return ERROR_OK
     }
 
-    // Catch all the sector write errors
     catch(e){
        if(e < ERROR_NOTIFIED)
            errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
@@ -217,18 +214,12 @@ function flash_write(sector, address, buffer)
 function flash_done()
 {
     try{
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
-        
-     /*
-        switchPeMode(peMode.READ_PE)
 
-        // Prohibit programming and erasing
-       _n_throw(intrfApi._readMem(FWEPROR_REG,8))
-        while(intrfApi.value32 != 2) {
-          _n_throw(intrfApi._writeMem(FWEPROR_REG, 2,8))
-          _n_throw(intrfApi._readMem(FWEPROR_REG,8))
-        }
-     */
+        switchPeMode(peMode.READ_PE)
+        _n_throw(intrfApi._writeMem(FWEPROR_REG, FWEPROR_PROHIB,8))
+
+        // A reset works perhaps nicer because target can resume rigth away
+//        _n_throw( targetApi.reset(SYSTEM_RESET) )
         return ERROR_OK
     }
 
@@ -250,7 +241,7 @@ function checkBusy(timeout)
     do{
         if(GetTickCount() - time > timeout)
             _n_throw(ERROR_TIMEOUT)
-        _n_throw( intrfApi.readMem32(BASE_REG+FSTATR_OFFS) )
+        _n_throw( intrfApi.readMem32(FSTATR_REG) )
     }while ( !(intrfApi.value32 & FSTATR_RDY) )
 }
 
@@ -260,24 +251,24 @@ function checkBusy(timeout)
 //
 function error_check(errors)
 {
-   _n_throw( intrfApi.readMem32(BASE_REG+FSTATR_OFFS) )
+   _n_throw( intrfApi.readMem32(FSTATR_REG) )
    local status = intrfApi.value32
 
-   _n_throw(intrfApi._readMem(BASE_REG+FASTAT_OFFS, 8))
+   _n_throw(intrfApi._readMem(FASTAT_REG, 8))
 
    if( intrfApi.value32 & FASTAT_CMDLK){
-        printf("Recovery from the Command-Locked State\n")
+       debugf("Recovery from the Command-Locked State\n")
        if(status & FSTATR_ILGLERR){
-            printf("If an illegal error occurred read and clear CFAE and DFAE in FASTAT\n")
-           _n_throw(intrfApi._readMem(BASE_REG+FASTAT_OFFS, 8))
-           _n_throw(intrfApi._writeMem(BASE_REG+FASTAT_OFFS, 0, 8))
-           checkBusy(20)
+            debugf("If an illegal error occurred read and clear CFAE and DFAE in FASTAT\n")
+           _n_throw(intrfApi._readMem(FASTAT_REG, 8))
+           _n_throw(intrfApi._writeMem(FASTAT_REG, 0, 8))
+           checkBusy(FLASH_TIMEOUT)
          }
    }
 
    if(status & errors){
        _n_throw(intrfApi._writeMem(CMD_REG, CMD_FORCED_STOP, 8))
-       throw -2
+       _n_throw(ERROR_FLASH)
    }
 }
 
@@ -287,7 +278,7 @@ function error_check(errors)
 //
 function switchPeMode(mode)
 {
-    _n_throw(intrfApi._readMem(BASE_REG+FENTRYR_OFFS, 16))
+    _n_throw(intrfApi._readMem(FENTRYR_REG, 16))
 
     switch(mode){
         case peMode.CODE_PE:
@@ -299,17 +290,16 @@ function switchPeMode(mode)
                return
            break
         default:
-            if(intrfApi.value32 == 0)
-                return
-            checkBusy(1000)
+            if(intrfApi.value32 == 0) return
+            checkBusy(FLASH_TIMEOUT)
     }
 
-    _n_throw(intrfApi._writeMem(BASE_REG+FMEPROT_OFFS, FMEPROT_UNLOCK, 16))
+    _n_throw(intrfApi._writeMem(FMEPROT_REG, FMEPROT_UNLOCK, 16))
 
     // If we switch from flash modes we have to go via read mode
     if( mode && intrfApi.value32){
-        checkBusy(100)
-       _n_throw(intrfApi._writeMem(BASE_REG+FENTRYR_OFFS, FENTRYR_KEY, 16))
+        checkBusy(FLASH_TIMEOUT)
+       _n_throw(intrfApi._writeMem(FENTRYR_REG, FENTRYR_KEY, 16))
     }
 
     local fev = 0
@@ -321,21 +311,21 @@ function switchPeMode(mode)
            fev = FENTRYR_PE_DF
            break
         default:
-            checkBusy(100)
+            checkBusy(FLASH_TIMEOUT)
     }
 
-    _n_throw(intrfApi._writeMem(BASE_REG+FENTRYR_OFFS, FENTRYR_KEY | fev, 16))
+    _n_throw(intrfApi._writeMem(FENTRYR_REG, FENTRYR_KEY | fev, 16))
 
     local time = GetTickCount()
     do{
-        if(GetTickCount() - time > 2000)
+        if(GetTickCount() - time > FLASH_TIMEOUT)
             _n_throw(ERROR_TIMEOUT)
 
-        _n_throw(intrfApi._readMem(BASE_REG+FENTRYR_OFFS, 16))
+        _n_throw(intrfApi._readMem(FENTRYR_REG, 16))
     }while(intrfApi.value32 != fev)
 
     if(fev == 0)
-        _n_throw(intrfApi._writeMem(BASE_REG+FMEPROT_OFFS, FMEPROT_LOCK, 16))
+        _n_throw(intrfApi._writeMem(FMEPROT_REG, FMEPROT_LOCK, 16))
 
     error_check(FSTATR_ILGLERR)
 }
