@@ -1,11 +1,11 @@
 # Cortex-M tool e.g. STlink V2 & V3 support
 ## Win32, Linux_x86_64 and Raspberry 
-### Auto detects Silabs, STmicro, Atmel and NXP
+### Auto detects Silabs, STmicro, Atmel, NXP and Renesas
 
 EBlink ARM Cortex-M debug tool with squirrel scripting device support
 
 [ Windows installer ](https://embitz.org/forum/thread-141.html) available with windows shell context menu.  
-The installer set environment variable EB_DEFAULT_SCRIPT to "auto"(.script) so that all supported vendors are automaticlly detected (currently Silabs, STmicro, Atmel and NXP).
+The installer set environment variable EB_DEFAULT_SCRIPT to "auto"(.script) so that all supported vendors are automaticlly detected (currently Silabs, STmicro, Atmel, NXP and Renesas).
 
 ![alt text](https://www.embitz.org/context3.png)  
 
