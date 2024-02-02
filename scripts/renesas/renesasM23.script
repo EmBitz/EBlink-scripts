@@ -11,18 +11,33 @@
 const mem_template = @@"
 <?xml version=\"1.0\"?>
 <memory-map>
+ <memory type=\"flash\" start=\"0x00000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x800</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+
+ <memory type=\"flash\" start=\"0x40100000\" length=\"0x%x\">
+  <property name=\"blocksize\">1024</property>
+  <property name=\"secstart\">1000</property>
+  <property name=\"sectype\">gdb_nc</property>
+ </memory>
+
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x28000000\" length=\"1024\"/>
+
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
 </memory-map>"
 
 
 RNSS_DEV <- [
-// M23
-[ "A2L1"],
-[ "A2E1"],
-[ "A2E2"],
-[ "A2E3"],
-[ "A2A1"]
+// Family,DFLASH,SRAM
+[ "A2L1", 8, 32],
+[ "A2E1", 4, 16],
+[ "A2E2", 2,  8],
+[ "A2E3", 2, 16],
+[ "A2A1", 8, 32]
 ]
-
 
 require("renesas/generic.script")
 
@@ -35,17 +50,26 @@ require("renesas/generic.script")
 function renesas_device()
 {
     local flash_size = getFlashSize()
+    local dflash_size = 0
     local ram_size = 0
 
+    for (local i=0;i<RNSS_DEV.len();i++)
+      if(RNSS_DEV[i][0] == familyStr){
+          dflash_size = RNSS_DEV[i][1]
+          ram_size = RNSS_DEV[i][2]
+          break
+      }
+
+    if(!ram_size){
+        errorf("\nThis Renesas part:\n %s\nis not support yet.\nVisit forum for help.", deviceStr)
+        throw ERROR_NOTIFIED
+    }
 
     printf("Renesas family : R%s (%s)\n", familyStr, deviceStr)
-
 
     // Inform the user
     printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size)
 
-    errorf("\nThis Renesas part:\n %s\nis not support yet.\nVisit forum for help.", deviceStr)
-    throw ERROR_NOTIFIED
 
     // The user specified the size of flash memory
     if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
@@ -59,8 +83,7 @@ function renesas_device()
       ram_size = (RAM_SIZE & 0xffff)
     }
 
-    errorf("\n Renesas support\nUnder construction!")
-    throw ERROR_NOTIFIED
+    DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size))
 
-    //DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size))
+    require("renesas/flash/mf3.script")
 }
