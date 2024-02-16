@@ -83,9 +83,9 @@ function silabs_device()
     noticef("Silabs fam. ID : %d\n", famId)
 
     local deviceStr = ""
-    for (local i=0;i<SILABS.len();i++)
-      if(SILABS[i][0] == famId){
-          deviceStr = SILABS[i][1]
+    foreach(dev in SILABS)
+      if(dev[0] == famId){
+          deviceStr = dev[1]
           break
        }
 

@@ -53,10 +53,10 @@ function renesas_device()
     local dflash_size = 0
     local ram_size = 0
 
-    for (local i=0;i<RNSS_DEV.len();i++)
-      if(RNSS_DEV[i][0] == familyStr){
-          dflash_size = RNSS_DEV[i][1]
-          ram_size = RNSS_DEV[i][2]
+    foreach(dev in RNSS_DEV)
+      if(dev[0] == familyStr){
+          dflash_size = dev[1]
+          ram_size = dev[2]
           break
       }
 

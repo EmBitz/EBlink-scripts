@@ -27,8 +27,8 @@ RENESAS_REG <- [
 // Script wide globals
 intrfApi <- InterfAPI()
 targetApi<- TargetAPI()
-deviceStr <- ""
-familyStr <- ""
+deviceStr<- ""
+familyStr<- ""
 
 const RENESAS_FMIFRT 0x407fb19c
 
@@ -70,8 +70,8 @@ function findDevice()
        throw ERROR_NOTIFIED
     }
 
-    for(local r=0;r<RENESAS_REG.len();r++)
-        if( getPartString(RENESAS_REG[r]))
+    foreach(cpuReg in RENESAS_REG)
+        if( getPartString(cpuReg))
             break
 
     if(!deviceStr.len() && (intrfApi.readMem32(RENESAS_FMIFRT)==ERROR_OK))
@@ -83,11 +83,11 @@ function findDevice()
     noticef("Renesas part   : %s\n", deviceStr)
 
     familyStr = deviceStr.slice(3,7)
-    for (local i=0;i<RENESAS.len();i++)
-      if(RENESAS[i][0] == targetApi.getCpuName()){
-          for (local f=0;f<RENESAS[i][1].len();f++)
-             if( RENESAS[i][1][f] == familyStr){
-                    require("renesas/renesas"+RENESAS[i][0]+".script")
+    foreach(arch in RENESAS)
+      if(arch[0] == targetApi.getCpuName()){
+          foreach(cpuFam in arch[1])
+             if( cpuFam == familyStr){
+                    require("renesas/renesas"+arch[0]+".script")
                     renesas_device()
                     return
                   }
@@ -123,7 +123,7 @@ function getPartString(addr)
     catch(e) {
         return false
     }
-    
+
     deviceStr = strip(deviceStr)
     return true;
 }

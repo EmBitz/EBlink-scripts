@@ -90,8 +90,8 @@ function findDevice()
        throw ERROR_NOTIFIED
     }
 
-    for(local r=0;r<STMICRO_REG.len();r++)
-        if( (intrfApi.readMem32(STMICRO_REG[r])>=0) && intrfApi.value32){
+    foreach(cpuReg in STMICRO_REG)
+        if( (intrfApi.readMem32(cpuReg)>=0) && intrfApi.value32){
             deviceId = intrfApi.value32 & 0xfff
             break
         }
@@ -101,14 +101,13 @@ function findDevice()
 
     noticef("STmicro device : 0x%X\n", deviceId)
 
-    for (local i=0;i<STMICRO.len();i++)
-      if(STMICRO[i][0] == targetApi.getCpuName()){
-          local scrpts = STMICRO[i][1]
-          for (local s=0;s<scrpts.len();s++)
-              for (local d=0;d<scrpts[s][1].len();d++)
-                  if( scrpts[s][1][d] == deviceId){
-                    noticef("STmicro script : %s\n", scrpts[s][0])
-                    require("stmicro/stm32"+scrpts[s][0]+".script")
+    foreach(arch in STMICRO)
+      if(arch[0] == targetApi.getCpuName()){
+          foreach(script in arch[1])
+              foreach(devId in script[1])
+                  if( devId == deviceId){
+                    noticef("STmicro script : %s\n", script[0])
+                    require("stmicro/stm32"+script[0]+".script")
                     stm32_device()
                     return
                   }
