@@ -1,0 +1,80 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32H5x
+//
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces.
+//
+
+//*************************************************************
+//*****             Memory map of the H5                   ****
+//*************************************************************
+const mem_template_H5 = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <memory type=\"ram\" start=\"0x00000000\" length=\"0x08000000\"/>
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+    <property name=\"blocksize\">0x%x</property>
+    <property name=\"secstart\">0</property>
+  </memory>
+  <memory type=\"ram\" start=\"0x%x\" length=\"0xf7fdffff\"/>
+</memory-map>"
+
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local flash_size
+    local page_size
+    local ram_size
+
+    // Get the flash size in KB
+    _n_throw(intrfApi.readMem32(0x08fff80c))
+    flash_size = (intrfApi.value32 &0xFFFF) *1024
+
+    // Set the memory map according the device ID
+      local deviceStr
+      switch(deviceId) {
+
+        case 0x474 : // CHIPID_STM32H503
+            deviceStr = "H503"
+            ram_size = 0x8000 // 32KB
+            page_size = 0x2000 // 8k
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+    }
+
+    DeviceAPI().memmap(format( mem_template_H5, flash_size, page_size, 0x08000000 + flash_size))
+
+    // Include flash loader script
+    require("stmicro/flash/h5.script")
+}
+
