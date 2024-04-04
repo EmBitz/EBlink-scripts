@@ -20,7 +20,7 @@ const mem_template_H5 = @@"
     <property name=\"blocksize\">0x%x</property>
     <property name=\"secstart\">0</property>
   </memory>
-  <memory type=\"ram\" start=\"0x%x\" length=\"0xf7fdffff\"/>
+  <memory type=\"ram\" start=\"0x%x\" length=\"0x%x\"/>
 </memory-map>"
 
 
@@ -72,7 +72,7 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    DeviceAPI().memmap(format( mem_template_H5, flash_size, page_size, 0x08000000 + flash_size))
+    DeviceAPI().memmap(format( mem_template_H5, flash_size, page_size, 0x08000000 + flash_size, 0xffffffff - 0x08000000 - flash_size))
 
     // Include flash loader script
     require("stmicro/flash/h5.script")
