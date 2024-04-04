@@ -57,6 +57,12 @@ function stm32_device()
             page_size = 0x2000
             break
 
+       case 0x474 : // CHIPID_STM32H5x3
+            deviceStr = "H503"
+            ram_size = 0x8000 // 32KB
+            page_size = 0x2000
+            break
+
         default:
             throw ERROR_NOT_FOUND
     }
