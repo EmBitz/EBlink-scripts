@@ -51,15 +51,15 @@ function stm32_device()
       local deviceStr
       switch(deviceId) {
 
-        case 0x484 : // CHIPID_STM32H5x3
-            deviceStr = "H5x3"
-            ram_size = 0x40000 // 256KB
+       case 0x474 : // CHIPID_STM32H503
+            deviceStr = "H503"
+            ram_size = 0x8000 // 32KB
             page_size = 0x2000
             break
 
-       case 0x474 : // CHIPID_STM32H5x3
-            deviceStr = "H503"
-            ram_size = 0x8000 // 32KB
+        case 0x484 : // CHIPID_STM32H563
+            deviceStr = "H563"
+            ram_size = 0x40000 // 256KB
             page_size = 0x2000
             break
 
