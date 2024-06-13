@@ -36,7 +36,7 @@ STMICRO <- [
 
 ["M33", [["u5", [ 0x455, 0x476, 0x481, 0x482 ]],
          ["l5", [ 0x472 ]],
-         ["h5", [ 0x474, 0x484 ]]]]
+         ["h5", [ 0x474, 0x478, 0x484 ]]]]
 ]
 
 // The register scan list for the CPU ID

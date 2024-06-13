@@ -57,9 +57,15 @@ function stm32_device()
             page_size = 0x2000
             break
 
-        case 0x484 : // CHIPID_STM32H563
-            deviceStr = "H563"
-            ram_size = 0x40000 // 256KB
+        case 0x478 : // CHIPID_STM32H523/H533
+            deviceStr = "H523/H533"
+            ram_size = 0x44000 // 272KB
+            page_size = 0x2000
+            break
+
+        case 0x484 : // CHIPID_STM32H562/H563/H573
+            deviceStr = "H562/H563/H573"
+            ram_size = 0xa0000 // 640k
             page_size = 0x2000
             break
 
