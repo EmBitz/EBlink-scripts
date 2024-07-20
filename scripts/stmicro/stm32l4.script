@@ -88,15 +88,24 @@ function stm32_device()
             page_size = 0x800
             break
 
-        case 0x470 : // CHIPID_STM32_L4R/L4S
-        case 0x471 : // CHIPID_STM32_L4P5/L4Q5x
-            deviceStr = ( deviceId == 0x470 ? "L4R/L4Sxx" : "L4P5/L4Q5x")
+        case 0x470 :
+            deviceStr = "L4R/L4Sxx"
+            ram_size = 0xa0000
             page_size = 0x2000
             if( (flash_size == (1024*1024)) && readDualBankOption(21) ){
                 hasDualBank = true
                 page_size = 0x1000
             }
-            ram_size = 0x18000
+            break
+
+        case 0x471 :
+            deviceStr = "L4P5/L4Q5x"
+            ram_size = 0x50000
+            page_size = 0x2000
+            if( (flash_size == (1024*1024)) && readDualBankOption(21) ){
+                hasDualBank = true
+                page_size = 0x1000
+            }
             break
 
         default:
