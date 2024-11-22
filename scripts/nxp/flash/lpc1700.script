@@ -2,7 +2,6 @@
 //
 //          LPC1700
 //
-//          _n_throw is a built-in function which throws an exception if argument < 0
 //
 // Adapted from stmicro scripts by J.DuBois
 // at Thermalogic Corporation (jer@thlogic.com)
@@ -36,23 +35,23 @@ function flash_start()
 
     try{
         // Be sure that the core is halted
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount()
         do{
             // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-                _n_throw(ERROR_TIMEOUT)
+                throw ERROR_TIMEOUT
 
-            _n_throw( targetApi.poll() )
+            targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
 		// Make sure boot ROM routines are mapped
-		_n_throw(intrfApi.writeMem32(0x400FC040,0x0))
+        intrfApi.writeMem32(0x400FC040,0x0)
 
 		// Set Stack Pointer to not interfere with flash routines
-		_n_throw(targetApi.writeReg("SP", 0x10000000+ram_size-32))
+        targetApi.writeReg("SP", 0x10000000+ram_size-32)
 
         return ERROR_OK
     }
@@ -79,12 +78,13 @@ function flash_erase(sector, address)
     try {
 
 		// Prepare sector for writing
-		_n_throw(executeIAP(IAP_PREPARESECTORS,result,sector,sector))
+		executeIAP(IAP_PREPARESECTORS,result,sector,sector)
 
 		// Copy data from RAM to FLASH
-		_n_throw(executeIAP(IAP_ERASESECTORS,result,sector,sector,12000))
+		executeIAP(IAP_ERASESECTORS,result,sector,sector,12000)
 
-		if (result[0] != 0) throw ERROR_FLASH
+		if (result[0] != 0) 
+            throw ERROR_FLASH
 
 		return ERROR_OK
     }
@@ -136,18 +136,19 @@ function flash_write(sector, address, buffer)
 			for (local j=0;j<writeSize;j+=4) {
 
 				if (i < bufferSize)
-					_n_throw(intrfApi.writeMem32(DATA_ADDR+j, buffer.un32(j+i*4096)))
+                    intrfApi.writeMem32(DATA_ADDR+j, buffer.un32(j+i*4096))
 				else
-					_n_throw(intrfApi.writeMem32(DATA_ADDR+j, 0xFFFFFF))
+                    intrfApi.writeMem32(DATA_ADDR+j, 0xFFFFFF)
 			}
 
 			// Prepare sector for writing
-			_n_throw(executeIAP(IAP_PREPARESECTORS,result,sector,sector,0))
+            executeIAP(IAP_PREPARESECTORS,result,sector,sector,0)
 
 			// Copy data from RAM to FLASH
-			_n_throw(executeIAP(IAP_COPYRAMTOFLASH,result,address+i*4096,DATA_ADDR,writeSize,12000))
+            executeIAP(IAP_COPYRAMTOFLASH,result,address+i*4096,DATA_ADDR,writeSize,12000)
 
-			if (result[0] != 0) throw ERROR_FLASH
+			if (result[0] != 0) 
+                throw ERROR_FLASH
 		}
 		// Catch all the sector write errors
 		catch(e){
@@ -171,15 +172,13 @@ function flash_done()
 {
 
   // Unmap the boot loader from the first 512 bytes of memory
-  _n_throw(intrfApi.writeMem32(0x400FC040,0x1))
+  intrfApi.writeMem32(0x400FC040,0x1)
 
   // Set the Stack pointer according the Vector table entry
-  intrfApi.readMem32(0x00000000)
-  targetApi.writeReg("SP", intrfApi.value32)
+  targetApi.writeReg("SP", intrfApi.intrfApi.readMem32(0x00000000))
 
   // Set the Program pointer according the Vector table entry
-  intrfApi.readMem32(0x00000004)
-  targetApi.writeReg("PC", intrfApi.value32)
+  targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
 
   return ERROR_OK
 }
@@ -203,14 +202,16 @@ function flash_erase_chip()
 
 		// Compute maximum sector number
 		max_sector = flash_size/page_size-1
-		if (flash1_size > 0) max_sector += flash1_size/page1_size
+		if (flash1_size > 0) 
+            max_sector += flash1_size/page1_size
 
 		// Prepare all sectors for erasing
-		_n_throw(executeIAP(IAP_PREPARESECTORS,result,0,max_sector))
+		executeIAP(IAP_PREPARESECTORS,result,0,max_sector)
 
 		// Erase all sectors
-		_n_throw(executeIAP(IAP_ERASESECTORS,result,0,max_sector))
-		if (result[0] != 0) throw ERROR_FLASH
+		executeIAP(IAP_ERASESECTORS,result,0,max_sector)
+		if (result[0] != 0) 
+            throw ERROR_FLASH
 
 		return ERROR_OK
     }
@@ -230,45 +231,28 @@ function executeIAP(cmd,result,...)
 {
 	local i
 
-	try {
+    targetApi.halt()
 
-		_n_throw( targetApi.halt() )
+    intrfApi.writeMem32(RESULT_ADDR, 1)
 
-		_n_throw( intrfApi.writeMem32(RESULT_ADDR, 1) )
+	// Write params to RAM
+    intrfApi.writeMem32(PARAM_ADDR, cmd)
+	for (i=0;i < 4 && i < vargv.len();i++) 
+       intrfApi.writeMem32(PARAM_ADDR+(i+1)*4, vargv[i])		
 
-		// Write params to RAM
-		_n_throw( intrfApi.writeMem32(PARAM_ADDR, cmd) )
+	// Write the param and result addresses into R0/R1
+    targetApi.writeReg("R0", PARAM_ADDR)
+    targetApi.writeReg("R1", RESULT_ADDR)
 
-		for (i=0;i < 4 && i < vargv.len();i++) {
-			_n_throw( intrfApi.writeMem32(PARAM_ADDR+(i+1)*4, vargv[i]) )
-		}
+	// Write the return address to the LR register, and set the BKPT instruction at
+	// the return address
+    targetApi.writeReg("LR", RETURN_ADDR+1)
+    intrfApi.writeMem32(RETURN_ADDR, 0xBEAABEAA)
 
-		// Write the param and result addresses into R0/R1
-		_n_throw( targetApi.writeReg("R0", PARAM_ADDR) )
-		_n_throw( targetApi.writeReg("R1", RESULT_ADDR) )
+	// Execute the IAP command
+    targetApi.execute(IAP_ADDR, true)
 
-		// Write the return address to the LR register, and set the BKPT instruction at
-		// the return address
-		_n_throw( targetApi.writeReg("LR", RETURN_ADDR+1) )
-		_n_throw( intrfApi.writeMem32(RETURN_ADDR, 0xBEAABEAA) )
-
-		// Execute the IAP command
-
-		_n_throw( targetApi.execute(IAP_ADDR, true) )
-
-		// Return results
-
-		for (i=0;i<3;i++) {
-			_n_throw( intrfApi.readMem32(RESULT_ADDR+i*4) )
-			result[i] = intrfApi.value32;
-		}
-
-		return ERROR_OK
-	}
-	catch(e) {
-	   flash_done()
-       if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing chip failed! %s\n", flashError(e) )
-       return ERROR_NOTIFIED
-	}
+	// Return results
+	for (i=0;i<3;i++) 
+		result[i] = intrfApi.readMem32(RESULT_ADDR+i*4);		
 }

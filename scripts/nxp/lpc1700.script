@@ -63,9 +63,6 @@ ram1_size <- 0
 
 function lpc_device()
 {
-
-  //  _n_throw(intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY  ))
-
     local deviceStr
 
 	for (local i=0;i<NXPCONFIG.len();i++) {
@@ -80,7 +77,8 @@ function lpc_device()
 		}
 	}
 
-	if (deviceStr == "") throw ERROR_NOT_FOUND
+	if (deviceStr == "") 
+        throw ERROR_NOT_FOUND
 
     // Inform user of the device found
     printf("NXP LPC17xx family : LPC17%s\n", deviceStr)
@@ -101,7 +99,7 @@ function lpc_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-	_n_throw(intrfApi.writeMem32(0x400FC040, 0x01))
+    intrfApi.writeMem32(0x400FC040, 0x01)
 
     DeviceAPI().memmap( format( mem_template,  ram_size,flash_size,page_size,flash1_size,page1_size,ram1_size))
 
@@ -132,15 +130,13 @@ function  reset_post_hook(resetType)
     {
         try {
  			// Unmap the boot loader from the first 512 bytes of memory
-			_n_throw(intrfApi.writeMem32(0x400FC040,0x1))
+			intrfApi.writeMem32(0x400FC040,0x1)
 
-			// Set the Stack pointer according the Vector table entry
-			intrfApi.readMem32(0x00000000)
-			targetApi.writeReg("SP", intrfApi.value32)
+			// Set the Stack pointer according the Vector table entry			
+			targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
 
-			// Set the Program pointer according the Vector table entry
-			intrfApi.readMem32(0x00000004)
-			targetApi.writeReg("PC", intrfApi.value32)
+			// Set the Program pointer according the Vector table entry			
+			targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
         }
 
         // Catch the errors

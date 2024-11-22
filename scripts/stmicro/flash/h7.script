@@ -103,22 +103,22 @@ function flash_start()
 
     try{
         // We reset the system so all clocks are at default values (HSI 64)
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount();
         do{
-            _n_throw( targetApi.poll() )
+            targetApi.poll()
 
           // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-              _n_throw(ERROR_TIMEOUT)
+                throw ERROR_TIMEOUT 
 
         } while(targetApi.getState() != TARGET_HALTED )
 
         // Check voltage
         if(intrfApi.targetVoltage() < 2.7)
-            _n_throw(ERROR_VOLTAGE)
+            throw ERROR_VOLTAGE
 
         return ERROR_OK
     }
@@ -155,7 +155,7 @@ function flash_erase(sector, address)
         }
 
         // After the reset at flash_start we have core clock HSI 64 MHz, adapt FLASH_ACR.
-        _n_throw( intrfApi.writeMem32(regbase + FLASH_ACR, 0) )
+        intrfApi.writeMem32(regbase + FLASH_ACR, 0)
 
         // 1)  Check and clear (optional) all the error flags due to previous programming/erase
         flash_get_clear_status(regbase)
@@ -165,21 +165,23 @@ function flash_erase(sector, address)
 
         // (3) Set the SER bit and select the sector out of the 8 in the main memory block) you wish to erase (SNB) in the FLASH_CR register
         // (4) Set the STRT bit in the FLASH_CR register also
-        _n_throw( intrfApi.writeMem32(regbase + FLASH_CR, (bnkSector<<8) | FLASH_SER  | FLASH_PG | FLASH_START ) )
+        intrfApi.writeMem32(regbase + FLASH_CR, (bnkSector<<8) | FLASH_SER  | FLASH_PG | FLASH_START )
 
         // (5) Wait for the QW1/2 bit and BSY1/2 to be cleared in the corresponding FLASH_SR1/2 register
         local time = GetTickCount();
+        local value
         do{
-            _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
+            value = intrfApi.readMem32(regbase + FLASH_SR)
 
             // Timeout of 5sec
             if(GetTickCount() - time > 5000)
-              _n_throw( ERROR_TIMEOUT)
-        }while ( intrfApi.value32 &  (FLASH_QW | FLASH_BSY) )
+                throw ERROR_TIMEOUT
+                
+        }while ( value &  (FLASH_QW | FLASH_BSY) )
 
         // Check for errors
-        if(intrfApi.value32 & FLASH_ERROR )
-          _n_throw(ERROR_FLASH)
+        if(value & FLASH_ERROR )
+            throw ERROR_FLASH
 
         // Lock the flash again
         flash_lock(regbase)
@@ -204,8 +206,10 @@ function flash_write(sector, address, buffer)
     local regbase = FLASH_REG_BASE_B0 // first flash bank
 
     // If this is the virtual option sector, go to options write function
-    if(sector == 999)
-      return option_write(buffer)
+    if(sector == 999) {
+      printf("\n\nStart writing option bytes virtual sector 999\n")
+      return flash_option_write(buffer)
+    }
 
     // Select the right flash bank
     if (address >= FLASH_BANK1_ADDRESS)
@@ -219,25 +223,24 @@ function flash_write(sector, address, buffer)
         flash_unlock(regbase)
 
         // Enable the program flag PG in flash_CR and 32bits parallelism
-        _n_throw( intrfApi.writeMem32(regbase+FLASH_CR, FLASH_PSIZE_32 | FLASH_PG ) )
+        intrfApi.writeMem32(regbase+FLASH_CR, FLASH_PSIZE_32 | FLASH_PG )
 
         // Lower the probe speed
         local probeSpeed = intrfApi.getSpeed()
-        _n_throw(intrfApi.setSpeed(maxFlashSpeed))
+        intrfApi.setSpeed(maxFlashSpeed)
 
         // Write the buffer direct to flash with 32 bits access
-        _n_throw( intrfApi.writeBuf(address, buffer, 32) )
+        intrfApi.writeBuf(address, buffer, 32)
 
         // Restore probe speed
-        _n_throw( intrfApi.setSpeed(probeSpeed) )
+        intrfApi.setSpeed(probeSpeed)
 
         // Check and clear (optional) all the error flags due to previous programming/erase
-        _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
-        if(intrfApi.value32 & FLASH_ERROR )
-           _n_throw(ERROR_FLASH)
+        if(intrfApi.readMem32(regbase + FLASH_SR) & FLASH_ERROR )
+            throw ERROR_FLASH
 
         // Disable the program flag  PG in flash_CR
-        _n_throw( intrfApi.writeMem32(regbase+ FLASH_CR, 0) )
+        intrfApi.writeMem32(regbase+ FLASH_CR, 0)
 
         // Lock the flash again
         flash_lock(regbase)
@@ -248,121 +251,6 @@ function flash_write(sector, address, buffer)
     catch(e){
        if(e < ERROR_NOTIFIED)
            errorf("Error: sector %d writing failed! %s\n", sector, flashError(e) )
-       return ERROR_NOTIFIED
-    }
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-//
-//  Write STM32H7 option bytes
-//
-//  Virtual sector 999 of 32 bytes with format as below.
-//  Be aware of reserved reset values!! (otherwise program errors)
-//
-//  typedef struct {       //   Reset    Flash control offset
-//     un32 FLASH_OPTSR;   //0x1416AAF0  0x20 (alias 0x120)
-//     un32 FLASH_BOOT;    //0x1FF00800  0x44 (alias 0x144)
-//     un32 FLASH_PRAR_x1; //0x000000FF  0x2C
-//     un32 FLASH_PRAR_x2; //0x000000FF  0x12C
-//     un32 FLASH_SCAR_x1; //0x800000FF  0x34
-//     un32 FLASH_SCAR_x2; //0x800000FF  0x134
-//     un32 FLASH_WPSN_x1; //0x000000FF  0x3C
-//     un32 FLASH_WPSN_x2; //0x000000FF  0x13C
-//  } STM32H7_options;
-//
-//
-function option_write(buffer)
-{
-    local regbase = FLASH_REG_BASE_B0 // first flash bank
-
-    // Check if the buffer is valid
-    if(buffer.getSize() != 32){
-       errorf("Error: Option program length is %d, should be 32 bytes\n", buffer.getSize())
-       return ERROR_NOTIFIED
-    }
-
-    printf("\n\nStart writing option bytes virtual sector 999\n")
-
-    try{
-        //------------- Unlock options  --------------
-        // Read flash FLASH_OPTCR
-        _n_throw( intrfApi.readMem32(regbase + FLASH_OPTCR) )
-
-        // Check if options are locked by the FLASH_OPTCR_OPTLOCK flag
-        if( intrfApi.value32 & OPT_LOCK  ){
-            // Write FLASH_OPTKEYR to unlock
-            _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY1) )
-            _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY2) )
-
-
-            // Reread flash FLASH_OPTCR to check if we are unlocked
-            _n_throw( intrfApi.readMem32(regbase + FLASH_OPTCR) )
-            if( intrfApi.value32 & OPT_LOCK  )
-              _n_throw(ERROR_UNLOCK)
-        }
-
-        //-------------- Program the options ---------
-        printf("FLASH_OPTSR  : 0x%x\n", buffer.un32(0))
-        _n_throw( intrfApi.writeMem32(regbase + 0x20, buffer.un32(0) ) )
-
-        printf("FLASH_BOOT   : 0x%x\n", buffer.un32(4))
-        _n_throw( intrfApi.writeMem32(regbase + 0x44, buffer.un32(4) ) )
-
-        printf("FLASH_PRAR_x1: 0x%x\n", buffer.un32(8))
-        _n_throw( intrfApi.writeMem32(regbase + 0x2C, buffer.un32(8) ) )
-
-        printf("FLASH_PRAR_x2: 0x%x\n", buffer.un32(12))
-        _n_throw( intrfApi.writeMem32(regbase + 0x12C, buffer.un32(12) ) )
-
-        printf("FLASH_SCAR_x1: 0x%x\n", buffer.un32(16))
-        _n_throw( intrfApi.writeMem32(regbase + 0x34, buffer.un32(16) ) )
-
-        printf("FLASH_SCAR_x2: 0x%x\n", buffer.un32(20))
-        _n_throw( intrfApi.writeMem32(regbase + 0x134, buffer.un32(20) ) )
-
-        printf("FLASH_WPSN_x1: 0x%x\n", buffer.un32(24))
-        _n_throw( intrfApi.writeMem32(regbase + 0x3C, buffer.un32(24) ) )
-
-        printf("FLASH_WPSN_x2: 0x%x\n", buffer.un32(28))
-        _n_throw( intrfApi.writeMem32(regbase + 0x13C, buffer.un32(28) ) )
-
-        //------------- Commit options  --------------
-
-        // Remove OPT error flag in FLASH_OPTCCR before programming
-        _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTCCR, OPT_OPTCHANGEERR) )
-
-        // Set the FLASH_OPTCR_OPTSTART in the FLASH_OPTCR
-        _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_START) )
-
-        local time = GetTickCount();
-        do{
-            AnimateCursor();
-
-            // Timeout of 1sec
-            if(GetTickCount() - time > 1000)
-                _n_throw( ERROR_TIMEOUT)
-
-            // Read the FLASH_OPTSR_CUR to get the busy flag
-            _n_throw( intrfApi.readMem32(regbase + FLASH_OPTSR_CUR) )
-        }while ( intrfApi.value32 &  OPT_BSY )
-
-        AnimateDone()
-
-        _n_throw( intrfApi.readMem32(regbase + FLASH_OPTSR_CUR) )
-
-        if(intrfApi.value32 & OPT_OPTCHANGEERR)
-            _n_throw( ERROR_FLASH)
-
-        // Relock the options bytes
-        _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_LOCK) )
-
-        printf("Options bytes ready\n\n")
-        return ERROR_OK
-    }
-
-    catch(e){
-       if(e < ERROR_NOTIFIED)
-           errorf("Error: options writing failed! %s\n", flashError(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -382,10 +270,10 @@ function flash_erase_chip()
     try{
         local time = GetTickCount()
 
-        _n_throw( flash_erase_bank(1, FLASH_REG_BASE_B0) )
+        flash_erase_bank(1, FLASH_REG_BASE_B0)
 
         if(hasSecondBank)
-            _n_throw( flash_erase_bank(2, FLASH_REG_BASE_B1) )
+             flash_erase_bank(2, FLASH_REG_BASE_B1)
 
         printf("done [%ums] \n", GetTickCount() - time)
         return ERROR_OK
@@ -410,21 +298,19 @@ function flash_erase_bank(bank, regbase)
         flash_unlock(regbase)
 
         //  3. BER1 and  START1 to launch bank erase
-        _n_throw( intrfApi.writeMem32(regbase + FLASH_CR,  FLASH_BER | FLASH_START  | FLASH_PG ) )
+        intrfApi.writeMem32(regbase + FLASH_CR,  FLASH_BER | FLASH_START  | FLASH_PG )
 
         // 4. Then wait until QW bit are cleared in the corresponding FLASH_SR1/2
         flash_check_busy(regbase, 30000) // 30 seconds timeout
 
         // 5. Lock the flash banks again
         flash_lock(regbase)
-
-        return ERROR_OK
     }
 
     catch(e){
        if(e < ERROR_NOTIFIED)
            errorf("Error: mass erase bank %d! %s\n", bank, flashError(e) )
-       return ERROR_NOTIFIED
+       throw ERROR_NOTIFIED
     }
 }
 
@@ -434,9 +320,8 @@ function flash_erase_bank(bank, regbase)
 //
 function flash_get_clear_status(regbase)
 {
-    _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
-    if( intrfApi.value32 & FLASH_ERROR )
-        _n_throw(ERROR_FLASH)
+    if( intrfApi.readMem32(regbase + FLASH_SR) & FLASH_ERROR )
+        throw ERROR_FLASH
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -448,27 +333,23 @@ function flash_unlock(regbase)
     // Wait for flash not busy
     local time = GetTickCount();
     do{
-        _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
-
         // Timeout of 1sec
         if(GetTickCount() - time > 1000)
-            _n_throw(ERROR_TIMEOUT)
-    }while ( intrfApi.value32 &  FLASH_BSY )
+            throw ERROR_TIMEOUT
+            
+    }while ( intrfApi.readMem32(regbase + FLASH_SR) &  FLASH_BSY )
 
     // Read flash lock status in FLASH_CR
-    _n_throw( intrfApi.readMem32(regbase + FLASH_CR) )
-
     // Check if it's locked by the FLASH_CR_LOCK flag
-    if( intrfApi.value32 & FLASH_LOCK ){
+    if( intrfApi.readMem32(regbase + FLASH_CR) & FLASH_LOCK ){
+    
         // Write flash KEYR
-        _n_throw( intrfApi.writeMem32(regbase + FLASH_KEYR, KEY1) )
-        _n_throw( intrfApi.writeMem32(regbase + FLASH_KEYR, KEY2) )
-
+        intrfApi.writeMem32(regbase + FLASH_KEYR, KEY1)
+        intrfApi.writeMem32(regbase + FLASH_KEYR, KEY2)
 
         // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
-        _n_throw( intrfApi.readMem32(regbase + FLASH_CR) )
-        if( intrfApi.value32 & FLASH_LOCK )
-            _n_throw(ERROR_UNLOCK)
+        if( intrfApi.readMem32(regbase + FLASH_CR) & FLASH_LOCK )
+            throw ERROR_UNLOCK
     }
 }
 
@@ -478,8 +359,8 @@ function flash_unlock(regbase)
 //
 function flash_lock(regbase)
 {
-    _n_throw( intrfApi.writeMem32(regbase + FLASH_CR, FLASH_LOCK)  )
-    _n_throw( intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_LOCK) )
+    intrfApi.writeMem32(regbase + FLASH_CR, FLASH_LOCK)
+    intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_LOCK)
 }
 
 
@@ -496,14 +377,192 @@ function flash_check_busy(regbase, timeout)
 
         // Timeout of 30sec (it can take quite long
         if(GetTickCount() - time > timeout)
-            _n_throw(ERROR_TIMEOUT)
-
-        _n_throw( intrfApi.readMem32(regbase + FLASH_SR) )
-    }while ( intrfApi.value32 &  (FLASH_QW|FLASH_BSY) )
+            throw ERROR_TIMEOUT
+            
+    }while ( intrfApi.readMem32(regbase + FLASH_SR) &  (FLASH_QW|FLASH_BSY) )
 
     AnimateDone()
 }
 
+//===================================================================================
+//                            Option byte programming
+//
+//  Virtual sector 999 of 32 bytes with format as below.
+//  Be aware of reserved reset values!! (otherwise program errors)
+//
+//  typedef struct {       //   Reset    Flash control offset
+//     un32 FLASH_OPTSR;   //0x1416AAF0  0x20 (alias 0x120)
+//     un32 FLASH_BOOT;    //0x1FF00800  0x44 (alias 0x144)
+//     un32 FLASH_PRAR_x1; //0x000000FF  0x2C
+//     un32 FLASH_PRAR_x2; //0x000000FF  0x12C
+//     un32 FLASH_SCAR_x1; //0x800000FF  0x34
+//     un32 FLASH_SCAR_x2; //0x800000FF  0x134
+//     un32 FLASH_WPSN_x1; //0x000000FF  0x3C
+//     un32 FLASH_WPSN_x2; //0x000000FF  0x13C
+//  } STM32H7_options;
+//
+//
 
 
+const FLASH_OPTSR    0
+const FLASH_BOOT     4
+const FLASH_PRAR_x1  8
+const FLASH_PRAR_x2 12
+const FLASH_SCAR_x1 16
+const FLASH_SCAR_x2 20
+const FLASH_WPSN_x1 24
+const FLASH_WPSN_x2 28
 
+//  Mapping of the EBlink ebBuffer (virtual sector) and STM32 registers
+OPT_MAPPING <- [[ 0,0x20, "FLASH_OPTSR  : 0x%08x\n"],
+                [ 4,0x44, "FLASH_BOOT   : 0x%08x\n"],
+                [ 8,0x2C, "FLASH_PRAR_x1: 0x%08x\n"],
+                [12,0x12C,"FLASH_PRAR_x2: 0x%08x\n"],
+                [16,0x34, "FLASH_SCAR_x1: 0x%08x\n"],
+                [20,0x134,"FLASH_SCAR_x2: 0x%08x\n"],
+                [24,0x3C, "FLASH_WPSN_x1: 0x%08x\n"],
+                [28,0x13C,"FLASH_WPSN_x2: 0x%08x\n"]]
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Write STM32H7 option bytes
+//
+function flash_option_write(buffer)
+{
+    local regbase = FLASH_REG_BASE_B0 // first flash bank
+    
+    // Get the current options
+    local curOptions = flash_get_option_buffer()
+
+    // Check if the buffer is valid
+    if(buffer.getSize() != 32){
+       errorf("Error: Option program length is %d, should be 32 bytes\n", buffer.getSize())
+       return ERROR_NOTIFIED
+    }
+
+    try{
+        //------------- Unlock options  --------------
+        // Read flash FLASH_OPTCR
+        // Check if options are locked by the FLASH_OPTCR_OPTLOCK flag
+        if( intrfApi.readMem32(regbase + FLASH_OPTCR) & OPT_LOCK  ){
+            // Write FLASH_OPTKEYR to unlock
+           intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY1)
+           intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY2)
+
+            // Reread flash FLASH_OPTCR to check if we are unlocked
+            if( intrfApi.readMem32(regbase + FLASH_OPTCR) & OPT_LOCK  )
+                throw ERROR_UNLOCK
+        }
+
+        //-------------- Program the options ---------
+        debugf("Write buffer into option registers:\n")
+        foreach(optReg in OPT_MAPPING)
+            // Changed options
+            if(curOptions.un32(optReg[0]) != buffer.un32(optReg[0]) ) {
+                debugf(optReg[2], buffer.un32(optReg[0]))
+                intrfApi.writeMem32(regbase + optReg[1], buffer.un32(optReg[0]) )
+            }
+
+        //------------- Commit options  --------------
+
+        // Remove OPT error flag in FLASH_OPTCCR before programming
+        intrfApi.writeMem32(regbase + FLASH_OPTCCR, OPT_OPTCHANGEERR)
+
+        // Set the FLASH_OPTCR_OPTSTART in the FLASH_OPTCR
+        intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_START)
+
+        local time = GetTickCount();
+        do{
+            AnimateCursor();
+
+            // Timeout of 10sec
+            if(GetTickCount() - time > 10000)
+                throw ERROR_TIMEOUT
+
+            // Read the FLASH_OPTSR_CUR to get the busy flag
+        }while ( intrfApi.readMem32(regbase + FLASH_OPTSR_CUR) &  OPT_BSY )
+
+        AnimateDone()
+
+        if(intrfApi.readMem32(regbase + FLASH_OPTSR_CUR) & OPT_OPTCHANGEERR)
+            throw ERROR_FLASH
+
+        // Relock the options bytes
+        intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_LOCK)
+
+        printf("Options bytes ready\n\n")
+        return ERROR_OK
+    }
+
+    catch(e){
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: options writing failed! %s\n", flashError(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  This function will return an ebBuffer with the option filled
+//
+function flash_get_option_buffer()
+{
+    local regbase = FLASH_REG_BASE_B0 // first flash bank
+    local optionBuf = ebBuffer(32)
+
+    debugf("Read option registers in buffer:\n")
+    foreach(optReg in OPT_MAPPING){       
+        optionBuf.put32( optReg[0], intrfApi.readMem32(regbase + optReg[1]))
+        debugf(optReg[2], optionBuf.un32(optReg[0]))
+    }
+
+    return optionBuf
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  This function will return an ebBuffer with the option filled
+//
+function flash_write_option_buffer(optionBuf)
+{
+    local probeSpeed = intrfApi.getSpeed()
+    intrfApi.setSpeed(maxFlashSpeed)
+     
+    // Reprogram the options
+    flash_unlock(FLASH_REG_BASE_B0)
+    flash_option_write(optionBuf)
+    flash_lock(FLASH_REG_BASE_B0)
+    
+    intrfApi.setSpeed(probeSpeed)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  This is a standalone function to clear the RDP level
+//
+function flash_Clear_RDP(optionBuf)
+{
+    // Clear the readout protection level
+    local optsr = optionBuf.un32(FLASH_OPTSR)
+    optsr = optsr & 0xFFFF00FF
+    optsr = optsr | 0x0000AA00 // Level 0
+    optionBuf.put32(FLASH_OPTSR, optsr)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Get the readout protoection level
+//
+function flash_RDP_level(optionBuf)
+{
+  local flash_optsr = optionBuf.un32(FLASH_OPTSR)
+
+  flash_optsr = flash_optsr >> 8
+  flash_optsr = flash_optsr & 0xFF
+
+  if( flash_optsr == 0xAA ) return 0
+  if( flash_optsr == 0xCc ) return 2
+  return 1
+}

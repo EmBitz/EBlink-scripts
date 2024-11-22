@@ -31,24 +31,23 @@ function flash_start()
 {
     try{
         // Be sure that the core is halted
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount()
         do{
             // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-                _n_throw(ERROR_TIMEOUT)
+              throw ERROR_TIMEOUT
 
-            _n_throw( targetApi.poll() )
+              targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
         // Unlock MSC
-        _n_throw( intrfApi.writeMem32(mscBase|mscLockOff, MSC_UNLOCK_KEY) )
+        intrfApi.writeMem32(mscBase|mscLockOff, MSC_UNLOCK_KEY)
 
-        // Enable WREN in  MSC_WRITECTRL
-        _n_throw( intrfApi.readMem32(mscBase|MSC_WRITECTRL) )
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECTRL, intrfApi.value32 | 0x01 ) )
+        // Enable WREN in  MSC_WRITECTRL    )
+        intrfApi.writeMem32(mscBase|MSC_WRITECTRL, intrfApi.readMem32(mscBase|MSC_WRITECTRL) | 0x01 )
 
         return ERROR_OK
     }
@@ -70,22 +69,20 @@ function flash_erase(sector, address)
 {
     try{
         //MSC->ADDRB = address
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_ADDRB, address))
+        intrfApi.writeMem32(mscBase|MSC_ADDRB, address)
 
         // MSC->WRITECMD = MSC_WRITECMD_LADDRIM
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x01))
+        intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x01)
 
         //MSC->WRITECMD = MSC_WRITECMD_ERASEPAGE
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x02))
+        intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x02)
 
         //while ( MSC->STATUS & MSC_STATUS_BUSY )
         local time = GetTickCount()
         do{
             if(GetTickCount() - time > 2000)
-                _n_throw(ERROR_TIMEOUT)
-
-            _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS))
-        }while (intrfApi.value32 &  0x01 )
+                throw ERROR_TIMEOUT
+        }while (intrfApi.readMem32(mscBase|MSC_STATUS) &  0x01 )
 
         return ERROR_OK
     }
@@ -111,16 +108,14 @@ function flash_write(sector, address, buffer)
         local time = GetTickCount()
         do{
             if(GetTickCount() - time > 2000)
-                _n_throw(ERROR_TIMEOUT)
-
-            _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS) )
-        }while (intrfApi.value32 &  0x01 )
+                throw ERROR_TIMEOUT
+        }while (intrfApi.readMem32(mscBase|MSC_STATUS) &  0x01 )
 
         // Write the destination address in MSC_ADDRB
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_ADDRB, address) )
+        intrfApi.writeMem32(mscBase|MSC_ADDRB, address)
 
         // MSC->WRITECMD = MSC_WRITECMD_LADDRIM
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x01) )
+        intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x01)
 
         // Write the flash content and use the auto address increment
         // of the MSC engine.
@@ -128,15 +123,15 @@ function flash_write(sector, address, buffer)
         while(idx < buffer.getSize() )
         {
             // Write word to MSC_DATA
-            _n_throw( intrfApi.writeMem32( mscBase|MSC_WDATA, buffer.un32(idx) ) )
+            intrfApi.writeMem32( mscBase|MSC_WDATA, buffer.un32(idx) )
 
             // Initiate write with auto increment, 1 to WRITETRIG in MSC_WRITECMD
-            _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x10) )
+            intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x10)
             idx += 4
         }
 
         // End writing  MSC->WRITECMD = MSC_WRITECMD_WRITEEND
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x04) )
+        intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x04)
         return ERROR_OK
     }
 
@@ -159,17 +154,14 @@ function flash_done()
         local time = GetTickCount()
         do{
             if(GetTickCount() - time > 2000)
-                _n_throw(ERROR_TIMEOUT)
-
-            _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS) )
-        }while (intrfApi.value32 &  0x01 )
+                throw ERROR_TIMEOUT
+        }while (intrfApi.readMem32(mscBase|MSC_STATUS) &  0x01 )
 
         // Disable flash writing WREN in MSC_WRITECTRL
-        //intrfApi.readMem32(0x400E0008)
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECTRL, 0 ) )//intrfApi.value32 & 0xFFFFFFFE )
+        intrfApi.writeMem32(mscBase|MSC_WRITECTRL, 0 )
 
         // Lock MSC
-        _n_throw( intrfApi.writeMem32(mscBase|mscLockOff, 0x0 ))
+        intrfApi.writeMem32(mscBase|mscLockOff, 0 )
 
         return ERROR_OK
     }
@@ -192,42 +184,42 @@ function flash_erase_chip()
 
     try{
         // Unlock device, see above
-        _n_throw( flash_start() )
+        if( flash_start() < ERROR_OK)
+            throw ERROR_NOTIFIED
+            
 
         // MSC->MASSLOCK = MSC_MASSLOCK_LOCKKEY_UNLOCK
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_MASSLOCK, MSC_MASS_KEY))
+        intrfApi.writeMem32(mscBase|MSC_MASSLOCK, MSC_MASS_KEY)
 
 
         // Erase first 512K block
         //MSC->WRITECMD = MSC_WRITECMD_ERASEMAIN0
-        _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x100) )
+        intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x100)
 
         //while ( MSC->STATUS & MSC_STATUS_BUSY )
         local time = GetTickCount()
         do{
             if(GetTickCount() - time > 2000)
-                _n_throw(ERROR_TIMEOUT)
-            _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS) )
-        }while ( intrfApi.value32 &  0x01 )
+                throw ERROR_TIMEOUT
+        }while ( intrfApi.readMem32(mscBase|MSC_STATUS) &  0x01 )
 
         // Second 512K block if this is available
         if( flashSize > 512 )
         {
             //MSC->WRITECMD = MSC_WRITECMD_ERASEMAIN1
-            _n_throw( intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x200) )
+            intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x200)
 
             //while ( MSC->STATUS & MSC_STATUS_BUSY )
             time = GetTickCount()
             do{
                 if(GetTickCount() - time > 2000)
-                    _n_throw(ERROR_TIMEOUT)
-
-                _n_throw( intrfApi.readMem32(mscBase|MSC_STATUS))
-            }while ( intrfApi.value32 &  0x01 )
+                    throw ERROR_TIMEOUT
+            }while ( intrfApi.readMem32(mscBase|MSC_STATUS) &  0x01 )
         }
 
         // Lock the flash, see above
-        _n_throw( flash_done() )
+        if( flash_done() < ERROR_OK)
+            throw ERROR_NOTIFIED
 
         // Inform the user what we did
         printf("Flash: -- chip erased --\n")

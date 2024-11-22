@@ -168,32 +168,22 @@ function stm32_device()
     local ram_size
 
     // Enable debug clocks
-    _n_throw( intrfApi.readMem32(DBGMCU_CR) )
-    _n_throw( intrfApi.writeMem32(DBGMCU_CR, intrfApi.value32 | DBGSTBY_D1 | D1DBGCKEN | D3DBGCKEN) )
+    local value = intrfApi.readMem32(DBGMCU_CR)
+    intrfApi.writeMem32(DBGMCU_CR, value | DBGSTBY_D1 | D1DBGCKEN | D3DBGCKEN)
 
     // Stop watchdog counters during halt: DBGMCU_APB4FZ1 |= DBG_IIWDG1
-    _n_throw( intrfApi.readMem32(DBGMCU_APB4FZ1) )
-    _n_throw( intrfApi.writeMem32(DBGMCU_APB4FZ1, intrfApi.value32 | DBG_IIWDG1) )
+    value = intrfApi.readMem32(DBGMCU_APB4FZ1) 
+    intrfApi.writeMem32(DBGMCU_APB4FZ1, value | DBG_IIWDG1)
 
-    // If IWDG runs as HARDWARE watchdog (44.3.4) erase
-    // will be aborted by the Watchdog and erase fails!
-    // Setting IWDG_KR to 0xaaaa does not seem to help!*/
-    _n_throw( intrfApi.readMem32(0x52002020) )
-    if( !(intrfApi.value32 & (1<<4) ) )
-        printf("\nHardware IWDG running, expect failure.\nSet IWDG1_SW!\n\n")
 
     // Get the flash size by reading the info register
     // Be sure that we are usig DAP-AP 0, the user can change the
     // default interface AP-port on the CLI
     local curAp = intrfApi.setDapAp(0)
-    intrfApi.readMem32(0x1ff1e880)    
+    value = intrfApi.readMem32(0x1ff1e880)
     intrfApi.setDapAp(curAp) // Restore the default DAP-AP!
 
-    // Check if the read was succesful
-    if(intrfApi.result < ERROR_OK)
-        _n_throw(interfApi.result)
-
-    flash_size = (intrfApi.value32 & 0xffff) * 1024
+    flash_size = (value & 0xffff) * 1024
 
     local deviceStr
     switch(deviceId) {
@@ -245,13 +235,55 @@ function stm32_device()
     // Generate XML and put it in EBlink's device object
     DeviceAPI().memmap( format(mem_template_H7, ( hasDualCore ? mem_ram_alias : "" ), flash_size, ( hasSecondBank ? mem_2MB : "") ) )
 
+
     // Use the normal H7 flash algorithm
     require("stmicro/flash/h7.script")
+
+    // =================== Flash Option checking =================
+
+    try{
+        local devOpt = flash_get_option_buffer()
+
+        // If IWDG runs as HARDWARE watchdog (44.3.4) erase
+        // will be aborted by the Watchdog and erase fails!
+        // Setting IWDG_KR to 0xaaaa does not seem to help!
+        if( !(devOpt.un32(0) & (1<<4) ) )
+            printf("\nHardware IWDG running, expect failure.\nSet IWDG1_SW!\n\n")
+
+        // Check the readout level
+        local rdpLevel = flash_RDP_level(devOpt)
+
+        if(rdpLevel == 2){
+            errorf("This device is protected with level 2\nNo debug possible\n")
+            throw ERROR_NOTIFIED
+        }
+
+        if(rdpLevel == 1){            
+            if( yesNof(1, "Read protection level 1 active\nClear to level 0? (chip will erase)") ) {
+                printf("Reset the RDP level to 0\n")
+
+                // Clear the readout level inside the flash routines
+                flash_Clear_RDP(devOpt)
+
+                // Remark: If other options should be cleared
+                //         Do it here!
+                flash_write_option_buffer(devOpt)
+            }
+            else {
+                errorf("This device is protected with level 1.\nDevice not accessible.\n")
+                throw ERROR_NOTIFIED
+            }
+        }
+    }
+    catch(e)
+    {
+        throw ERROR_NOTIFIED
+    }
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-// We overrule the default reset_post function 
+// We overrule the default reset_post function
 //
 // resetType:
 //        SYSTEM_RESET
@@ -274,12 +306,12 @@ function  reset_post_hook(resetType)
                 cpuVector = CM4_VEC
 
             // Set the Stack pointer according the Vector table entry
-            _n_throw( intrfApi.readMem32(cpuVector) )
-            _n_throw( targetApi.writeReg("SP", intrfApi.value32) )
+            local value = intrfApi.readMem32(cpuVector)
+            targetApi.writeReg("SP", value) 
 
             // Set the Program pointer according the Vector table entry
-            _n_throw( intrfApi.readMem32(cpuVector + 4) )
-            _n_throw( targetApi.writeReg("PC", intrfApi.value32) )
+            value = intrfApi.readMem32(cpuVector + 4)
+            targetApi.writeReg("PC", value)
 
             // Print additional info if we have dual core
             if(hasDualCore)
@@ -317,8 +349,8 @@ function services_setup()
 
         //                                 service        Name                  service-options
         //------------------------------------------------------------------------------------------------------
-        _n_throw( servicesApi.addService("GDB-target", "GDB_CM7",  format("%s,ap=%d", cliSwitch("-G"),CM7_AP )) )// Add GDB server for cpu1
-        _n_throw( servicesApi.addService("GDB-target", "GDB_CM4",  format("%s,ap=%d", cliSwitch("-G"),CM4_AP )) )// Add GDB server for cpu2
+        servicesApi.addService("GDB-target", "GDB_CM7",  format("%s,ap=%d", cliSwitch("-G"),CM7_AP )) // Add GDB server for cpu1
+        servicesApi.addService("GDB-target", "GDB_CM4",  format("%s,ap=%d", cliSwitch("-G"),CM4_AP )) // Add GDB server for cpu2
 
         // Remark:
         //  We start the GDB servers with the original GDB options from the command line (like no-caching etc)
@@ -351,18 +383,14 @@ function checkDualCore(dap_ap)
 
     // Read the core ID
     local curAp = intrfApi.setDapAp(dap_ap)
-    intrfApi.readMem32(0xE000ED00)
+    local value = intrfApi.readMem32(0xE000ED00)
     intrfApi.setDapAp(curAp)
-
-    // Check if the read was successful
-    if(intrfApi.result < ERROR_OK)
-        return false
 
     // Not sure this is right but if the CM4 is invisible because disabled by CM7 then
     // the upper byte is not zero but the lower 3 bytes are zero.
-    if( intrfApi.value32 && !(intrfApi.value32 & 0xFFFFFF))
+    if( value && !(value & 0xFFFFFF))
         printf("DualCore status: Disabled (single core mode)\n")
 
     // cpuID of non-zero is valid core
-    return (intrfApi.value32 & 0xFFFFFF ? true : false)
+    return (value & 0xFFFFFF ? true : false)
 }

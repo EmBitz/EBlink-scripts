@@ -79,16 +79,16 @@ function flash_start()
 
     try{
         // Be sure that the core is halted
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount()
         do{
             // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-                _n_throw(ERROR_TIMEOUT)
+              throw ERROR_TIMEOUT
 
-            _n_throw( targetApi.poll() )
+            targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
         flash_unlock()
@@ -129,7 +129,7 @@ function flash_erase(sector, address)
 
         // 3. Set the PER bit and select the page to erase (PNB) in the flash_cr
         // 4. Set the STRT bit of the flash_cr
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, eraseFlags ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, eraseFlags )
 
         // 5. Wait until the BSY bit of the flash_SR
         // 10.000 msec timeoucd ..t sometimes erasing can take long
@@ -166,14 +166,14 @@ function flash_write(sector, address, buffer)
         clear_flash_errors()
 
         // Set the PG bit of the FLASH control register (FLASH_CR)
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR,  FLASH_CR_PG ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR,  FLASH_CR_PG )
 
         // Adjust the probe speed to the maximum for direct write
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
         // Program the flash with 32 bit width memory access
-        _n_throw( intrfApi.writeBuf(address, buffer, 32) )
+        intrfApi.writeBuf(address, buffer, 32)
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
@@ -183,8 +183,8 @@ function flash_write(sector, address, buffer)
 
         // 7. Clear the PG bit of the FLASH control register (FLASH_CR) if there no more
         // programming request anymore
-        _n_throw( intrfApi.readMem32 (FLASH_BASE + FLASH_CR) )
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, intrfApi.value32 & ~FLASH_CR_PG ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 
+            intrfApi.readMem32 (FLASH_BASE + FLASH_CR) & ~FLASH_CR_PG )
 
         return ERROR_OK
     }
@@ -204,9 +204,9 @@ function flash_write(sector, address, buffer)
 function flash_done()
 {
     try{
-        // Write the CR register to lock (LOCK)
-        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, intrfApi.value32 | FLASH_CR_LOCK) )
+        // Write the CR register to lock (LOCK)        
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 
+            intrfApi.readMem32(FLASH_BASE + FLASH_CR) | FLASH_CR_LOCK) 
         return ERROR_OK
     }
     catch(e) {
@@ -222,21 +222,19 @@ function flash_done()
 //
 function flash_check_busy(timeout)
 {
+    local value
     local time = GetTickCount()
     do{
         AnimateCursor()
-
-        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_SR) )
-
+        value = intrfApi.readMem32(FLASH_BASE + FLASH_SR)        
         if(GetTickCount() - time > timeout)
-            _n_throw(ERROR_TIMEOUT)
-
-    } while ( intrfApi.value32 & FLASH_SR_BSY)
+          throw ERROR_TIMEOUT
+    } while ( value & FLASH_SR_BSY)
 
     AnimateDone()
 
-    if( intrfApi.value32 & FLASH_ERROR )
-        _n_throw(ERROR_FLASH)
+    if( value & FLASH_ERROR )
+        throw ERROR_FLASH
 
     // Clear error's
     clear_flash_errors()
@@ -248,8 +246,8 @@ function flash_check_busy(timeout)
 //
 function clear_flash_errors()
 {
-    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_SR) )
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_SR, intrfApi.value32 | FLASH_ERROR  ) )
+    intrfApi.writeMem32(FLASH_BASE + FLASH_SR,
+        intrfApi.readMem32(FLASH_BASE + FLASH_SR) | FLASH_ERROR  )
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -259,12 +257,11 @@ function clear_flash_errors()
 function flash_unlock()
 {
     // Unlock Flash
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEY1 ) )
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEY2 ) )
+    intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEY1 )
+    intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEY2 )
 
-    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
-    if(intrfApi.value32 & FLASH_CR_LOCK )
-       _n_throw(ERROR_UNLOCK)
+    if(intrfApi.readMem32(FLASH_BASE + FLASH_CR) & FLASH_CR_LOCK )
+       throw ERROR_UNLOCK 
 }
 
 
@@ -282,19 +279,19 @@ function flash_erase_chip()
         printf("Flash chip erase ")
 
         // Be sure that the target is halted
-        _n_throw( targetApi.halt() )
+        targetApi.halt()
 
         // Unlock flash
         flash_unlock()
 
         // (1) Set the MER1 and MER2 bit in the FLASH_CR register to enable mass erasing
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER1  ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER1)
 
         // (2) Set the STRT bit in the FLASH_CR register to start the erasing
         if(hasDualBank)
-            _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER1 | FLASH_CR_MER2  | FLASH_CR_STRT ) )
+            intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER1 | FLASH_CR_MER2  | FLASH_CR_STRT )
         else
-            _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER1 | FLASH_CR_STRT ) )
+            intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER1 | FLASH_CR_STRT )
 
         // (3) Wait until the BSY bit is reset in the FLASH_SR register
         local time = GetTickCount()
@@ -303,15 +300,13 @@ function flash_erase_chip()
 
             // Check for time out of 30 seconds
             if(GetTickCount() - time > 3000)
-                _n_throw(ERROR_TIMEOUT)
-
-            _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_SR) )
-        }while ( intrfApi.value32 & FLASH_SR_BSY)
+                throw ERROR_TIMEOUT
+        }while ( intrfApi.readMem32(FLASH_BASE + FLASH_SR) & FLASH_SR_BSY)
 
         AnimateDone()
 
         // Lock the flash again
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK )
 
         printf("done\n")
         return ERROR_OK

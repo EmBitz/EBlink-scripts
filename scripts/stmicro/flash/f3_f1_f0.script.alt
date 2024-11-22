@@ -73,16 +73,16 @@ function flash_start()
     try{
 
         // Be sure that the core is halted and all clocks are reset
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount();
         do{
-            _n_throw( targetApi.poll() )
+             targetApi.poll()
 
           // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-              _n_throw(ERROR_TIMEOUT)
+              throw ERROR_TIMEOUT
 
         } while(targetApi.getState() != TARGET_HALTED )
 
@@ -90,7 +90,7 @@ function flash_start()
         flash_unlock()
 
         // Load the flash loader in advance in target RAM in case we need it
-        _n_throw( intrfApi.loadString(LOADER_ADDR, extFlashLoader, EXT_LOADER_SIZE) )
+        intrfApi.loadString(LOADER_ADDR, extFlashLoader, EXT_LOADER_SIZE)
 
         return ERROR_OK
     }
@@ -113,33 +113,34 @@ function flash_erase(sector, address)
 {
     try{
         // (1) Set the PER bit in the FLASH_CR register to enable page erasing
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_PER ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_PER )
 
         // (2) Program the FLASH_AR register to select a page to erase
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_AR, address ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_AR, address )
 
         // (3) Set the STRT bit (keep PER set) in the FLASH_CR register to start the erasing
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR,  FLASH_CR_STRT| FLASH_CR_PER) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR,  FLASH_CR_STRT| FLASH_CR_PER)
 
         // (4) Wait until the BSY bit is reset in the FLASH_SR register
+        local status
         local time = GetTickCount()
         do{
             // Check for time out
             if(GetTickCount() - time > 1500)
-               _n_throw(ERROR_TIMEOUT)
+               throw ERROR_TIMEOUT
 
-            _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_SR))
-        }while ( intrfApi.value32 & FLASH_SR_BSY)
+            status = intrfApi.readMem32(FLASH_BASE + FLASH_SR)
+        }while ( status & FLASH_SR_BSY)
 
         //  (5) Check the EOP flag in the FLASH_SR register
-        if( (intrfApi.value32 & FLASH_SR_EOP) == 0)
-            _n_throw(ERROR_FLASH)
+        if( (status & FLASH_SR_EOP) == 0)
+            throw ERROR_FLASH
 
         // (6) Clear EOP flag by software by writing EOP at 1
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_SR, intrfApi.value32 | FLASH_SR_EOP) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_SR, status | FLASH_SR_EOP)
 
         // (7) Reset the PER Bit to disable the page erase
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 0 ))
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 0 )
 
         return ERROR_OK
     }
@@ -162,17 +163,17 @@ function flash_write(sector, address, buffer)
 {
     try{
         // Enable the program flag PG in flash_CR
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_PG ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_PG )
 
         // For direct flash writing we can't be too fast.
         local probeSpeed = intrfApi.getSpeed()
-        _n_throw(intrfApi.setSpeed(maxFlashSpeed))
+        intrfApi.setSpeed(maxFlashSpeed)
 
         // Write buffer to flash with 16bit memory access
         local result = intrfApi.writeBuf(address, buffer, 16)
 
         // Restore the probe speed
-        _n_throw(intrfApi.setSpeed(probeSpeed))
+        intrfApi.setSpeed(probeSpeed)
 
         // Check if the current probe is supporting 16bits width memory access, if not then fall
         // back to external flash loader
@@ -180,23 +181,22 @@ function flash_write(sector, address, buffer)
         //         to support older STlink/V2 firmware versions not capable of 16bit memory access.
         if(result == INTERFACE_NOT_SUPPORTED){
             // Write buffer to data ram space
-            _n_throw( intrfApi.writeBuf(SCRATCH_ADDR, buffer, 32) )
+            intrfApi.writeBuf(SCRATCH_ADDR, buffer, 32)
 
             // Initialize flash loader
-            _n_throw( targetApi.writeReg("R0", SCRATCH_ADDR) )        // Data address to be writen
-            _n_throw( targetApi.writeReg("R1", address) )             // Target address in flash
-            _n_throw( targetApi.writeReg("R2", buffer.getSize()/2) )  // Halfwords count to be writen
+            targetApi.writeReg("R0", SCRATCH_ADDR)         // Data address to be writen
+            targetApi.writeReg("R1", address)              // Target address in flash
+            targetApi.writeReg("R2", buffer.getSize()/2)   // Halfwords count to be writen
 
             // Run flash loader and wait till ready (todo: timeout)
-            _n_throw( targetApi.execute(LOADER_ADDR, true) )
+            targetApi.execute(LOADER_ADDR, true)
 
-            // Check flash loader result, if $R2 is 0 then all data is written
-            _n_throw( targetApi.readReg("R2") )
-            if(targetApi.value32 != 0)
-              _n_throw(ERROR_FLASH)
+            // Check flash loader result, if $R2 is 0 then all data is written            
+            if(targetApi.readReg("R2") != 0)
+              throw ERROR_FLASH
         }
         else
-           _n_throw(result)
+           throw result
 
         return ERROR_OK
     }
@@ -217,7 +217,7 @@ function flash_done()
 {
     try{
         // Relock the flash by setting the FLASH_CR_LOCK in the flash CR register
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK )
         return ERROR_OK
     }
 
@@ -235,15 +235,13 @@ function flash_done()
 //
 function flash_unlock()
 {
-    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
-    if(intrfApi.value32 & FLASH_CR_LOCK ){
+    if(intrfApi.readMem32(FLASH_BASE + FLASH_CR) & FLASH_CR_LOCK ){
         // Unlock Flash
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY1 ) )
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY2 ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY1 ) 
+        intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY2 )
 
-        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
-        if(intrfApi.value32 & FLASH_CR_LOCK )
-           _n_throw(ERROR_UNLOCK)
+        if(intrfApi.readMem32(FLASH_BASE + FLASH_CR & FLASH_CR_LOCK )
+           throw ERROR_UNLOCK
     }
 }
 
@@ -261,43 +259,44 @@ function flash_erase_chip()
         printf("Flash chip erase ");
 
         // Be sure that the target is halted
-        _n_throw( targetApi.halt() )
+        targetApi.halt()
 
         // Unlock flash
         flash_unlock()
 
         // (1) Set the MER bit in the FLASH_CR register to enable mass erasing
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER )
 
         // (2) Set the STRT bit in the FLASH_CR register to start the erasing
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER | FLASH_CR_STRT ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MER | FLASH_CR_STRT )
 
         // (3) Wait until the BSY bit is reset in the FLASH_SR register
+        local status
         local time = GetTickCount()
         do{
             AnimateCursor()
 
             // Check for time out of 30 seconds
             if(GetTickCount() - time > 30000)
-                _n_throw(ERROR_TIMEOUT)
+                throw ERROR_TIMEOUT
 
-            _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_SR) )
-        }while ( intrfApi.value32 & FLASH_SR_BSY)
+            status = intrfApi.readMem32(FLASH_BASE + FLASH_SR)
+        }while ( status & FLASH_SR_BSY)
 
         AnimateDone()
 
         // (4) Check the EOP flag in the FLASH_SR register
-        if( (intrfApi.value32 & FLASH_SR_EOP) == 0)
-            _n_throw(ERROR_FLASH)
+        if( (status & FLASH_SR_EOP) == 0)
+            throw ERROR_FLASH
 
         // (5) Clear EOP flag by software by writing EOP at 1
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_SR, intrfApi.value32 | FLASH_SR_EOP) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_SR, status | FLASH_SR_EOP)
 
         // (6) Reset the PER Bit to disable the mass erase
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 0 ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 0 )
 
         // (7) Relock the flash by setting the FLASH_CR_LOCK in the flash CR register
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK )
 
         printf("done\n")
         return ERROR_OK

@@ -66,19 +66,15 @@ function findDevice()
         case "M0+":
 
             // Get the JEP106 code and check if it's Atmel
-            _n_throw(intrfApi.readMem32(SAMD_DSU_PID1))
-            local JEP106 =  (intrfApi.value32 >> 4)
-
-             _n_throw(intrfApi.readMem32(SAMD_DSU_PID2))
-            JEP106 += ((intrfApi.value32 & 7) << 4)
+            local JEP106 =  (intrfApi.readMem32(SAMD_DSU_PID1) >> 4)
+            JEP106 += ((intrfApi.readMem32(SAMD_DSU_PID2) & 7) << 4)
 
             debugf("Atmel JEP106: %x\n", JEP106)
             if( JEP106 != ATMEL_JEP106)
                    throw ERROR_NOT_FOUND
-
+  
             // Get the part info from the DSU
-            _n_throw(intrfApi.readMem32(SAMD_DSU_ID))
-            deviceId = intrfApi.value32
+            deviceId = intrfApi.readMem32(SAMD_DSU_ID)
 
             // Check if we have a meaningful device ID
             if(deviceId == 0)
@@ -90,8 +86,7 @@ function findDevice()
 
         case "M3":
 
-            _n_throw(intrfApi.readMem32(SAM3_CHIPID))
-            deviceId = intrfApi.value32
+            deviceId = intrfApi.readMem32(SAM3_CHIPID)
 
             if (deviceId >= 0x28000961 && deviceId <= 0x29AB0A60){
                 require("atmel/sam3.script")
@@ -131,13 +126,11 @@ function  reset_post(resetType)
     // We don't use this if the reset is a user_script type. In that
     // case, the user is responsible for the initialization.
     if( resetType != USER_RESET ){
-        // Set the Stack pointer according the Vector table entry
-        intrfApi.readMem32(0x00000000)
-        targetApi.writeReg("SP", intrfApi.value32)
+        // Set the Stack pointer according the Vector table entry        
+        targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
 
-        // Set the Program pointer according the Vector table entry
-        intrfApi.readMem32(0x00000004)
-        targetApi.writeReg("PC", intrfApi.value32)
+        // Set the Program pointer according the Vector table entry        
+        targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
     }
 
     return ERROR_OK

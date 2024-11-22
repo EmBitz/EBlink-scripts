@@ -21,6 +21,8 @@ const mem_template = @@"
  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
 </memory-map>"
 
+const FLASH_TIMEOUT     1500 // Generic 1.5sec flash timeout
+
 // Flash Constroller Registers (also used by the flash script)
 const EEFC_FMR 	0x400E0A00
 const EEFC_FCR	0x400E0A04
@@ -146,15 +148,18 @@ function atmel_device()
 	local flash_desc = array(8)
 
 	try {
-		_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | FCMD_GETD))
+		intrfApi.writeMem32(EEFC_FCR, FKEY | FCMD_GETD)
 
-		do {
-		  _n_throw(intrfApi.readMem32(EEFC_FSR))
-		} while (!(intrfApi.value32 & FRDY))
+        // Wait for ready with 2 sec timeout
+        local time = GetTickCount()
+        do {
+            if(GetTickCount() - time > 2000)       
+                throw ERROR_UNLOCK
+        } while (!(intrfApi.readMem32(EEFC_FSR) & FRDY)) 
 
+        // Read the description
 		for (local i=0;i<8;i++) {
-			_n_throw(intrfApi.readMem32(EEFC_FRR))
-			flash_desc[i] = intrfApi.value32
+			flash_desc[i] = intrfApi.readMem32(EEFC_FRR)
 		}
 	}
 	// Catch the errors

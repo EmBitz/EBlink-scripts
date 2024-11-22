@@ -66,10 +66,8 @@ function stm32_device()
         case 0x436 :
             deviceStr = "(Cat.4/Cat.3 - Medium+/High Density)"
             // Get the flash size by reading the info register
-            _n_throw(intrfApi.readMem32(0x1ff800cc))
-            flash_size = intrfApi.value32 & ~3
-            flash_size = (flash_size & 0xffff)
-
+            flash_size = (intrfApi.readMem32(0x1ff800cc) & ~3) & 0xffff               
+            
             // 0 is 384k and 1 is 256k
             if(flash_size == 0)
                 flash_size = 384 * 1024
@@ -78,7 +76,7 @@ function stm32_device()
 
             page_size = 0x100
             ram_size = 0xC000 /*Not completely clear if there are some with 32K*/
-            fsize_addr = 0x1FF800CC
+            fsize_addr = 0
             break
 
         case 0x437 :
@@ -96,9 +94,9 @@ function stm32_device()
     printf("STmicro family : STM32L1xx %s\n", deviceStr)
 
     // Get the flash size by reading the info register
-    _n_throw(intrfApi.readMem32(fsize_addr))
-    flash_size = intrfApi.value32 & ~3
-    flash_size = (flash_size & 0xffff) * 1024
+    if(fsize_addr)
+        flash_size = ((intrfApi.readMem32(fsize_addr) & ~3) & 0xffff) * 1024    
+   
 
     // Inform the user
     printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)

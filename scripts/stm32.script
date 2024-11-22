@@ -82,6 +82,8 @@ function main()
 //
 function findDevice()
 {
+    local devReg
+    
     if( VERSION < 5.0){
        errorf("Error:\n\nIncompatiable EBlink version %.2f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
@@ -90,12 +92,13 @@ function findDevice()
     foreach(arch in STMICRO)
       if(arch[0] == targetApi.getCpuName()){
 
-          foreach(addr in arch[1])
-            if( (intrfApi.readMem32(addr) == ERROR_OK) && intrfApi.value32 )
-                break;
+          foreach(addr in arch[1]) {
+              try{ devReg = intrfApi.readMem32(addr); if(devReg) break; }
+              catch(e){}
+          }
 
-          if(intrfApi.value32) {
-            deviceId = intrfApi.value32 & 0xfff
+          if(devReg) {
+            deviceId = devReg & 0xfff
             noticef("STmicro device : 0x%X\n", deviceId)
 
             foreach(script in arch[2])
@@ -135,13 +138,11 @@ function  reset_post(resetType)
     // case, the user is responsible for the initialization.
     //
     if( resetType != USER_RESET ){
-        // Set the Stack pointer according the Vector table entry
-        intrfApi.readMem32(0x08000000)
-        targetApi.writeReg("SP", intrfApi.value32)
+        // Set the Stack pointer according the Vector table entry        
+        targetApi.writeReg("SP", intrfApi.readMem32(0x08000000))
 
-        // Set the Program pointer according the Vector table entry
-        intrfApi.readMem32(0x08000004)
-        targetApi.writeReg("PC", intrfApi.value32)
+        // Set the Program pointer according the Vector table entry        
+        targetApi.writeReg("PC", intrfApi.readMem32(0x08000004))
     }
 
     return ERROR_OK

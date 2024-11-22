@@ -112,16 +112,17 @@ function flash_start()
 
     try{
         // Be sure that the core is halted and all clocks are reset
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount();
         do{
-            _n_throw( targetApi.poll() )
-            if(GetTickCount() - time > FLASH_TIMEOUT) _n_throw(ERROR_TIMEOUT)
+            targetApi.poll()
+            if(GetTickCount() - time > FLASH_TIMEOUT) 
+                throw ERROR_TIMEOUT
         } while(targetApi.getState() != TARGET_HALTED )
 
-        _n_throw(intrfApi._writeMem(DFLCTL_REG, DFLCTL_DFLEN,8))
+        intrfApi._writeMem(DFLCTL_REG, DFLCTL_DFLEN,8)
 
         return ERROR_OK
     }
@@ -154,26 +155,16 @@ function flash_erase(sector, address)
 
         setStartAddress(address)
         setEndAddress(address+0x800-4)
-        _n_throw(intrfApi._writeMem(FCR_REG, CMD_BLOCK_ERASE | CMD_START,8))
+        intrfApi._writeMem(FCR_REG, CMD_BLOCK_ERASE | CMD_START,8)
         checkBusy(FLASH_TIMEOUT, FSTATR1_FRDY)
 
-      //  _n_throw(intrfApi._writeMem(FCR_REG, CMD_BLOCK_ERASE,8))
-        _n_throw(intrfApi._writeMem(FCR_REG, 0,8))
+      // intrfApi._writeMem(FCR_REG, CMD_BLOCK_ERASE,8)
+        intrfApi._writeMem(FCR_REG, 0,8)
 
 
-      /*
-        local time = GetTickCount()
-        do{
-            if(GetTickCount() - time > timeout)
-                _n_throw(ERROR_TIMEOUT)
-           _n_throw( intrfApi._readMem(FSTATR1_REG,8) )
-        }while ( (intrfApi.value32 & FSTATR1_FRDY) )
-      */
-
-/*
-      //  checkBusy(FLASH_TIMEOUT)
+     //function checkBusy(FLASH_TIMEOUT, FSTATR1_FRDY)
       //  error_check(FSTATR_ERSERR | FSTATR_ILGLERR)
-*/
+
         switchPeMode(peMode.READ_PE)
         return ERROR_OK
     }
@@ -207,12 +198,12 @@ function flash_write(sector, address, buffer)
     try{
         while(idx < buffer.getSize() ) {
             setPgmData(buffer.un32(idx))
-            _n_throw(intrfApi._writeMem(FCR_REG, CMD_PROGRAM | CMD_START,8))
+            intrfApi._writeMem(FCR_REG, CMD_PROGRAM | CMD_START,8)
              idx += 4
            // checkBusy(FLASH_TIMEOUT, FSTATR1_FRDY)
 
-           // _n_throw(intrfApi._writeMem(FCR_REG, CMD_PROGRAM,8))
-           _n_throw(intrfApi._writeMem(FCR_REG, 0,8))
+           // intrfApi._writeMem(FCR_REG, CMD_PROGRAM,8)
+           intrfApi._writeMem(FCR_REG, 0,8)
         }
        // switchPeMode(peMode.READ_PE)
         //error_check(FSTATR_PRGERR  | FSTATR_ILGLERR)
@@ -235,10 +226,10 @@ function flash_done()
     try{
 
         switchPeMode(peMode.READ_PE)
-        _n_throw(intrfApi._writeMem(DFLCTL_REG, 0,8))
+        intrfApi._writeMem(DFLCTL_REG, 0,8)
 
         // A reset works perhaps nicer because target can resume rigth away
-//        _n_throw( targetApi.reset(SYSTEM_RESET) )
+//      targetApi.reset(SYSTEM_RESET)
         return ERROR_OK
     }
 
@@ -259,9 +250,8 @@ function checkBusy(timeout, flag)
     local time = GetTickCount()
     do{
         if(GetTickCount() - time > timeout)
-            _n_throw(ERROR_TIMEOUT)
-        _n_throw( intrfApi._readMem(FSTATR1_REG,8) )
-    }while ( !(intrfApi.value32 & flag) )
+            throw ERROR_TIMEOUT
+    }while ( !(intrfApi._readMem(FSTATR1_REG,8) & flag) )
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -270,24 +260,21 @@ function checkBusy(timeout, flag)
 //
 function error_check(errors)
 {
-   _n_throw( intrfApi.readMem32(FSTATR_REG) )
-   local status = intrfApi.value32
+   local status = intrfApi.readMem32(FSTATR_REG)
 
-   _n_throw(intrfApi._readMem(FASTAT_REG, 8))
-
-   if( intrfApi.value32 & FASTAT_CMDLK){
+   if( intrfApi._readMem(FASTAT_REG, 8) & FASTAT_CMDLK){
        debugf("Recovery from the Command-Locked State\n")
        if(status & FSTATR_ILGLERR){
-            debugf("If an illegal error occurred read and clear CFAE and DFAE in FASTAT\n")
-           _n_throw(intrfApi._readMem(FASTAT_REG, 8))
-           _n_throw(intrfApi._writeMem(FASTAT_REG, 0, 8))
+           debugf("If an illegal error occurred read and clear CFAE and DFAE in FASTAT\n")
+           intrfApi._readMem(FASTAT_REG, 8)
+           intrfApi._writeMem(FASTAT_REG, 0, 8)
            checkBusy(FLASH_TIMEOUT)
          }
    }
 
    if(status & errors){
-       _n_throw(intrfApi._writeMem(CMD_REG, CMD_FORCED_STOP, 8))
-       _n_throw(ERROR_FLASH)
+       intrfApi._writeMem(CMD_REG, CMD_FORCED_STOP, 8)
+       throw ERROR_FLASH
    }
 }
 
@@ -297,25 +284,25 @@ function error_check(errors)
 //
 function switchPeMode(mode)
 {
-    _n_throw(intrfApi._readMem(FENTRYR_REG, 16))
+    local entryr = intrfApi._readMem(FENTRYR_REG, 16)
 
     switch(mode){
         case peMode.CODE_PE:
-           if(intrfApi.value32 == FENTRYR_PE_CF)
+           if(entryr == FENTRYR_PE_CF)
                return
            break
         case peMode.DATA_PE:
-           if(intrfApi.value32 == FENTRYR_PE_DF)
+           if(entryr == FENTRYR_PE_DF)
                return
            break
         default:
-            if(intrfApi.value32 == 0) return
+            if(entryr == 0) return
     }
 
     // First to read mode
     writeFPMCR(0x0)
     Sleep(1) //tMS
-    _n_throw(intrfApi._writeMem(FENTRYR_REG, FENTRYR_KEY, 16))
+    intrfApi._writeMem(FENTRYR_REG, FENTRYR_KEY, 16)
 
     local fentry  = 0
     local fpmcr   = 0
@@ -336,7 +323,7 @@ function switchPeMode(mode)
 
     // Do we have to switch to an active mode
     if(fentry){
-        _n_throw(intrfApi._writeMem(FENTRYR_REG, FENTRYR_KEY | fentry, 16))
+        intrfApi._writeMem(FENTRYR_REG, FENTRYR_KEY | fentry, 16)
         Sleep(1)
         writeFPMCR(fpmcr)
     }
@@ -344,12 +331,11 @@ function switchPeMode(mode)
     local time = GetTickCount()
     do{
         if(GetTickCount() - time > FLASH_TIMEOUT){
-        printf("FENTRYR_REG : 0x%X\n", intrfApi.value32)
-            _n_throw(ERROR_TIMEOUT)
+            printf("FENTRYR_REG : 0x%X\n", intrfApi._readMem(FENTRYR_REG, 16))
+            throw ERROR_TIMEOUT 
         }
 
-        _n_throw(intrfApi._readMem(FENTRYR_REG, 16))
-    }while(intrfApi.value32 != fentry)
+    }while(intrfApi._readMem(FENTRYR_REG, 16) != fentry)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -358,8 +344,8 @@ function switchPeMode(mode)
 //
 function setStartAddress(address)
 {
-    _n_throw(intrfApi._writeMem(FSARH_REG, (address >> 16), 16))
-    _n_throw(intrfApi._writeMem(FSARL_REG, address &0xFFFF, 16))
+    intrfApi._writeMem(FSARH_REG, (address >> 16), 16)
+    intrfApi._writeMem(FSARL_REG, address &0xFFFF, 16)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -368,8 +354,8 @@ function setStartAddress(address)
 //
 function setEndAddress(address)
 {
-    _n_throw(intrfApi._writeMem(FEARH_REG, (address >> 16), 16))
-    _n_throw(intrfApi._writeMem(FEARL_REG, address &0xFFFF, 16))
+    intrfApi._writeMem(FEARH_REG, (address >> 16), 16)
+    intrfApi._writeMem(FEARL_REG, address &0xFFFF, 16)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -378,8 +364,8 @@ function setEndAddress(address)
 //
 function setPgmData(value)
 {
-    _n_throw(intrfApi._writeMem( FWBH0_REG, (value >> 16), 16))
-    _n_throw(intrfApi._writeMem( FWBL0_REG, value &0xFFFF, 16))
+    intrfApi._writeMem( FWBH0_REG, (value >> 16), 16)
+    intrfApi._writeMem( FWBL0_REG, value &0xFFFF, 16)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -390,16 +376,16 @@ function writeFPMCR(value)
 {
     //Procedure to unlock protection:
     //1. Write 0xA5 to the FPR register.
-    _n_throw(intrfApi._writeMem(FPR_REG, FPR_KEY,8))
+    intrfApi._writeMem(FPR_REG, FPR_KEY,8)
 
     //2. Write a set value to the FPMCR register
-    _n_throw(intrfApi._writeMem(FPMCR_REG, value,8))
+    intrfApi._writeMem(FPMCR_REG, value,8)
 
     //3. Write the inverted set value to the FPMCR register.
-    _n_throw(intrfApi._writeMem(FPMCR_REG, ~value,8))
+    intrfApi._writeMem(FPMCR_REG, ~value,8)
 
     //4. Write a set value to the FPMCR register again.
-    _n_throw(intrfApi._writeMem(FPMCR_REG, value,8))
+    intrfApi._writeMem(FPMCR_REG, value,8)
     // tDIS
     Sleep(2)
 }

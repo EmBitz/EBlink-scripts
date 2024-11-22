@@ -73,41 +73,36 @@ function flash_start()
 
     try{
         // Be sure that the core is halted and all clocks are reset
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount();
         do{
-            _n_throw( targetApi.poll() )
+            targetApi.poll()
 
           // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-              _n_throw(ERROR_TIMEOUT)
+                throw ERROR_TIMEOUT
 
         } while(targetApi.getState() != TARGET_HALTED )
 
         // Read flash lock status
-        _n_throw( intrfApi.readMem32(FLASH_BASE|FLASH_CR) )
-
-        // Check if it's locked by the FLASH_CR_LOCK flag
-        if( intrfApi.value32 & (FLASH_CR_PELOCK|FLASH_CR_PRGLOCK) ){
+        if( intrfApi.readMem32(FLASH_BASE|FLASH_CR) & (FLASH_CR_PELOCK|FLASH_CR_PRGLOCK) ){
             // Unlock
-            _n_throw( intrfApi.writeMem32(FLASH_BASE|FLASH_PEKEYR,PEKEY1) )
-            _n_throw( intrfApi.writeMem32(FLASH_BASE|FLASH_PEKEYR,PEKEY2) )
+            intrfApi.writeMem32(FLASH_BASE|FLASH_PEKEYR,PEKEY1)
+            intrfApi.writeMem32(FLASH_BASE|FLASH_PEKEYR,PEKEY2)
 
             // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
-            _n_throw( intrfApi.readMem32(FLASH_BASE|FLASH_CR) )
-            if( intrfApi.value32 & FLASH_CR_PELOCK )
-                _n_throw(ERROR_UNLOCK)
+            if( intrfApi.readMem32(FLASH_BASE|FLASH_CR) & FLASH_CR_PELOCK )
+                throw ERROR_UNLOCK
 
             // Unlock flash program
-            _n_throw( intrfApi.writeMem32(FLASH_BASE|FLASH_PRGKEYR,PRGKEY1) )
-            _n_throw( intrfApi.writeMem32(FLASH_BASE|FLASH_PRGKEYR,PRGKEY2) )
+            intrfApi.writeMem32(FLASH_BASE|FLASH_PRGKEYR,PRGKEY1)
+            intrfApi.writeMem32(FLASH_BASE|FLASH_PRGKEYR,PRGKEY2)
 
             // check CR.prglock is cleared
-            _n_throw( intrfApi.readMem32(FLASH_BASE|FLASH_CR) )
-            if( intrfApi.value32 & FLASH_CR_PRGLOCK )
-                _n_throw(ERROR_UNLOCK)
+            if( intrfApi.readMem32(FLASH_BASE|FLASH_CR) & FLASH_CR_PRGLOCK )
+                throw ERROR_UNLOCK
         }
         return ERROR_OK
     }
@@ -128,16 +123,16 @@ function flash_erase(sector, address)
 {
     try{
         // Set the ERASE and PROG bits in the FLASH_CR register to enable page erasing
-        _n_throw( intrfApi.writeMem32(FLASH_BASE|FLASH_CR, FLASH_CR_ERASE|FLASH_CR_PROG) )
+        intrfApi.writeMem32(FLASH_BASE|FLASH_CR, FLASH_CR_ERASE|FLASH_CR_PROG)
 
         // Write a 32-bit word value in an address of the selected page to start the erase sequence
-        _n_throw( intrfApi.writeMem32(address, 0 ) )
+        intrfApi.writeMem32(address, 0 )
 
         //  Wait until the BSY bit is reset in the FLASH_SR register
         checkBusy(FLASH_TIMEOUT)
 
         //  Reset the ERASE bits in the FLASH_CR register to disable the page erase
-        _n_throw( intrfApi.writeMem32(FLASH_BASE|FLASH_CR, 0) )
+        intrfApi.writeMem32(FLASH_BASE|FLASH_CR, 0)
 
         return ERROR_OK
     }
@@ -162,7 +157,7 @@ function flash_write(sector, address, buffer)
     try{
 
         // Enable the program  FPRG and PRG in FLASH_CR
-        _n_throw( intrfApi.writeMem32( FLASH_BASE|FLASH_CR, FLASH_CR_FPRG |FLASH_CR_PROG ) )
+        intrfApi.writeMem32( FLASH_BASE|FLASH_CR, FLASH_CR_FPRG |FLASH_CR_PROG )
 
         // Adjust the probe speed to the maximum for direct write
         local probeSpeed = intrfApi.getSpeed()
@@ -170,11 +165,11 @@ function flash_write(sector, address, buffer)
 
         // Write halfpages, the buffer size is always the same as sector size (no sector trim)
         local halfPageSize = buffer.getSize()/2
-        _n_throw( intrfApi.writeMem(address, buffer, 0, halfPageSize, 32 ) )
+        intrfApi.writeMem(address, buffer, 0, halfPageSize, 32 )
 
         checkBusy(FLASH_TIMEOUT)
 
-        _n_throw( intrfApi.writeMem(address+halfPageSize, buffer, halfPageSize, halfPageSize, 32 ) )
+        intrfApi.writeMem(address+halfPageSize, buffer, halfPageSize, halfPageSize, 32 )
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
@@ -183,7 +178,7 @@ function flash_write(sector, address, buffer)
         checkBusy(FLASH_TIMEOUT)
 
         // Disable the program flag FPRG in FLASH_CR
-        _n_throw( intrfApi.writeMem32(FLASH_BASE|FLASH_CR, 0x00) )
+        intrfApi.writeMem32(FLASH_BASE|FLASH_CR, 0x00)
 
         return ERROR_OK
     }
@@ -204,8 +199,7 @@ function flash_done()
 {
     try{
         //  Locks the NVM by setting PELOCK in CR
-        _n_throw( intrfApi.writeMem32(FLASH_BASE|FLASH_CR, FLASH_CR_PELOCK) )
-
+        intrfApi.writeMem32(FLASH_BASE|FLASH_CR, FLASH_CR_PELOCK)
         return ERROR_OK
     }
 
@@ -224,23 +218,24 @@ function flash_done()
 function checkBusy(timeout)
 {
     // Wait until the BSY bit is reset in the FLASH_SR register
+    local status
     local time = GetTickCount()
     do{
 
         if(GetTickCount() - time > timeout)
-            _n_throw(ERROR_TIMEOUT)
+            throw ERROR_TIMEOUT
 
-        _n_throw( intrfApi.readMem32(FLASH_BASE|FLASH_SR) )
-    }while ( intrfApi.value32 & FLASH_SR_BSY )
+        status = intrfApi.readMem32(FLASH_BASE|FLASH_SR)
+    }while ( status & FLASH_SR_BSY )
 
 
     // Check for errors
-    if( intrfApi.value32 & (FLASH_SR_NOTZERO | FLASH_SR_SIZERR | FLASH_SR_PGAERR |  FLASH_SR_WRPERR) )
-        _n_throw(ERROR_FLASH)
+    if( status & (FLASH_SR_NOTZERO | FLASH_SR_SIZERR | FLASH_SR_PGAERR |  FLASH_SR_WRPERR) )
+        throw ERROR_FLASH 
 
     //  Check the EOP flag in the FLASH_SR register
-    if( !(intrfApi.value32 & FLASH_SR_EOP) )
-        _n_throw(ERROR_FLASH)
+    if( !(status & FLASH_SR_EOP) )
+       throw ERROR_FLASH
 }
 
 

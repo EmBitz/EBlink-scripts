@@ -110,17 +110,18 @@ function kinetis_device()
 		}
 	}
 
-	if (ram_size == 0) throw ERROR_NOT_FOUND
+	if (ram_size == 0) 
+        throw ERROR_NOT_FOUND
 
 	// Read FLASH size
-	if (deviceStr == "32L2B") _n_throw(intrfApi.readMem32(SIM_FCFG1_L2B))
-	else _n_throw(intrfApi.readMem32(SIM_FCFG1))
-
+    local value = intrfApi.readMem32( deviceStr == "32L2B" ? SIM_FCFG1_L2B : SIM_FCFG1 )
 	for (local i=0;i<FLASHCONFIG.len();i++) {
-		if ((intrfApi.value32 & 0x0F000000) == FLASHCONFIG[i][0]) flash_size = FLASHCONFIG[i][1]
+		if ((value & 0x0F000000) == FLASHCONFIG[i][0]) 
+            flash_size = FLASHCONFIG[i][1]
 	}
 
-	if (flash_size == 0) throw ERROR_NOT_FOUND
+	if (flash_size == 0) 
+        throw ERROR_NOT_FOUND
 
     // Inform user of the device found
     printf("NXP Kinetis family : K%s\n", deviceStr)

@@ -99,16 +99,16 @@ function flash_start()
 
     try{
         // Be sure that the core is halted
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount()
         do{
             // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-                _n_throw(ERROR_TIMEOUT)
+                throw ERROR_TIMEOUT
 
-            _n_throw( targetApi.poll() )
+            targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
         flash_unlock()
@@ -148,7 +148,7 @@ function flash_erase(sector, address)
 
         // 3. Set the PER bit and select the page to erase (PNB) in the flash_cr
         // 4. Set the STRT bit of the flash_cr
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, eraseFlags ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, eraseFlags )
 
         // 5. Wait until the BSY bit of the flash_SR
         // 10.000 msec timeoucd ..t sometimes erasing can take long
@@ -184,14 +184,14 @@ function flash_write(sector, address, buffer)
         flash_check_busy(10000)
 
         // 3. Set the NSPG bit in the FLASH_NSCR register.
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR,  FLASH_NSCR_NSPG ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR,  FLASH_NSCR_NSPG )
 
         // Adjust the probe speed to the maximum for direct write
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
         // 4. Perform the data write operation at the desired memory non-secure address
-        _n_throw( intrfApi.writeBuf(address, buffer, 32) )
+        intrfApi.writeBuf(address, buffer, 32)
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
@@ -202,9 +202,9 @@ function flash_write(sector, address, buffer)
         // 6. Check that NSEOP flag is set in the FLASH_NSSR register (meaning that the
         // programming operation has succeed), and clear it by software.
 
-        // 7. Clear the NSPG bit in the FLASH_NSSR register if there no more programming request anymore.
-        _n_throw( intrfApi.readMem32 (FLASH_BASE + FLASH_NSCR) )
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, intrfApi.value32 & ~FLASH_NSCR_NSPG ) )
+        // 7. Clear the NSPG bit in the FLASH_NSSR register if there no more programming request anymore.        
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, 
+            intrfApi.readMem32 (FLASH_BASE + FLASH_NSCR) & ~FLASH_NSCR_NSPG )
 
         return ERROR_OK
     }
@@ -241,21 +241,22 @@ function flash_done()
 //
 function flash_check_busy(timeout)
 {
+    local status
     local time = GetTickCount()
     do{
         AnimateCursor()
 
-        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSSR) )
+        status = intrfApi.readMem32(FLASH_BASE + FLASH_NSSR)
 
         if(GetTickCount() - time > timeout)
-            _n_throw(ERROR_TIMEOUT)
+            throw ERROR_TIMEOUT
 
-    } while ( intrfApi.value32 & FLASH_NSSR_NSBSY)
+    } while ( status & FLASH_NSSR_NSBSY)
 
     AnimateDone()
 
-    if( intrfApi.value32 & FLASH_ERROR )
-        _n_throw(ERROR_FLASH)
+    if( status & FLASH_ERROR )
+        throw ERROR_FLASH
 
     // Clear error's
     clear_flash_errors()
@@ -266,9 +267,9 @@ function flash_check_busy(timeout)
 //   Clear errors according ST user manual
 //
 function clear_flash_errors()
-{
-    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSSR) )
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSSR, intrfApi.value32 | FLASH_ERROR  ) )
+{    
+    intrfApi.writeMem32(FLASH_BASE + FLASH_NSSR, 
+        intrfApi.readMem32(FLASH_BASE + FLASH_NSSR) | FLASH_ERROR  )
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -278,12 +279,11 @@ function clear_flash_errors()
 function flash_unlock()
 {
     // Unlock Flash
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSKEYR, FLASH_KEY1 ) )
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSKEYR, FLASH_KEY2 ) )
+    intrfApi.writeMem32(FLASH_BASE + FLASH_NSKEYR, FLASH_KEY1 )
+    intrfApi.writeMem32(FLASH_BASE + FLASH_NSKEYR, FLASH_KEY2 )
 
-    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
-    if(intrfApi.value32 & FLASH_NSCR_NSLOCK)
-       _n_throw(ERROR_UNLOCK)
+    if(intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_NSLOCK)
+        throw ERROR_UNLOCK
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -293,8 +293,8 @@ function flash_unlock()
 function flash_lock()
 {
     // Lock Flash and option register
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSLOCK ) )
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OPTLOCK ) )
+    intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSLOCK )
+    intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OPTLOCK )
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -309,7 +309,7 @@ function flash_erase_chip()
 {
     try{
         // Be sure that the target is halted
-        _n_throw( targetApi.halt() )
+        targetApi.halt()
 
         // Unlock flash
         flash_unlock()
@@ -320,13 +320,13 @@ function flash_erase_chip()
 
         // 3. Set the NSMER1 bit and NSMER2 bits in the FLASH_NSCR register
         // 4. Set the NSSTRT bit in the FLACH_NSCR register.
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSMER1 | FLASH_NSCR_NSMER2  | FLASH_NSCR_NSSTRT   ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSMER1 | FLASH_NSCR_NSMER2  | FLASH_NSCR_NSSTRT )
 
         // 5. Wait for the NSBSY bit to be cleared in the FLASH_NSSR.
         flash_check_busy(10000)
 
         // 6. The NSMER1 and NSMER2 bit can be cleared if no more non-secure mass erase is requested.
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, 0 ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, 0 )
 
         // Lock the flash again
         flash_lock()
@@ -355,39 +355,38 @@ function setDualBank(dmode)
     try {
 
         // Be sure that the core is halted
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount()
         do{
             // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-                _n_throw(ERROR_TIMEOUT)
+                throw ERROR_TIMEOUT
 
-            _n_throw( targetApi.poll() )
+            targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
         flash_unlock()
 
         // Unlock flash options
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 ) )
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY2 ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY2 )
 
-        //
-        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
-        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK)
-            _n_throw(ERROR_UNLOCK)
 
-        _n_throw(intrfApi.readMem32(FLASH_BASE + FLASH_OPTR))
-        local newValue = dmode ? intrfApi.value32 | DBANK : intrfApi.value32 & ~DBANK
+        if(intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_OPTLOCK )
+            throw ERROR_UNLOCK
 
-        printf("Flash option 0x%X -> 0x%X\n", intrfApi.value32, newValue)
-        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  newValue))
+        local optr = intrfApi.readMem32(FLASH_BASE + FLASH_OPTR)
+        local newValue = ( dmode ? (optr | DBANK) : (optr & ~DBANK ) )
 
-        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT))
+        printf("Flash option 0x%X -> 0x%X\n", optr, newValue)
+        intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  newValue)
+
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT)
 
         flash_check_busy(10000)
-        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH))
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH)
 
         flash_lock()
     }
@@ -418,36 +417,32 @@ function restoreDualBankMode()
     try {
 
         // Be sure that the core is halted
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount()
         do{
             // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-                _n_throw(ERROR_TIMEOUT)
+                throw ERROR_TIMEOUT
 
-            _n_throw( targetApi.poll() )
+            targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
         flash_unlock()
 
         // Unlock flash options
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 ) )
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY2 ) )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 )
+        intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY2 )
 
-        //
-        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
-        if(intrfApi.value32 & FLASH_NSCR_OPTLOCK){
-            printf("Unlock error!\n")
-            _n_throw(ERROR_UNLOCK)
-        }
+        if(intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_OPTLOCK)
+            throw ERROR_UNLOCK        
 
-        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  defaultOptrValue))
-        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT))
+        intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  defaultOptrValue)
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT)
 
         flash_check_busy(10000)
-        _n_throw(intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH))
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH)
 
         flash_lock()
 

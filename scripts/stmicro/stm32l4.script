@@ -49,14 +49,13 @@ function stm32_device()
     local ram_size
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
-    _n_throw(intrfApi.writeMem32(0xE0042004, 7))
+    intrfApi.writeMem32(0xE0042004, 7)
 
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
-    _n_throw(intrfApi.writeMem32(0xE0042008, 0x00001800))
+    intrfApi.writeMem32(0xE0042008, 0x00001800)
 
-    // Get the flash size in KB
-    _n_throw(intrfApi.readMem32(0x1fff75e0))
-    flash_size = (intrfApi.value32 &0xFFFF) *1024
+    // Get the flash size
+    flash_size = (intrfApi.readMem32(0x1fff75e0) &0xFFFF) *1024
 
     // Set the memory map according the device ID
       local deviceStr
@@ -142,8 +141,7 @@ function stm32_device()
 //  option state
 //
 function readDualBankOption(bit)
-{
-     intrfApi.readMem32(FLASH_BASE+0x20)
-     return (intrfApi.value32 & (1<<bit) ? true: false)
+{     
+     return (intrfApi.readMem32(FLASH_BASE+0x20) & (1<<bit) ? true: false)
 }
 

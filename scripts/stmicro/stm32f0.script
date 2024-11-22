@@ -43,12 +43,11 @@ function stm32_device()
     local page_size
     local ram_size
 
-    _n_throw(intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY  ))
+    intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY  )
 
     // Get the flash size by reading the info register
-    _n_throw(intrfApi.readMem32(0x1ffff7cc))
-    flash_size = intrfApi.value32 & ~3
-    flash_size = (flash_size & 0xffff) * 1024
+    flash_size = intrfApi.readMem32(0x1ffff7cc) 
+    flash_size = ( (flash_size & ~3) & 0xffff) * 1024
 
     local deviceStr
     switch(deviceId) {

@@ -74,8 +74,8 @@ function findDevice()
         if( getPartString(cpuReg))
             break
 
-    if(!deviceStr.len() && (intrfApi.readMem32(RENESAS_FMIFRT)==ERROR_OK))
-        getPartString(intrfApi.value32+24)
+    if(!deviceStr.len())
+        getPartString(intrfApi.readMem32(RENESAS_FMIFRT)+24)
 
     if(!deviceStr.len())
         throw ERROR_NOT_FOUND
@@ -107,10 +107,10 @@ function getPartString(addr)
     deviceStr=""
     try{
         for (local i=0;i<4;i++){
-            _n_throw(intrfApi.readMem32(addr+(i*4)))
-           if(intrfApi.value32==0)
+           local value = intrfApi.readMem32(addr+(i*4))
+           if(value==0)
                return false
-           preg.append(intrfApi.value32)
+           preg.append(value)
         }
 
         if(addr == 0x01001c10)
@@ -150,13 +150,11 @@ function  reset_post(resetType)
     // case, the user is responsible for the initialization.
     //
     if( resetType != USER_RESET ){
-        // Set the Stack pointer according the Vector table entry
-        intrfApi.readMem32(0x00000000)
-        targetApi.writeReg("SP", intrfApi.value32)
+        // Set the Stack pointer according the Vector table entry        
+        targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
 
-        // Set the Program pointer according the Vector table entry
-        intrfApi.readMem32(0x00000004)
-        targetApi.writeReg("PC", intrfApi.value32)
+        // Set the Program pointer according the Vector table entry        
+        targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
     }
 
     return ERROR_OK

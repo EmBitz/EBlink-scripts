@@ -36,9 +36,7 @@ function stm32_device()
     local ram_size
 
     // Get the flash size by reading the info register
-    _n_throw(intrfApi.readMem32(0x1ffff7e0))
-    flash_size = intrfApi.value32 & 0xFFFF
-    flash_size = (flash_size & 0xffff) * 1024
+    flash_size = (intrfApi.readMem32(0x1ffff7e0) & 0xffff) * 1024
 
     local deviceStr
     switch(deviceId) {

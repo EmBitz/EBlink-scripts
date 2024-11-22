@@ -67,9 +67,15 @@ SILABS <- [
  [122,"EZR32HG%d - Happy Gecko\n"],
 ]
 
-flashSize  <- 0          // Global flash size, is also used for mass erase
-mscBase    <- 0x400E0000 // Default base address for flash MSC
-mscLockOff <- 0x40       // Default offset of the unlock register
+SILABS_REG <- [
+   [0x400E0000,  0x40],   
+   [0x400C0000,  0x3C]
+]
+
+
+flashSize  <- 0 // Global flash size, is also used for mass erase
+mscBase    <- 0 // Default base address for flash MSC
+mscLockOff <- 0 // Default offset of the unlock register
 
 /////////////////////////////////////////////////////
 //
@@ -97,15 +103,15 @@ function silabs_device()
     printf(deviceStr, deviceId & 0xFFFF)
 
     // Get the MEM_INFO_PAGE_SIZE
-    _n_throw(intrfApi.readMem32(0x0FE081E4))
-    intrfApi.value32 = (intrfApi.value32 >> 24) & 0xFF
-    local pageSize = pow(2, ((intrfApi.value32+10) & 0xFF))
+    local pageSize = (intrfApi.readMem32(0x0FE081E4) >> 24) & 0xFF
+    pageSize = pow(2, ((pageSize+10) & 0xFF))    
+    
 
     // Get the MEM_INFO_FLASH and MEM_INFO_RAM
-    _n_throw(intrfApi.readMem32(0x0FE081F8 ))
+    local value = intrfApi.readMem32(0x0FE081F8 )
 
-    flashSize = intrfApi.value32 & 0xFFFF
-    local ramSize = (intrfApi.value32 >> 16) & 0xFFFF
+    flashSize = value & 0xFFFF
+    local ramSize = (value >> 16) & 0xFFFF
 
     // Inform the user
     printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flashSize, ramSize)
@@ -124,21 +130,24 @@ function silabs_device()
 
     DeviceAPI().memmap( format( mem_template,  flashSize*1024, pageSize, ramSize*1024 ))
 
-    // Find the rigth base address of the MSC by reading the status register and check WDATAREADY.
-    noticef("Silabs.script: Check MSC base address 0x%X\n", mscBase )
 
-    if( (intrfApi.readMem32(mscBase|0x1C) < ERROR_OK ) || !(intrfApi.value32 &0x08)){
-        mscBase    = 0x400C0000
-        mscLockOff = 0x3C
-
-        // Check WDATAREADY again on this MSC base address
-        noticef("Silabs-auto.script: Check MSC base address 0x%X\n", mscBase )
-        if( (intrfApi.readMem32(mscBase|0x1C) < ERROR_OK ) || !(intrfApi.value32 &0x08)){
-            errorf("ERROR: Can't find Silabs MSC base address\n");
-            return ERROR_NOTIFIED
-        }
+    foreach(silab in SILABS_REG){
+      try{
+        noticef("Silabs.script: Check MSC base address 0x%X\n", silab[0] )  
+        if( intrfApi.readMem32(silab[0]| 0x1C) &0x08) )
+            {
+                mscBase    = silab[0]
+                mscLockOff = silab[1]
+                require("silabs/flash/silabs.script")            
+                return
+            }
+      }
+      catch(e)
+      {
+      }                
     }
 
-    // Generic flash algorithm
-    require("silabs/flash/silabs.script")
+    // Check WDATAREADY again on this MSC base address
+    errorf("ERROR: Can't find Silabs MSC base address\n");
+    return ERROR_NOTIFIED
 }

@@ -90,14 +90,16 @@ function findDevice()
     if (deviceId == 0) {
         deviceId = readLPCDeviceID()
 
-		if(deviceId == 0) throw ERROR_NOT_FOUND
+		if(deviceId == 0) 
+            throw ERROR_NOT_FOUND
 
 		// We have valid device LPC ID which will be used to load the right scripts
 		set_target(NXP_LPC)
     }
 
     // We have valid device Kinetis ID which will be used to load the right scripts
-    else set_target(NXP_KINETIS)
+    else 
+        set_target(NXP_KINETIS)
 }
 
 /////////////////////////////////////////////////////
@@ -110,12 +112,13 @@ function readKinetisDeviceID()
   // Try to read a DEVICE_ID register
 
   for (local i=0;i<NXP_KINETIS_DEVICEID.len();i++) {
-   	_n_throw(intrfApi.readMem32(NXP_KINETIS_DEVICEID[i]))
-	if (intrfApi.value32 > 0x1002 || (intrfApi.value32 < 0 || intrfApi.value32 > 0x90000000)) return(intrfApi.value32)
+     local value = intrfApi.readMem32(NXP_KINETIS_DEVICEID[i])
+	 if (value > 0x1002 || (value < 0 || value > 0x90000000)) 
+        return value
   }
 
   // No Kinetis device detected
-  return(0)
+  return 0
 }
 
 /////////////////////////////////////////////////////
@@ -124,56 +127,50 @@ function readKinetisDeviceID()
 //
 function readLPCDeviceID()
 {
-   _n_throw( targetApi.halt() )
+    local value
+    targetApi.halt()
 
    // Try to read a DEVICE_ID register
 
    for (local i=0;i<NXP_DEVICEID.len();i++) {
-   	_n_throw(intrfApi.readMem32(NXP_DEVICEID[i]))
-	if (intrfApi.value32 >= 0x00007000 && intrfApi.value32 <= 0x46000000) {
-		printf("Device ID found! (%X)\n",intrfApi.value32)
-		return(intrfApi.value32)
+    value = intrfApi.readMem32(NXP_DEVICEID[i])
+	if (value >= 0x00007000 && value <= 0x46000000) {
+		printf("Device ID found! (%X)\n",value)
+        return value
 	}
    }
 
    // Otherwise, check to make sure we're dealing with an NXP LPC device by
    // looking for the IAP signature at the IAP routine memory locations
-
-   _n_throw(intrfApi.readMem32(IAP_ADDR))
-
-   if (intrfApi.value32 != IAP_SIG && intrfApi.value32 != IAP_SIG_176X) {
-	 _n_throw(intrfApi.readMem32(IAP_ADDR_800))
-	 if (intrfApi.value32 != IAP_SIG) return(0)
+   value = intrfApi.readMem32(IAP_ADDR)
+   if (value != IAP_SIG && value != IAP_SIG_176X) {
+        value = intrfApi.readMem32(IAP_ADDR_800)
+	    if (value != IAP_SIG) 
+            return 0
    }
 
    // Write params to data ram space
-   _n_throw( intrfApi.writeMem32(PARAM_ADDR, IAP_READPARTID) )
-   _n_throw( intrfApi.writeMem32(RESULT_ADDR+4,0) )
+   intrfApi.writeMem32(PARAM_ADDR, IAP_READPARTID)
+   intrfApi.writeMem32(RESULT_ADDR+4,0)
 
    // Write the param and result addresses into R0/R1
-   _n_throw( targetApi.writeReg("R0", PARAM_ADDR) )
-   _n_throw( targetApi.writeReg("R1", RESULT_ADDR) )
+   targetApi.writeReg("R0", PARAM_ADDR)
+   targetApi.writeReg("R1", RESULT_ADDR)
 
    // Write the return address to the LR register, and set the BKPT instruction at
    // the return address
-   _n_throw( targetApi.writeReg("LR", RETURN_ADDR+1) )
-   _n_throw( intrfApi.writeMem32(RETURN_ADDR, BKPT) )
+   targetApi.writeReg("LR", RETURN_ADDR+1)
+   intrfApi.writeMem32(RETURN_ADDR, BKPT)
 
    // Execute the IAP command (If there's nothing at the standard IAP entry address,
    // try the LPC800 entry address)
-   _n_throw(intrfApi.readMem32(IAP_ADDR_800))
-
-   if (intrfApi.value32 == IAP_SIG)
-	_n_throw( targetApi.execute(IAP_ADDR_800, true) )
+   if (intrfApi.readMem32(IAP_ADDR_800) == IAP_SIG)
+       targetApi.execute(IAP_ADDR_800, true)
    else
-	_n_throw( targetApi.execute(IAP_ADDR, true) )
+	  targetApi.execute(IAP_ADDR, true)
 
-   // Read result
-   _n_throw( intrfApi.readMem32(RESULT_ADDR+4) )
-
-// Return result
-
-   return(intrfApi.value32)
+   // Read result and return result
+   return intrfApi.readMem32(RESULT_ADDR+4)
 
 }
 
@@ -203,7 +200,7 @@ function set_target(type)
     else {
 
     	require("nxp/kinetis.script")
-	kinetis_device()
+        kinetis_device()
     }
 }
 

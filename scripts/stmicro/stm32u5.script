@@ -60,8 +60,7 @@ function stm32_device()
     local ram_size
 
     // Get the flash size in KB
-    _n_throw(intrfApi.readMem32(0x0bfa07a0))
-    flash_size = (intrfApi.value32 &0xFFFF)*1024
+    flash_size = (intrfApi.readMem32(0x0bfa07a0) &0xFFFF)*1024
 
     // Set the memory map according the device ID
       local deviceStr
@@ -126,7 +125,6 @@ function stm32_device()
 //
 function getDualBankOption()
 {
-    _n_throw(intrfApi.readMem32(FLASH_BASE+FLASH_OPTR))
-    return intrfApi.value32 & DBANK
+    return (intrfApi.readMem32(FLASH_BASE+FLASH_OPTR) & DBANK)
 }
 

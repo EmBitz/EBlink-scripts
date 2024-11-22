@@ -17,11 +17,34 @@ const mem_template_H5 = @@"
 <memory-map>
   <memory type=\"rom\" start=\"0x00000000\" length=\"0x100000\"/>
   <memory type=\"ram\" start=\"0x10000000\" length=\"0x4000\"/>
+
+  // Data memory
   <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
 
+  // Flash bank 1
   <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
-   <property name=\"blocksize\">0x%x</property>
+   <property name=\"blocksize\">0x2000</property>
    <property name=\"secstart\">0</property>
+  </memory>
+
+  // Flash bank 2 (we start counting sectors in bank 2 from 2000 so 2101 is sector 101 in bank 2)
+  <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+   <property name=\"blocksize\">0x2000</property>
+   <property name=\"secstart\">2000</property>
+  </memory>
+
+  // Optional HighCycle data flash Bank 1
+  <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+   <property name=\"blocksize\">0x1800</property>
+   <property name=\"secstart\">%d</property>
+   <property name=\"sectype\">nocache</property>  
+  </memory>
+
+  // Optional HighCycle data flash Bank 2
+  <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+   <property name=\"blocksize\">0x1800</property>
+   <property name=\"secstart\">%d</property>
+   <property name=\"sectype\">nocache</property>  
   </memory>
 
   <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
@@ -30,6 +53,21 @@ const mem_template_H5 = @@"
   <memory type=\"rom\" start=\"0x0bf90000\" length=\"0x8000\"/>
  </memory-map>"
 
+// Option register settings for highcycle data
+const FLASH_HIGH_CNF_1 0x500220f0
+const FLASH_HIGH_CNF_2 0x500221f0
+const FLASH_HIGH_EN    (1<<15)
+const FLASH_HIGH_SEC   0x7
+
+// Total flash size
+flash_size           <- 0
+
+// The start address of flash bank 2
+flashBank2Adress     <- 0
+
+// HighCycle flash sector count ( 0 = no HighData flash enabled)
+flashDataSectorCnt_1 <- 0
+flashDataSectorCnt_2 <- 0
 
 /////////////////////////////////////////////////////
 //
@@ -39,13 +77,13 @@ const mem_template_H5 = @@"
 //
 function stm32_device()
 {
-    local flash_size
-    local page_size
     local ram_size
 
     // Get the flash size in KB
-    _n_throw(intrfApi.readMem32(0x08fff80c))
-    flash_size = (intrfApi.value32 &0xFFFF) *1024
+    flash_size = ( intrfApi.readMem32(0x08fff80c) &0xFFFF) *1024
+
+    flashDataSectorCnt_1 = highCycleFlashSec(FLASH_HIGH_CNF_1)
+    flashDataSectorCnt_2 = highCycleFlashSec(FLASH_HIGH_CNF_2)
 
     // Set the memory map according the device ID
       local deviceStr
@@ -54,19 +92,16 @@ function stm32_device()
        case 0x474 : // CHIPID_STM32H503
             deviceStr = "H503"
             ram_size = 0x8000 // 32KB
-            page_size = 0x2000
             break
 
         case 0x478 : // CHIPID_STM32H523/H533
             deviceStr = "H523/533"
             ram_size = 0x44000 // 272KB
-            page_size = 0x2000
             break
 
         case 0x484 : // CHIPID_STM32H562/H563/H573
             deviceStr = "H562/563/573"
             ram_size = 0xa0000 // 640k
-            page_size = 0x2000
             break
 
         default:
@@ -91,9 +126,63 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    DeviceAPI().memmap(format( mem_template_H5, ram_size, flash_size, page_size))
+    // Get the flash bank sizes without the optional HighCycle data flash
+    local flash_size_1 = getFlashBankSize(flash_size, flashDataSectorCnt_1)
+    local flash_size_2 = getFlashBankSize(flash_size, flashDataSectorCnt_2)
+
+    // Inform the user about the HighCycle data flash
+    if(flashDataSectorCnt_1)
+        printf("HighCycle Data1: %dKB (%d sectors)\n", flashDataSectorCnt_1 *6, flashDataSectorCnt_1)
+
+    if(flashDataSectorCnt_2)
+        printf("HighCycle Data2: %dKB (%d sectors)\n", flashDataSectorCnt_2 *6, flashDataSectorCnt_2)
+
+
+    // Calculate start address of flashbank 2
+    flashBank2Adress = 0x08000000 + flash_size/2
+
+    DeviceAPI().memmap(format( mem_template_H5, ram_size,
+                               flash_size_1,
+                               flashBank2Adress, flash_size_2,
+                               (0x09000000 + (8-flashDataSectorCnt_1)*0x1800), ( flashDataSectorCnt_1 * 0x1800),  128 - flashDataSectorCnt_1,
+                               (0x0900C000 + (8-flashDataSectorCnt_2)*0x1800), ( flashDataSectorCnt_2 * 0x1800), 2128 - flashDataSectorCnt_2 ))
 
     // Include flash loader script
     require("stmicro/flash/h5.script")
 }
 
+/////////////////////////////////////////////////////
+//
+//  Checks if a HighCycle data flash is active
+//
+function checkHighCycleFlash(flashReg)
+{
+    return (intrfApi.readMem32(flashReg) & FLASH_HIGH_EN ? true : false)
+}
+
+/////////////////////////////////////////////////////
+//
+//  Returns the HighCycle data flash sector count
+//
+function highCycleFlashSec(flashReg)
+{
+    if( !checkHighCycleFlash(flashReg) )
+        return 0
+    
+    return ( intrfApi.readMem32(flashReg) & FLASH_HIGH_SEC ) + 1
+}
+
+/////////////////////////////////////////////////////
+//
+//  Calculates the flashbank size
+//
+function getFlashBankSize(flashSize, dataSectors)
+{
+    if(dataSectors == 0)
+            return flashSize/2
+
+    if(dataSectors <5 )
+        return flashSize/2  - (4*  0x2000)
+
+    return flashSize/2  - (8*  0x2000)
+}

@@ -19,7 +19,7 @@ const mem_template = @@"
  <memory type=\"flash\" start=\"0x40100000\" length=\"0x%x\">
   <property name=\"blocksize\">1024</property>
   <property name=\"secstart\">1000</property>
-  <property name=\"sectype\">gdb_nc</property>
+  <property name=\"sectype\">read_through</property>
  </memory>
 
  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>

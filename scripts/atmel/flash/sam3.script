@@ -2,11 +2,11 @@
 //
 //          SAM3 flash loader
 //
-//          _n_throw is a built-in function which throws an exception if argument < 0
-//
 //
 // Adapted from samcd scripts by J.DuBois
 // at Thermalogic Corporation (jer@thlogic.com)
+
+const FLASH_TIMEOUT     1500 // Generic 1.5sec flash timeout
 
 maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think)
 
@@ -43,16 +43,16 @@ function flash_start()
 
     try{
         // Be sure that the core is halted
-        _n_throw( targetApi.reset(SYSTEM_RESET) )
+        targetApi.reset(SYSTEM_RESET)
 
         // Wait for halt
         local time = GetTickCount()
         do{
             // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-                _n_throw(ERROR_TIMEOUT)
+                throw ERROR_TIMEOUT
 
-            _n_throw( targetApi.poll() )
+            targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
         return ERROR_OK
@@ -91,17 +91,12 @@ function flash_write(sector, address, buffer)
 
     try{
 		// Unlock the page to be written
-		_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | FCMD_CLB))
+		intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | FCMD_CLB)
 
-		do {
-			_n_throw(intrfApi.readMem32(EEFC_FSR))
-		} while (!(intrfApi.value32 & FRDY))
-
-		if (intrfApi.value32 != FRDY) throw ERROR_UNLOCK
+        waitForReady()
 
 		// Write the data to the flash write buffer
-
-		_n_throw(intrfApi.writeBuf(FLASH_ADDR, buffer, 32))
+		intrfApi.writeBuf(FLASH_ADDR, buffer, 32)
 
 		// Either write and lock or erase, write and lock page
 
@@ -110,14 +105,9 @@ function flash_write(sector, address, buffer)
 		else
             flash_cmd = FCMD_WPL
 
-		_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | flash_cmd))
+		intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | flash_cmd)
 
-		do {
-			_n_throw(intrfApi.readMem32(EEFC_FSR))
-		} while (!(intrfApi.value32 & FRDY))
-
-		if (intrfApi.value32 != FRDY)
-            throw ERROR_FLASH
+        waitForReady()
 
         return ERROR_OK
     }
@@ -159,24 +149,14 @@ function flash_erase_chip()
     try{
 		// Clear all locks
 		for (local i=0;i<flash_size/page_size;i+=lock_size/page_size) {
-			_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | (i << 8) | FCMD_CLB))
-
-			do {
-			_n_throw(intrfApi.readMem32(EEFC_FSR))
-			} while (!(intrfApi.value32 & FRDY))
-
-			if (intrfApi.value32 != FRDY)
-                throw ERROR_UNLOCK
+			intrfApi.writeMem32(EEFC_FCR, FKEY | (i << 8) | FCMD_CLB)
+            waitForReady()
 		}
 
 		// Erase whole chip
+		intrfApi.writeMem32(EEFC_FCR, FKEY | FCMD_EA)
 
-		_n_throw(intrfApi.writeMem32(EEFC_FCR, FKEY | FCMD_EA))
-
-		do {
-		  _n_throw(intrfApi.readMem32(EEFC_FSR))
-		} while (!(intrfApi.value32 & FRDY))
-
+        waitForReady()
         return ERROR_OK
     }
 
@@ -187,3 +167,17 @@ function flash_erase_chip()
        return ERROR_NOTIFIED
     }
 }
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   wait for flash to be ready
+//
+function waitForReady()
+{
+    local time = GetTickCount()
+	do {
+        if(GetTickCount() - time > FLASH_TIMEOUT)       
+            throw ERROR_UNLOCK
+	} while (!(intrfApi.readMem32(EEFC_FSR) & FRDY))    
+}
+
