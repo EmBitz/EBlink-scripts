@@ -241,43 +241,40 @@ function stm32_device()
 
     // =================== Flash Option checking =================
 
-    try{
-        local devOpt = flash_get_option_buffer()
 
-        // If IWDG runs as HARDWARE watchdog (44.3.4) erase
-        // will be aborted by the Watchdog and erase fails!
-        // Setting IWDG_KR to 0xaaaa does not seem to help!
-        if( !(devOpt.un32(0) & (1<<4) ) )
-            printf("\nHardware IWDG running, expect failure.\nSet IWDG1_SW!\n\n")
+    local devOpt = flash_get_option_buffer()
 
-        // Check the readout level
-        local rdpLevel = flash_RDP_level(devOpt)
+    // Check the readout level
+    local rdpLevel = flash_RDP_level(devOpt)
 
-        if(rdpLevel == 2){
-            errorf("This device is protected with level 2\nNo debug possible\n")
+    if(rdpLevel == 2){
+        errorf("This device is protected with level 2\nNo debug possible\n")
+        throw ERROR_NOTIFIED
+    }
+
+    if(rdpLevel == 1){            
+        if( yesNof(1, "Read protection level 1 active\nClear to level 0? (chip will erase)") ) {
+            printf("\nReset the RDP level to 0\nThis can take a while due to erasing\n")
+
+            // Clear the readout level inside the flash routines
+            flash_Clear_RDP(devOpt)
+
+            // Remark: If other options should be cleared
+            //         Do it here!
+            flash_write_option_buffer(devOpt)
+        }
+        else {
+            errorf("This device is protected with level 1\nDevice not accessible\n")
             throw ERROR_NOTIFIED
         }
-
-        if(rdpLevel == 1){            
-            if( yesNof(1, "Read protection level 1 active\nClear to level 0? (chip will erase)") ) {
-                printf("Reset the RDP level to 0\n")
-
-                // Clear the readout level inside the flash routines
-                flash_Clear_RDP(devOpt)
-
-                // Remark: If other options should be cleared
-                //         Do it here!
-                flash_write_option_buffer(devOpt)
-            }
-            else {
-                errorf("This device is protected with level 1.\nDevice not accessible.\n")
-                throw ERROR_NOTIFIED
-            }
-        }
     }
-    catch(e)
-    {
-        throw ERROR_NOTIFIED
+    
+    // If IWDG runs as HARDWARE watchdog (44.3.4) erase
+    // will be aborted by the Watchdog and erase fails!
+    // Setting IWDG_KR to 0xaaaa does not seem to help!   
+    if( !(devOpt.un32(0) & (1<<4) ) ) {
+       // Todo: Should we feed the WD during erase or disable the WD?
+       printf("Alert Watchdog : Hardware IWDG running, expect failure during e.g. erase")
     }
 }
 
@@ -320,6 +317,9 @@ function  reset_post_hook(resetType)
 
         // Catch the errors
         catch(e){
+            if(catchString(e))
+                return ERROR_NOTIFIED         
+        
             if(e < ERROR_NOTIFIED)
                 errorf("\nError: Resetting! %d\n", e )
             return ERROR_NOTIFIED
@@ -360,6 +360,9 @@ function services_setup()
 
     // Catch the errors
     catch(e){
+        if(catchString(e))
+            return ERROR_NOTIFIED    
+    
         if(e < ERROR_NOTIFIED)
             errorf("Error(%d): Services!\n", e )
         return ERROR_NOTIFIED

@@ -27,6 +27,10 @@ function main()
             return ERROR_OK  // We succeed so return OK
         }
         catch(e){
+            // Catch any string exceptions (e.g. Squirrel error's)
+            if(catchString(e))
+                return ERROR_NOTIFIED
+
             if(e == ERROR_NOTIFIED)    // Notified errors will stop searching
                return e
         }

@@ -137,6 +137,10 @@ function flash_start()
 
     // Catch all the lock errors
     catch(e){
+       // Catch any string exceptions (e.g. Squirrel error's)
+       if(catchString(e))
+            return ERROR_NOTIFIED        
+        
        if(e == ERROR_VOLTAGE)
            errorf("Error: Current STM32F4x/STM32F7x flash algorithm needs at least 1.8V\nTarget voltage is %.2f V\n", voltage )
        else if(e < ERROR_NOTIFIED )
@@ -174,6 +178,9 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED  
+        
        if(e < ERROR_NOTIFIED)
            errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e))
        return ERROR_NOTIFIED
@@ -217,6 +224,9 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED  
+        
        if( e == INTERFACE_NOT_SUPPORTED)
             errorf("ERROR: probe doesn't support 16bit memory access!\nPlease change or update probe.")
        else if(e < ERROR_NOTIFIED)
@@ -239,6 +249,9 @@ function flash_done()
 
     // Catch all the lock errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED  
+        
        if(e < ERROR_NOTIFIED)
            errorf("Error: locking flash failed! %s\n", flashError(e))
        return ERROR_NOTIFIED
@@ -284,7 +297,10 @@ function flash_erase_chip()
     }
 
     // Catch all the mass erase errors
-    catch(e){
+    catch(e){     
+       if(catchString(e))
+            return ERROR_NOTIFIED  
+        
        if(e < ERROR_NOTIFIED)
            errorf("ERROR: mass erase failed! %s\n", flashError(e) )
        return ERROR_NOTIFIED

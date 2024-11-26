@@ -125,6 +125,9 @@ function flash_start()
 
     // Catch the errors
     catch(e){
+        if(catchString(e))
+            return ERROR_NOTIFIED      
+    
        if(e < ERROR_NOTIFIED)
            errorf("Error: target initializing! %s\n", flashError(e) )
        return ERROR_NOTIFIED
@@ -190,6 +193,9 @@ function flash_erase(sector, address)
     }
 
     catch(e){
+        if(catchString(e))
+            return ERROR_NOTIFIED      
+    
        if(e < ERROR_NOTIFIED)
            errorf("Error: sector %d erase failed! %s\n", sector, flashError(e) )
        return ERROR_NOTIFIED
@@ -203,22 +209,23 @@ function flash_erase(sector, address)
 //
 function flash_write(sector, address, buffer)
 {
-    local regbase = FLASH_REG_BASE_B0 // first flash bank
+    try{    
+        local regbase = FLASH_REG_BASE_B0 // first flash bank
 
-    // If this is the virtual option sector, go to options write function
-    if(sector == 999) {
-      printf("\n\nStart writing option bytes virtual sector 999\n")
-      return flash_option_write(buffer)
-    }
+        // If this is the virtual option sector, go to options write function
+        if(sector == 999) {
+            printf("\n\nStart writing option bytes virtual sector 999\n")
+            return flash_option_write(buffer)
+        }
 
-    // Select the right flash bank
-    if (address >= FLASH_BANK1_ADDRESS)
-        regbase = FLASH_REG_BASE_B1 // Second flash bank
+        // Select the right flash bank
+        if (address >= FLASH_BANK1_ADDRESS)
+            regbase = FLASH_REG_BASE_B1 // Second flash bank
 
-    // Flash loader works with multiple of 32 bytes.
-    buffer.trim(32)
+        // Flash loader works with multiple of 32 bytes.
+        buffer.trim(32)
 
-    try{
+
         // Unlock flash
         flash_unlock(regbase)
 
@@ -249,6 +256,9 @@ function flash_write(sector, address, buffer)
     }
 
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED      
+    
        if(e < ERROR_NOTIFIED)
            errorf("Error: sector %d writing failed! %s\n", sector, flashError(e) )
        return ERROR_NOTIFIED
@@ -280,6 +290,9 @@ function flash_erase_chip()
     }
 
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED  
+        
        return e
     }
 }
@@ -308,6 +321,8 @@ function flash_erase_bank(bank, regbase)
     }
 
     catch(e){
+       catchThrowStr(e)
+       
        if(e < ERROR_NOTIFIED)
            errorf("Error: mass erase bank %d! %s\n", bank, flashError(e) )
        throw ERROR_NOTIFIED
@@ -438,7 +453,7 @@ function flash_option_write(buffer)
     // Check if the buffer is valid
     if(buffer.getSize() != 32){
        errorf("Error: Option program length is %d, should be 32 bytes\n", buffer.getSize())
-       return ERROR_NOTIFIED
+       throw ERROR_NOTIFIED
     }
 
     try{
@@ -496,9 +511,12 @@ function flash_option_write(buffer)
     }
 
     catch(e){
+       catchThrowString(e)
+           
        if(e < ERROR_NOTIFIED)
            errorf("Error: options writing failed! %s\n", flashError(e) )
-       return ERROR_NOTIFIED
+       
+       throw ERROR_NOTIFIED
     }
 }
 

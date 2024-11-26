@@ -21,7 +21,7 @@ const SAMD_DSU_PID1 0x41003FE4
 const SAMD_DSU_PID2 0x41003FE8
 const ATMEL_JEP106  0x1F
 
-const SAM3_CHIPID	0x400E0740
+const SAM3_CHIPID   0x400E0740
 
 // Used by script to denote a not found devcie
 const ERROR_NOT_FOUND -100
@@ -37,6 +37,10 @@ function main( )
         findDevice()
     }
     catch(e){
+        // Catch any string exceptions (e.g. Squirrel error's)
+        if(catchString(e))
+            return ERROR_NOTIFIED
+
         if( e == ERROR_NOT_FOUND)
             if(deviceId)
                 errorf("ERROR: Atmel device [%x] is missing in table\n", deviceId)
@@ -72,7 +76,7 @@ function findDevice()
             debugf("Atmel JEP106: %x\n", JEP106)
             if( JEP106 != ATMEL_JEP106)
                    throw ERROR_NOT_FOUND
-  
+
             // Get the part info from the DSU
             deviceId = intrfApi.readMem32(SAMD_DSU_ID)
 
@@ -117,20 +121,34 @@ function findDevice()
 //
 function  reset_post(resetType)
 {
-    // Check if there is an user defined post reset hook, the user
-    // can add his own reset strategy with -S <myscript> as last
-    // defined script on the cli.
-    if (isScriptObject("reset_post_hook"))
-        return reset_post_hook(resetType);
+    try {
+        // Check if there is an user defined post reset hook, the user
+        // can add his own reset strategy with -S <myscript> as last
+        // defined script on the cli.
+        if (isScriptObject("reset_post_hook"))
+            return reset_post_hook(resetType);
 
-    // We don't use this if the reset is a user_script type. In that
-    // case, the user is responsible for the initialization.
-    if( resetType != USER_RESET ){
-        // Set the Stack pointer according the Vector table entry        
-        targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
+        // We don't use this if the reset is a user_script type. In that
+        // case, the user is responsible for the initialization.
+        //
+        if( resetType != USER_RESET ){
 
-        // Set the Program pointer according the Vector table entry        
-        targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
+            // Set the Stack pointer according the Vector table entry
+            targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
+
+            // Set the Program pointer according the Vector table entry
+            targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
+        }
+    }
+    catch(e) {
+        // Catch Squirrel errors in other optional scripts (e.g. reset_post_hook)
+        if(catchString(e))
+            return ERROR_NOTIFIED
+
+       if(e < ERROR_NOTIFIED)
+                errorf("ERROR(%d): reset failed\n", e )
+
+       return ERROR_NOTIFIED
     }
 
     return ERROR_OK

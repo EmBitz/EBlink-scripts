@@ -62,6 +62,10 @@ function main()
         findDevice()
     }
     catch(e){
+        // Catch any string exceptions (e.g. Squirrel error's)
+        if(catchString(e))
+            return ERROR_NOTIFIED
+
         if( e == ERROR_NOT_FOUND)
             if(deviceId){
                 printf("\n\nPlease report this ID so that we can add it.\n")
@@ -69,8 +73,8 @@ function main()
             }
             else
                 errorf("ERROR: No valid STmicro device ID found\n")
-        else
-            errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
+        else if( e != ERROR_NOTIFIED)
+             errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
         return ERROR_NOTIFIED
     }
     return ERROR_OK
@@ -83,8 +87,8 @@ function main()
 function findDevice()
 {
     local devReg
-    
-    if( VERSION < 5.0){
+
+    if( VERSION < 6.0){
        errorf("Error:\n\nIncompatiable EBlink version %.2f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
     }
@@ -128,21 +132,34 @@ function findDevice()
 //
 function  reset_post(resetType)
 {
-    // Check if there is an user defined post reset hook, the user
-    // can add his own reset strategy with -S <myscript> as last
-    // defined script on the cli.
-    if (isScriptObject("reset_post_hook"))
-        return reset_post_hook(resetType);
+    try {
+        // Check if there is an user defined post reset hook, the user
+        // can add his own reset strategy with -S <myscript> as last
+        // defined script on the cli.
+        if (isScriptObject("reset_post_hook"))
+            return reset_post_hook(resetType);
 
-    // We don't use this if the reset is a user_script type. In that
-    // case, the user is responsible for the initialization.
-    //
-    if( resetType != USER_RESET ){
-        // Set the Stack pointer according the Vector table entry        
-        targetApi.writeReg("SP", intrfApi.readMem32(0x08000000))
+        // We don't use this if the reset is a user_script type. In that
+        // case, the user is responsible for the initialization.
+        //
+        if( resetType != USER_RESET ){
 
-        // Set the Program pointer according the Vector table entry        
-        targetApi.writeReg("PC", intrfApi.readMem32(0x08000004))
+            // Set the Stack pointer according the Vector table entry
+            targetApi.writeReg("SP", intrfApi.readMem32(0x08000000))
+
+            // Set the Program pointer according the Vector table entry
+            targetApi.writeReg("PC", intrfApi.readMem32(0x08000004))
+        }
+    }
+    catch(e) {
+        // Catch Squirrel errors in other optional scripts (e.g. reset_post_hook)
+        if(catchString(e))
+            return ERROR_NOTIFIED
+
+       if(e < ERROR_NOTIFIED)
+                errorf("ERROR(%d): reset failed\n", e )
+
+       return ERROR_NOTIFIED
     }
 
     return ERROR_OK

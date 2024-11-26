@@ -32,6 +32,10 @@ function main()
         return ERROR_OK
     }
     catch(e){
+        // Catch any string exceptions (e.g. Squirrel error's)
+        if(catchString(e))
+            return ERROR_NOTIFIED
+
         if( e == ERROR_NOT_FOUND)
             if(deviceId)
                 errorf("ERROR: Unknown family ID %d. (Please add it)\n", deviceId)
@@ -78,18 +82,36 @@ function findDevice()
 //
 function  reset_post(resetType)
 {
-    // We don't use this if the reset is an user_script type. In that
-    // case, the user is responsible to initialize the chip and we don't
-    // gonna intervene with it.
-    if( resetType != USER_RESET){
-        // Set the Stack pointer according the Vector table entry
-        
-        targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
+    try {
+        // Check if there is an user defined post reset hook, the user
+        // can add his own reset strategy with -S <myscript> as last
+        // defined script on the cli.
+        if (isScriptObject("reset_post_hook"))
+            return reset_post_hook(resetType);
 
-        // Set the Program pointer according the Vector table entry
-        
-        targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
+        // We don't use this if the reset is a user_script type. In that
+        // case, the user is responsible for the initialization.
+        //
+        if( resetType != USER_RESET ){
+
+            // Set the Stack pointer according the Vector table entry
+            targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
+
+            // Set the Program pointer according the Vector table entry
+            targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
+        }
     }
+    catch(e) {
+        // Catch Squirrel errors in other optional scripts (e.g. reset_post_hook)
+        if(catchString(e))
+            return ERROR_NOTIFIED
+
+       if(e < ERROR_NOTIFIED)
+                errorf("ERROR(%d): reset failed\n", e )
+
+       return ERROR_NOTIFIED
+    }
+
     return ERROR_OK
 }
 

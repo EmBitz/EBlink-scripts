@@ -16,28 +16,28 @@
 intrfApi <- InterfAPI()  // Global so that all included script files also have access
 targetApi<- TargetAPI()  // Global interface to the target class
 deviceId <- 0            // Global deviceId
-deviceType <- 0			 // Global deviceType
+deviceType <- 0          // Global deviceType
 
 // Used by script to denote a not found devcie
 const ERROR_NOT_FOUND -100
 
-const BKPT	   0xBEAABEAA	// Breakpoint instruction
-const IAP_SIG_176X 0xBA72F700	// Signature to identify that IAP entry point exists on 176x devices
-const IAP_SIG	   0xF7FEB510	// Signature to identify that IAP entry point exists on 1100XL devices
-const IAP_ADDR     0x1FFF1FF1	// IAP entry point
-const IAP_ADDR_800 0x0F001FF1	// IAP entry point for LPC800 series
+const BKPT     0xBEAABEAA   // Breakpoint instruction
+const IAP_SIG_176X 0xBA72F700   // Signature to identify that IAP entry point exists on 176x devices
+const IAP_SIG      0xF7FEB510   // Signature to identify that IAP entry point exists on 1100XL devices
+const IAP_ADDR     0x1FFF1FF1   // IAP entry point
+const IAP_ADDR_800 0x0F001FF1   // IAP entry point for LPC800 series
 const RETURN_ADDR  0x10000010
 const PARAM_ADDR   0x10000030
 const RESULT_ADDR  0x100000D0
 
-NXP_KINETIS_DEVICEID <- [			// Kinetis Device ID register locations
-	0x40048024,
-	0x40075024,
+NXP_KINETIS_DEVICEID <- [           // Kinetis Device ID register locations
+    0x40048024,
+    0x40075024,
 ]
 
-NXP_LPC_DEVICEID <- [				// LPC Device ID register locations
-	0x400483F8,
-	0x400483F4,
+NXP_LPC_DEVICEID <- [               // LPC Device ID register locations
+    0x400483F8,
+    0x400483F4,
 ]
 
 const IAP_READPARTID 54
@@ -57,6 +57,10 @@ function main()
     }
     catch(e)
     {
+        // Catch any string exceptions (e.g. Squirrel error's)
+        if(catchString(e))
+            return ERROR_NOTIFIED
+
         if( e == ERROR_NOT_FOUND)
             if(deviceId) {
                 printf("\n\nPlease report this ID so that we can add it.\n")
@@ -90,15 +94,15 @@ function findDevice()
     if (deviceId == 0) {
         deviceId = readLPCDeviceID()
 
-		if(deviceId == 0) 
+        if(deviceId == 0)
             throw ERROR_NOT_FOUND
 
-		// We have valid device LPC ID which will be used to load the right scripts
-		set_target(NXP_LPC)
+        // We have valid device LPC ID which will be used to load the right scripts
+        set_target(NXP_LPC)
     }
 
     // We have valid device Kinetis ID which will be used to load the right scripts
-    else 
+    else
         set_target(NXP_KINETIS)
 }
 
@@ -113,7 +117,7 @@ function readKinetisDeviceID()
 
   for (local i=0;i<NXP_KINETIS_DEVICEID.len();i++) {
      local value = intrfApi.readMem32(NXP_KINETIS_DEVICEID[i])
-	 if (value > 0x1002 || (value < 0 || value > 0x90000000)) 
+     if (value > 0x1002 || (value < 0 || value > 0x90000000))
         return value
   }
 
@@ -134,10 +138,10 @@ function readLPCDeviceID()
 
    for (local i=0;i<NXP_DEVICEID.len();i++) {
     value = intrfApi.readMem32(NXP_DEVICEID[i])
-	if (value >= 0x00007000 && value <= 0x46000000) {
-		printf("Device ID found! (%X)\n",value)
+    if (value >= 0x00007000 && value <= 0x46000000) {
+        printf("Device ID found! (%X)\n",value)
         return value
-	}
+    }
    }
 
    // Otherwise, check to make sure we're dealing with an NXP LPC device by
@@ -145,7 +149,7 @@ function readLPCDeviceID()
    value = intrfApi.readMem32(IAP_ADDR)
    if (value != IAP_SIG && value != IAP_SIG_176X) {
         value = intrfApi.readMem32(IAP_ADDR_800)
-	    if (value != IAP_SIG) 
+        if (value != IAP_SIG)
             return 0
    }
 
@@ -167,7 +171,7 @@ function readLPCDeviceID()
    if (intrfApi.readMem32(IAP_ADDR_800) == IAP_SIG)
        targetApi.execute(IAP_ADDR_800, true)
    else
-	  targetApi.execute(IAP_ADDR, true)
+      targetApi.execute(IAP_ADDR, true)
 
    // Read result and return result
    return intrfApi.readMem32(RESULT_ADDR+4)
@@ -184,22 +188,22 @@ function set_target(type)
 
     if (type == NXP_LPC) {
 
-    	if (deviceId >= 0x00008021 && deviceId <= 0x00008044)
-		require("nxp/lpc800.script")
+        if (deviceId >= 0x00008021 && deviceId <= 0x00008044)
+        require("nxp/lpc800.script")
 
-    	else if ((deviceId >= 0x25001110 && deviceId <= 0x25113737) ||
-		     (deviceId >= 0x26011922 && deviceId <= 0x26113F37))
-        	require("nxp/lpc1700.script")
+        else if ((deviceId >= 0x25001110 && deviceId <= 0x25113737) ||
+             (deviceId >= 0x26011922 && deviceId <= 0x26113F37))
+            require("nxp/lpc1700.script")
 
-    	else
-        	require("nxp/lpc1100.script")
+        else
+            require("nxp/lpc1100.script")
 
-	// Call our generic entry point of the device script we just loaded
-    	lpc_device()
+    // Call our generic entry point of the device script we just loaded
+        lpc_device()
     }
     else {
 
-    	require("nxp/kinetis.script")
+        require("nxp/kinetis.script")
         kinetis_device()
     }
 }
@@ -216,19 +220,30 @@ function set_target(type)
 //
 function  reset_post(resetType)
 {
+    try {
+        // Check if there is an user defined post reset hook, the user
+        // can add his own reset strategy with -S <myscript> as last
+        // defined script on the cli.
+        if (isScriptObject("reset_post_hook"))
+            return reset_post_hook(resetType);
 
-    // Check if there is an user defined post reset hook, the user
-    // can add his own reset strategy with -S <myscript> as last
-    // defined script on the cli.
-    if (isScriptObject("reset_post_hook"))
-        return reset_post_hook(resetType);
+        // We don't use this if the reset is a user_script type. In that
+        // case, the user is responsible for the initialization.
+        //
+        if( resetType != USER_RESET )
+        {
+            // The reset strategies are defined in (lower) part definition scripts
+        }
+    }
+    catch(e) {
+        // Catch Squirrel errors in other optional scripts (e.g. reset_post_hook)
+        if(catchString(e))
+            return ERROR_NOTIFIED
 
-    // We don't use this if the reset is a user_script type. In that
-    // case, the user is responsible for the initialization.
-    //
-    if( resetType != USER_RESET )
-    {
-        // The reset strategies are defined in (lower) part definition scripts
+       if(e < ERROR_NOTIFIED)
+                errorf("ERROR(%d): reset failed\n", e )
+
+       return ERROR_NOTIFIED
     }
 
     return ERROR_OK
