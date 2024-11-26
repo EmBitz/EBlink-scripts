@@ -82,7 +82,7 @@ function main()
 function findDevice()
 {
     // Check if the right script API is supported
-    if( VERSION < 4.7) {
+    if( VERSION < 6.0) {
        errorf("Error:\n\nIncompatiable EBlink version %.2f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
     }

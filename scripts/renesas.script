@@ -69,7 +69,7 @@ function main()
 //
 function findDevice()
 {
-    if( VERSION < 5.12){
+    if( VERSION < 6.0){
        errorf("Error:\n\nIncompatiable EBlink version %.2f\nPlease update to >= 5.12\n", VERSION)
        throw ERROR_NOTIFIED
     }
