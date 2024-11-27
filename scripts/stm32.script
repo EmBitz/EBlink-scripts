@@ -49,8 +49,9 @@ intrfApi <- InterfAPI()  // Global so that all included script files also have a
 targetApi<- TargetAPI()  // Global interface to the target class
 deviceId <- 0            // Global deviceId
 
-// Used by scripts to denote a not found device
-const ERROR_NOT_FOUND -100
+// To decalare user errors below -1000
+//const ERROR_MY_ERROR1 -1001
+//const ERROR_MY_ERROR2 -1002
 
 /////////////////////////////////////////////////////
 //

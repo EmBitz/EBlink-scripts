@@ -338,6 +338,8 @@ function  reset_post_hook(resetType)
 //    As soon as a service is added, any EBlink default services are skipped and
 //    the user is responsible to add all the needed services.
 //
+//    This function is optional. If it is not needed just ommit it completly.
+//
 function services_setup()
 {
     // If we only have one core we can use the EBlink default services
@@ -347,7 +349,7 @@ function services_setup()
     try{
         local servicesApi = :: ServicesAPI()  // API to the services manager
 
-        //                                 service        Name                  service-options
+        //                       service        Name                  service-options
         //------------------------------------------------------------------------------------------------------
         servicesApi.addService("GDB-target", "GDB_CM7",  format("%s,ap=%d", cliSwitch("-G"),CM7_AP )) // Add GDB server for cpu1
         servicesApi.addService("GDB-target", "GDB_CM4",  format("%s,ap=%d", cliSwitch("-G"),CM4_AP )) // Add GDB server for cpu2

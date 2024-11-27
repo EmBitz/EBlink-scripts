@@ -18,8 +18,6 @@ targetApi<- TargetAPI()  // Global interface to the target class
 deviceId <- 0            // Global deviceId
 deviceType <- 0          // Global deviceType
 
-// Used by script to denote a not found devcie
-const ERROR_NOT_FOUND -100
 
 const BKPT     0xBEAABEAA   // Breakpoint instruction
 const IAP_SIG_176X 0xBA72F700   // Signature to identify that IAP entry point exists on 176x devices
@@ -136,8 +134,8 @@ function readLPCDeviceID()
 
    // Try to read a DEVICE_ID register
 
-   for (local i=0;i<NXP_DEVICEID.len();i++) {
-    value = intrfApi.readMem32(NXP_DEVICEID[i])
+   for (local i=0;i<NXP_LPC_DEVICEID.len();i++) {
+    value = intrfApi.readMem32(NXP_LPC_DEVICEID[i])
     if (value >= 0x00007000 && value <= 0x46000000) {
         printf("Device ID found! (%X)\n",value)
         return value

@@ -18,9 +18,6 @@ intrfApi  <- InterfAPI() // Global so that all included scripts files also have 
 targetApi <- TargetAPI() // Global interface to the target class, our reset_post need it and this is faster than local defined
 deviceId  <- 0           // Global deviceId
 
-// Used by script to denote a not found devcie
-const ERROR_NOT_FOUND -100
-
 /////////////////////////////////////////////////////
 //
 //  The entry point for this script

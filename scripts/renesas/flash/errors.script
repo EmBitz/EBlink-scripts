@@ -6,19 +6,17 @@
 //
 
 // --------- Defined by EBlink executable --------
-// ERROR_OK        0
-// ERROR_NOTIFIED -1
-
-// INTERFACE_NOT_SUPPORTED -100
-// INTERFACE_WAIT          -101
-// INTERFACE_ERROR         -102
+// ERROR_OK
+// ERROR_NOTIFIED
+// INTERFACE_NOT_SUPPORTED
+// INTERFACE_WAIT
+// INTERFACE_ERROR
+// ERROR_UNLOCK
+// ERROR_VOLTAGE
+// ERROR_FLASH
+// ERROR_TIMEOUT
 //------------------------------------------------
 
-// We can't use "const" here because it is not in upper scope apparently
-ERROR_UNLOCK  <-  -200
-ERROR_VOLTAGE <-  -201
-ERROR_FLASH   <-  -202
-ERROR_TIMEOUT <-  -203
 
 function flashError(error)
 {

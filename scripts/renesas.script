@@ -32,9 +32,6 @@ familyStr<- ""
 
 const RENESAS_FMIFRT 0x407fb19c
 
-// Used by scripts to denote a not found device
-const ERROR_NOT_FOUND -100
-
 /////////////////////////////////////////////////////
 //
 //  EBlink called Entry point
