@@ -65,28 +65,25 @@ pgSize  <- 0;
 
 maxFlashSpeed   <- 10000 // 10MHz is max speed for direct programming (we think)
 
-// Generic Flash Script errors
-require("stmicro/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Unlock the flash
 //
 function flash_start()
 {
-    local voltage
-
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        local voltage
+
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // Be sure that the core is halted and all clocks are reset
         targetApi.reset(SYSTEM_RESET)
 
@@ -139,12 +136,11 @@ function flash_start()
     catch(e){
        // Catch any string exceptions (e.g. Squirrel error's)
        if(catchString(e))
-            return ERROR_NOTIFIED        
-        
+            return ERROR_NOTIFIED
        if(e == ERROR_VOLTAGE)
            errorf("Error: Current STM32F4x/STM32F7x flash algorithm needs at least 1.8V\nTarget voltage is %.2f V\n", voltage )
        else if(e < ERROR_NOTIFIED )
-           errorf("Error: target initializing! %s\n", flashError(e) )
+           errorf("Error: target initializing! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -179,10 +175,9 @@ function flash_erase(sector, address)
     // Catch all the sector erase errors
     catch(e){
        if(catchString(e))
-            return ERROR_NOTIFIED  
-        
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e))
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e))
        return ERROR_NOTIFIED
     }
 }
@@ -195,7 +190,6 @@ function flash_erase(sector, address)
 function flash_write(sector, address, buffer)
 {
     try{
-
         // Enable the program flag PG in flash_CR together with the right parallelism
         intrfApi.writeMem32(FLASH_CR, pgSize | FLASH_CR_PG )
 
@@ -225,12 +219,11 @@ function flash_write(sector, address, buffer)
     // Catch all the sector write errors
     catch(e){
        if(catchString(e))
-            return ERROR_NOTIFIED  
-        
+            return ERROR_NOTIFIED
        if( e == INTERFACE_NOT_SUPPORTED)
             errorf("ERROR: probe doesn't support 16bit memory access!\nPlease change or update probe.")
        else if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e))
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e))
        return ERROR_NOTIFIED
     }
 }
@@ -250,10 +243,9 @@ function flash_done()
     // Catch all the lock errors
     catch(e){
        if(catchString(e))
-            return ERROR_NOTIFIED  
-        
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error: locking flash failed! %s\n", flashError(e))
+           errorf("Error: locking flash failed! [%s]\n", errorToStr(e))
        return ERROR_NOTIFIED
     }
 }
@@ -284,7 +276,7 @@ function flash_erase_chip()
             intrfApi.writeMem32(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_MER1 | FLASH_CR_STRT)
         else
             intrfApi.writeMem32(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_STRT)
-        
+
         // (4) Wait for the BSY bit to be cleared (worst case at low voltage > 40sec)
         // (5) Check for errors
         flash_check_busy(40000)
@@ -297,12 +289,11 @@ function flash_erase_chip()
     }
 
     // Catch all the mass erase errors
-    catch(e){     
+    catch(e){
        if(catchString(e))
-            return ERROR_NOTIFIED  
-        
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -321,9 +312,9 @@ function flash_check_busy(timeout)
         // Check timeout
         if( (GetTickCount() - time) > timeout)
            throw ERROR_TIMEOUT
-       
-        status = intrfApi.readMem32(FLASH_SR) 
-        
+
+        status = intrfApi.readMem32(FLASH_SR)
+
     } while ( status &  FLASH_SR_BSY )
 
     AnimateDone()
@@ -348,7 +339,7 @@ function flash_unlock()
 
         // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
         if( intrfApi.readMem32(FLASH_CR) & FLASH_CR_LOCK )
-          throw ERROR_UNLOCK 
+          throw ERROR_UNLOCK
     }
 }
 

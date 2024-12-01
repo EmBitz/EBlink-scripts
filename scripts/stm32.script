@@ -88,7 +88,7 @@ function main()
 function findDevice()
 {
     local devReg
-
+    
     if( VERSION < 6.0){
        errorf("Error:\n\nIncompatiable EBlink version %.2f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
@@ -109,7 +109,6 @@ function findDevice()
             foreach(script in arch[2])
               foreach(devId in script[1])
                   if( devId == deviceId){
-                    noticef("STmicro script : %s\n", script[0])
                     require("stmicro/stm32"+script[0]+".script")
                     stm32_device()
                     return

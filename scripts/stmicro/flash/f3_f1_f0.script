@@ -34,26 +34,23 @@ const FLASH_KEY2        0xCDEF89AB
 
 maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think)
 
-// Generic Flash Script errors
-require("stmicro/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Called by EBlink to initialize upcoming flash operations.
 //
 function flash_start()
 {
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // Be sure that the core is halted and all clocks are reset
         targetApi.reset(SYSTEM_RESET)
 
@@ -75,8 +72,10 @@ function flash_start()
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+           errorf("ERROR: couldn't initialize target! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -102,7 +101,7 @@ function flash_erase(sector, address)
 
         // (4) Wait until the BSY bit is reset in the FLASH_SR register
         local status
-        local time = GetTickCount()        
+        local time = GetTickCount()
         do{
             // Check for time out
             if(GetTickCount() - time > 1500)
@@ -126,8 +125,10 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -157,10 +158,12 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e ==  INTERFACE_NOT_SUPPORTED)
             errorf("This interface doesn't support direct 16bit memory access\nPlease update probe firmware or use other probe\n")
        else if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -179,8 +182,10 @@ function flash_done()
 
     // Catch all the lock errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error: locking flash failed! %s\n", flashError(e) )
+           errorf("Error: locking flash failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -261,8 +266,10 @@ function flash_erase_chip()
 
     // Catch all the mass erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }

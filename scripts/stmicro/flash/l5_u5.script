@@ -72,10 +72,6 @@ maxFlashSpeed   <- 16000 // The max speed tested with (can be changed from cli)
 // half size of the total page count then we are in the second bank.
 halfOfSectors   <- 0
 
-
-// Generic Flash Script errors
-require("stmicro/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 // EBlink callback
@@ -84,20 +80,20 @@ require("stmicro/flash/errors.script")
 //
 function flash_start()
 {
-    // Set the half sector size global
-    halfOfSectors = DeviceAPI().sectorCount()/2
-
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        // Set the half sector size global
+        halfOfSectors = DeviceAPI().sectorCount()/2
+
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // Be sure that the core is halted
         targetApi.reset(SYSTEM_RESET)
 
@@ -117,8 +113,10 @@ function flash_start()
 
     // Catch all the lock errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error: target initializing! %s\n", flashError(e) )
+           errorf("Error: target initializing! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -158,8 +156,10 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -202,8 +202,8 @@ function flash_write(sector, address, buffer)
         // 6. Check that NSEOP flag is set in the FLASH_NSSR register (meaning that the
         // programming operation has succeed), and clear it by software.
 
-        // 7. Clear the NSPG bit in the FLASH_NSSR register if there no more programming request anymore.        
-        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, 
+        // 7. Clear the NSPG bit in the FLASH_NSSR register if there no more programming request anymore.
+        intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR,
             intrfApi.readMem32 (FLASH_BASE + FLASH_NSCR) & ~FLASH_NSCR_NSPG )
 
         return ERROR_OK
@@ -211,8 +211,10 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -229,9 +231,11 @@ function flash_done()
         return ERROR_OK
     }
     catch(e) {
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
            errorf("ERROR: locking device\n")
-        return ERROR_NOTIFIED
+       return ERROR_NOTIFIED
     }
 }
 
@@ -267,9 +271,8 @@ function flash_check_busy(timeout)
 //   Clear errors according ST user manual
 //
 function clear_flash_errors()
-{    
-    intrfApi.writeMem32(FLASH_BASE + FLASH_NSSR, 
-        intrfApi.readMem32(FLASH_BASE + FLASH_NSSR) | FLASH_ERROR  )
+{
+    intrfApi.writeMem32(FLASH_BASE + FLASH_NSSR, intrfApi.readMem32(FLASH_BASE + FLASH_NSSR) | FLASH_ERROR  )
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -336,9 +339,11 @@ function flash_erase_chip()
 
     // Catch all the sector write errors
     catch(e){
-        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
-        return ERROR_NOTIFIED
+       if(catchString(e))
+           return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
+       return ERROR_NOTIFIED
     }
 }
 
@@ -353,7 +358,6 @@ function flash_erase_chip()
 function setDualBank(dmode)
 {
     try {
-
         // Be sure that the core is halted
         targetApi.reset(SYSTEM_RESET)
 
@@ -389,12 +393,15 @@ function setDualBank(dmode)
         intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH)
 
         flash_lock()
+        return ERROR_OK
     }
 
     // Catch all the sector write errors
     catch(e){
+        if(catchString(e))
+           return ERROR_NOTIFIED
         if(e < ERROR_NOTIFIED)
-           errorf("ERROR: set dual bank mode! %s\n", flashError(e) )
+           errorf("ERROR: set dual bank mode! [%s]\n", errorToStr(e) )
         return ERROR_NOTIFIED
     }
 }
@@ -409,12 +416,11 @@ function setDualBank(dmode)
 //
 function restoreDualBankMode()
 {
-    if( !isScriptObject(defaultOptrValue) || !defaultOptrValue) {
-        errorf("This script doesn't support restore for this chip\n")
-        return ERROR_NOTIFIED
-    }
-
     try {
+        if( !isScriptObject(defaultOptrValue) || !defaultOptrValue) {
+            errorf("This script doesn't support restore for this chip\n")
+            return ERROR_NOTIFIED
+        }
 
         // Be sure that the core is halted
         targetApi.reset(SYSTEM_RESET)
@@ -436,7 +442,7 @@ function restoreDualBankMode()
         intrfApi.writeMem32(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY2 )
 
         if(intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_OPTLOCK)
-            throw ERROR_UNLOCK        
+            throw ERROR_UNLOCK
 
         intrfApi.writeMem32(FLASH_BASE + FLASH_OPTR,  defaultOptrValue)
         intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT)
@@ -447,12 +453,15 @@ function restoreDualBankMode()
         flash_lock()
 
         printf("Flash option restore (0x%X) done\n", defaultOptrValue)
+        return ERROR_OK
     }
 
     // Catch all the sector write errors
     catch(e){
+        if(catchString(e))
+            return ERROR_NOTIFIED
         if(e < ERROR_NOTIFIED)
-           errorf("ERROR: flash option restore! %s\n", flashError(e) )
+           errorf("ERROR: flash option restore! [%s]\n", errorToStr(e) )
         return ERROR_NOTIFIED
     }
 }

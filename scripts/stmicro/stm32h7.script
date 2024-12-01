@@ -172,7 +172,7 @@ function stm32_device()
     intrfApi.writeMem32(DBGMCU_CR, value | DBGSTBY_D1 | D1DBGCKEN | D3DBGCKEN)
 
     // Stop watchdog counters during halt: DBGMCU_APB4FZ1 |= DBG_IIWDG1
-    value = intrfApi.readMem32(DBGMCU_APB4FZ1) 
+    value = intrfApi.readMem32(DBGMCU_APB4FZ1)
     intrfApi.writeMem32(DBGMCU_APB4FZ1, value | DBG_IIWDG1)
 
 
@@ -241,7 +241,6 @@ function stm32_device()
 
     // =================== Flash Option checking =================
 
-
     local devOpt = flash_get_option_buffer()
 
     // Check the readout level
@@ -252,11 +251,11 @@ function stm32_device()
         throw ERROR_NOTIFIED
     }
 
-    if(rdpLevel == 1){            
-        if( yesNof(1, "Read protection level 1 active\nClear to level 0? (chip will erase)") ) {
+    if(rdpLevel == 1){
+        if( yesNof(1, "Read protection level 1 active\nClear (chip will erase) to level 0?") ) {
             printf("\nReset the RDP level to 0\nThis can take a while due to erasing\n")
 
-            // Clear the readout level inside the flash routines
+            // Clear the readout level inside out option buffer
             flash_Clear_RDP(devOpt)
 
             // Remark: If other options should be cleared
@@ -268,11 +267,11 @@ function stm32_device()
             throw ERROR_NOTIFIED
         }
     }
-    
+
     // If IWDG runs as HARDWARE watchdog (44.3.4) erase
     // will be aborted by the Watchdog and erase fails!
-    // Setting IWDG_KR to 0xaaaa does not seem to help!   
-    if( !(devOpt.un32(0) & (1<<4) ) ) {
+    // Setting IWDG_KR to 0xaaaa does not seem to help!
+    if( !(devOpt[0] & (1<<4) ) ) {
        // Todo: Should we feed the WD during erase or disable the WD?
        printf("Alert Watchdog : Hardware IWDG running, expect failure during e.g. erase")
     }
@@ -304,7 +303,7 @@ function  reset_post_hook(resetType)
 
             // Set the Stack pointer according the Vector table entry
             local value = intrfApi.readMem32(cpuVector)
-            targetApi.writeReg("SP", value) 
+            targetApi.writeReg("SP", value)
 
             // Set the Program pointer according the Vector table entry
             value = intrfApi.readMem32(cpuVector + 4)
@@ -318,8 +317,8 @@ function  reset_post_hook(resetType)
         // Catch the errors
         catch(e){
             if(catchString(e))
-                return ERROR_NOTIFIED         
-        
+                return ERROR_NOTIFIED
+
             if(e < ERROR_NOTIFIED)
                 errorf("\nError: Resetting! %d\n", e )
             return ERROR_NOTIFIED
@@ -363,8 +362,8 @@ function services_setup()
     // Catch the errors
     catch(e){
         if(catchString(e))
-            return ERROR_NOTIFIED    
-    
+            return ERROR_NOTIFIED
+
         if(e < ERROR_NOTIFIED)
             errorf("Error(%d): Services!\n", e )
         return ERROR_NOTIFIED

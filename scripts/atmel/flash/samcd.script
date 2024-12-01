@@ -77,27 +77,24 @@ const NVMC_READY (1 << 0)
 
 maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think)
 
-// Generic Flash Script errors
-require("atmel/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Called by EBlink to initialize upcoming flash operations.
 //
 function flash_start()
 {
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
-    {
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
+        {
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // Be sure that the core is halted
         targetApi.reset(SYSTEM_RESET)
 
@@ -119,8 +116,10 @@ function flash_start()
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+           errorf("ERROR: couldn't initialize target! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -132,7 +131,6 @@ function flash_start()
 function flash_erase(sector, address)
 {
     try{
-
         // Set address to be erased
         intrfApi.writeMem32( NVMCTRL + NVMCTRL_ADDR, address >> 1)
 
@@ -152,8 +150,10 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -166,10 +166,10 @@ function flash_erase(sector, address)
 //
 function flash_write(sector, address, buffer)
 {
-    local length = buffer.getSize()  // The number of bytes in the data buffer
-    local offset = 0                 // Buffer offset for writing
-
     try{
+        local length = buffer.getSize()  // The number of bytes in the data buffer
+        local offset = 0                 // Buffer offset for writing
+
         // For direct flash writing we can't be too fast.
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
@@ -208,8 +208,10 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -228,6 +230,8 @@ function flash_done()
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        return e
     }
 }
@@ -243,7 +247,6 @@ function flash_done()
 function flash_erase_chip()
 {
     try{
-
         // Be sure that the target is halted
         targetApi.halt()
 
@@ -284,8 +287,10 @@ function flash_erase_chip()
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }

@@ -84,7 +84,7 @@ function findDevice()
             require("atmel/samcd.script")
             atmel_device()
             break
-
+            
         case "M3":
 
             deviceId = intrfApi.readMem32(SAM3_CHIPID)

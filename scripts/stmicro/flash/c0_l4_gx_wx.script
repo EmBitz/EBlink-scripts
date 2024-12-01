@@ -54,9 +54,6 @@ FLASH_ERROR <- ( FLASH_SR_PGSERR | FLASH_SR_SIZERR  | FLASH_SR_PGAERR |
 maxFlashSpeed   <- 4000 // 4MHz is max speed (we only tested it with V2 )
 halfOfSectors   <- 0    // The half of the number of sectors of the current device
 
-// Generic Flash Script errors
-require("stmicro/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 // EBlink callback
@@ -65,19 +62,19 @@ require("stmicro/flash/errors.script")
 //
 function flash_start()
 {
-    halfOfSectors = DeviceAPI().sectorCount()/2
-
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        halfOfSectors = DeviceAPI().sectorCount()/2
+
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // Be sure that the core is halted
         targetApi.reset(SYSTEM_RESET)
 
@@ -97,8 +94,10 @@ function flash_start()
 
     // Catch all the lock errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error: target initializing! %s\n", flashError(e) )
+           errorf("Error: target initializing! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -139,8 +138,10 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -183,7 +184,7 @@ function flash_write(sector, address, buffer)
 
         // 7. Clear the PG bit of the FLASH control register (FLASH_CR) if there no more
         // programming request anymore
-        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR,
             intrfApi.readMem32 (FLASH_BASE + FLASH_CR) & ~FLASH_CR_PG )
 
         return ERROR_OK
@@ -191,8 +192,10 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -204,15 +207,17 @@ function flash_write(sector, address, buffer)
 function flash_done()
 {
     try{
-        // Write the CR register to lock (LOCK)        
-        intrfApi.writeMem32(FLASH_BASE + FLASH_CR, 
-            intrfApi.readMem32(FLASH_BASE + FLASH_CR) | FLASH_CR_LOCK) 
+        // Write the CR register to lock (LOCK)
+        intrfApi.writeMem32(FLASH_BASE + FLASH_CR,
+            intrfApi.readMem32(FLASH_BASE + FLASH_CR) | FLASH_CR_LOCK)
         return ERROR_OK
     }
     catch(e) {
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
            errorf("ERROR: locking device\n")
-        return ERROR_NOTIFIED
+       return ERROR_NOTIFIED
     }
 }
 
@@ -226,7 +231,7 @@ function flash_check_busy(timeout)
     local time = GetTickCount()
     do{
         AnimateCursor()
-        value = intrfApi.readMem32(FLASH_BASE + FLASH_SR)        
+        value = intrfApi.readMem32(FLASH_BASE + FLASH_SR)
         if(GetTickCount() - time > timeout)
           throw ERROR_TIMEOUT
     } while ( value & FLASH_SR_BSY)
@@ -246,8 +251,7 @@ function flash_check_busy(timeout)
 //
 function clear_flash_errors()
 {
-    intrfApi.writeMem32(FLASH_BASE + FLASH_SR,
-        intrfApi.readMem32(FLASH_BASE + FLASH_SR) | FLASH_ERROR  )
+    intrfApi.writeMem32(FLASH_BASE + FLASH_SR, intrfApi.readMem32(FLASH_BASE + FLASH_SR) | FLASH_ERROR  )
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -261,7 +265,7 @@ function flash_unlock()
     intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEY2 )
 
     if(intrfApi.readMem32(FLASH_BASE + FLASH_CR) & FLASH_CR_LOCK )
-       throw ERROR_UNLOCK 
+       throw ERROR_UNLOCK
 }
 
 
@@ -314,8 +318,10 @@ function flash_erase_chip()
 
     // Catch all the sector write errors
     catch(e){
+        if(catchString(e))
+           return ERROR_NOTIFIED
         if(e < ERROR_NOTIFIED)
-           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
         return ERROR_NOTIFIED
     }
 }

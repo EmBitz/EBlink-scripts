@@ -1,15 +1,12 @@
 /////////////////////////////////////////////////////////////////////////////////
 //
-//          K32 Kinetis 
+//          K32 Kinetis
 //
 //
 // J.DuBois at Thermalogic Corporation (jer@thlogic.com)
 
-// Generic Flash Script errors
-require("nxp/flash/errors.script")
-
 const FTFA_FSTAT 0x40020000
-const 	FSTAT_CCIF 0x80
+const FSTAT_CCIF 0x80
 const FTFA_FCCOB 0x40020004
 
 const FCMD_PROGRAMLWORD  (0x06 << 24)
@@ -31,7 +28,7 @@ function flash_start()
     // Catch all the sector write errors
     catch(e){
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+           errorf("ERROR: couldn't initialize target! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -44,18 +41,21 @@ function flash_start()
 //
 function flash_erase(sector, address)
 {
-
     try {
 
-		executeFTFA(FCMD_ERASEFLASHSEC | (address & 0x0FFFFF))
-		return ERROR_OK
+        executeFTFA(FCMD_ERASEFLASHSEC | (address & 0x0FFFFF))
+        return ERROR_OK
     }
 
     // Catch all the sector erase errors
     catch(e){
-	   flash_done()
+       flash_done()
+
+        if(catchString(e))
+            return ERROR_NOTIFIED
+
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -67,33 +67,27 @@ function flash_erase(sector, address)
 //
 function flash_write(sector, address, buffer)
 {
-	local len = buffer.getSize();
-	
     try {
+        local len = buffer.getSize();
 
-		for (local i=0;len > 0;i++,len-=4) {
-			executeFTFA(FCMD_PROGRAMLWORD | address+i*4,buffer.un32(i*4))
-		}
-		
- 	    return ERROR_OK
+        for (local i=0;len > 0;i++,len-=4) {
+            executeFTFA(FCMD_PROGRAMLWORD | address+i*4,buffer[i])
+        }
+
+        return ERROR_OK
     }
 
-// Catch all the sector write errors
+    // Catch all the sector write errors
     catch(e){
-	   flash_done()
+       flash_done()
+
+       if(catchString(e))
+          return ERROR_NOTIFIED
+
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-//
-// Called by EBlink if all flash operations are ready
-//
-function flash_done()
-{
-  return ERROR_OK
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -108,15 +102,17 @@ function flash_done()
 function flash_erase_chip()
 {
     try {
-
-		executeFTFA(FCMD_ERASEALLBLKSU)		
-		return ERROR_OK
+        executeFTFA(FCMD_ERASEALLBLKSU)
+        return ERROR_OK
     }
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+          return ERROR_NOTIFIED
+
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing chip failed! %s\n", flashError(e) )
+           errorf("ERROR: erasing chip failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -126,30 +122,30 @@ function flash_erase_chip()
 function executeFTFA(cmd,...)
 {
 
-	// Check for busy
-	do {	
-	} while(!(intrfApi.readMem32(FTFA_FSTAT) & FSTAT_CCIF))
-		
-	// Clear any old errors
-    intrfApi.writeMem32(FTFA_FSTAT,0x30)
-		
-	// Write command to FCCOB
-	intrfApi.writeMem32(FTFA_FCCOB, cmd)
+    // Check for busy
+    do {
+    } while(!(intrfApi.readMem32(FTFA_FSTAT) & FSTAT_CCIF))
 
-	// Write params to FCCOB
-	for (local i=0;i < 2 && i < vargv.len();i++) {
+    // Clear any old errors
+    intrfApi.writeMem32(FTFA_FSTAT,0x30)
+
+    // Write command to FCCOB
+    intrfApi.writeMem32(FTFA_FCCOB, cmd)
+
+    // Write params to FCCOB
+    for (local i=0;i < 2 && i < vargv.len();i++) {
        intrfApi.writeMem32(FTFA_FCCOB+(i+1)*4, vargv[i])
-	}
-		
-	// Execute
+    }
+
+    // Execute
     intrfApi.writeMem32(FTFA_FSTAT, FSTAT_CCIF)
-		
-	// Check for busy
+
+    // Check for busy
     local value
-	do {
+    do {
         value = intrfApi.readMem32(FTFA_FSTAT)
-	} while(!(value & FSTAT_CCIF))
-		
-	if (value & 0x31) 
-        throw ERROR_FLASH			
+    } while(!(value & FSTAT_CCIF))
+
+    if (value & 0x31)
+        throw ERROR_FLASH
 }

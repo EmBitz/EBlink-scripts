@@ -1,0 +1,74 @@
+/////////////////////////////////////////////////////
+//
+//
+//
+function gdb_qRcmd(packet, length, ebBuffer)
+{ 
+    try{ 
+        local matches = []
+                                     //ReadMemAP           <APBaseAddr>              <Addr>                          <NumItems>                        <Flags>
+        if( amregex(matches, packet, @"ReadMemAP\s+\b(0x[0-9a-fA-F]+|[0-9]+)\b\s+\b(0x[0-9a-fA-F]+|[0-9]+)\b\s+\b(0x[0-9a-fA-F]+|[0-9]+)\b\s+\b(0x[0-9a-fA-F]+|[0-9]+)\b") > 0)
+        {        
+            local APbase = strToNumber(matches[1])
+            local addr   = strToNumber(matches[2])
+            local num    = strToNumber(matches[3])
+            local flags  = strToNumber(matches[4])
+                        
+            local byteLen = 4      
+            local width   = -1   // Auto(=32)      
+            local fspec   = "0x%08X"            
+            
+            // Handle the width specifier flags
+            switch(flags & 7){
+                case 0: 
+                    // Default
+                    break
+
+                case 1:
+                    width =  8;
+                    byteLen= 1;
+                    fspec = "0x%02X" 
+                    break
+
+                case 2:
+                    width = 16
+                    byteLen= 2
+                    fspec = "0x%04X" 
+                    break
+
+                case 4:
+                default:
+                    width =  32
+                    break
+            }
+            
+            // Allocate an EBbuffer with enough space
+            local eb = EBbuffer(num*byteLen)
+            // Set the EBbuffer access '[]' width
+            if(width > 0)
+                eb.access(width)
+                                        
+            // Read the memory into buffer with 'width' access
+            InterfAPI().readMem(addr, eb, 0, num*byteLen, width)
+          
+            // Create output string 
+            local outStr = ("O.K.:")
+            for(local i=0; i<num; i++){
+                outStr += format(fspec, eb[i])
+                if( i < num -1) outStr += ","
+            }
+            
+            // Return answer to GDB (we return the number of bytes writen)
+            return ebBuffer.printf(outStr+"\n")
+        }                   
+        return ERROR_OK
+    }
+    catch(e){
+        // Catch any string exceptions (e.g. Squirrel error's)
+        if(catchString(e))
+            return ERROR_NOTIFIED
+        printf("GDb error %s\n", errorToStr(e) )
+        return ERROR_NOTIFIED
+    }    
+    
+}

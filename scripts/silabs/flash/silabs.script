@@ -19,10 +19,6 @@ const MSC_MASSLOCK  0x54
 const MSC_UNLOCK_KEY  0x1B71
 const MSC_MASS_KEY    0x631A
 
-// Generic Flash Script errors
-require("silabs/flash/errors.script")
-
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Unlock the flash and prepare erasing and writing
@@ -53,9 +49,11 @@ function flash_start()
     }
 
     // Catch all the sector write errors
-    catch(e){
+    catch(e
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error unlocking flash! %s\n", flashError(e) )
+           errorf("Error unlocking flash! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -89,8 +87,10 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -123,7 +123,7 @@ function flash_write(sector, address, buffer)
         while(idx < buffer.getSize() )
         {
             // Write word to MSC_DATA
-            intrfApi.writeMem32( mscBase|MSC_WDATA, buffer.un32(idx) )
+            intrfApi.writeMem32( mscBase|MSC_WDATA, buffer.get32(idx) )
 
             // Initiate write with auto increment, 1 to WRITETRIG in MSC_WRITECMD
             intrfApi.writeMem32(mscBase|MSC_WRITECMD, 0x10)
@@ -137,8 +137,10 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -168,6 +170,8 @@ function flash_done()
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        return e
     }
 }
@@ -181,16 +185,13 @@ function flash_done()
 //
 function flash_erase_chip()
 {
-
     try{
         // Unlock device, see above
         if( flash_start() < ERROR_OK)
             throw ERROR_NOTIFIED
-            
 
         // MSC->MASSLOCK = MSC_MASSLOCK_LOCKKEY_UNLOCK
         intrfApi.writeMem32(mscBase|MSC_MASSLOCK, MSC_MASS_KEY)
-
 
         // Erase first 512K block
         //MSC->WRITECMD = MSC_WRITECMD_ERASEMAIN0
@@ -228,6 +229,8 @@ function flash_erase_chip()
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
            errorf("ERROR: Chip erasing\n")
        return ERROR_NOTIFIED

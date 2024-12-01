@@ -52,26 +52,23 @@ const OPTKEY2         0x24252627
 
 maxFlashSpeed   <- 4000 // 4MHz is max speed for direct programming (we think)
 
-// Generic Flash Script errors
-require("stmicro/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Unlock the flash
 //
 function flash_start()
 {
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // Be sure that the core is halted and all clocks are reset
         targetApi.reset(SYSTEM_RESET)
 
@@ -109,8 +106,10 @@ function flash_start()
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error unlocking flash! %s\n", flashError(e) )
+           errorf("Error unlocking flash! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -139,8 +138,10 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -155,7 +156,6 @@ function flash_erase(sector, address)
 function flash_write(sector, address, buffer)
 {
     try{
-
         // Enable the program  FPRG and PRG in FLASH_CR
         intrfApi.writeMem32( FLASH_BASE|FLASH_CR, FLASH_CR_FPRG |FLASH_CR_PROG )
 
@@ -185,8 +185,10 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -204,6 +206,8 @@ function flash_done()
     }
 
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
            errorf("Error locking flash!\n")
        return ERROR_NOTIFIED
@@ -231,7 +235,7 @@ function checkBusy(timeout)
 
     // Check for errors
     if( status & (FLASH_SR_NOTZERO | FLASH_SR_SIZERR | FLASH_SR_PGAERR |  FLASH_SR_WRPERR) )
-        throw ERROR_FLASH 
+        throw ERROR_FLASH
 
     //  Check the EOP flag in the FLASH_SR register
     if( !(status & FLASH_SR_EOP) )

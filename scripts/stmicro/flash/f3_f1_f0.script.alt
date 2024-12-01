@@ -50,9 +50,6 @@ const SCRATCH_ADDR     0x20000030  // The area for program upload
 
 maxFlashSpeed   <-10000 // 10MHz is max speed for direct programming (we think)
 
-// Generic Flash Script errors
-require("stmicro/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Called by EBlink to initialize upcoming flash operations.
@@ -60,17 +57,16 @@ require("stmicro/flash/errors.script")
 //
 function flash_start()
 {
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
 
         // Be sure that the core is halted and all clocks are reset
         targetApi.reset(SYSTEM_RESET)
@@ -96,8 +92,10 @@ function flash_start()
     }
 
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+           errorf("ERROR: couldn't initialize target! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -147,8 +145,10 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -191,7 +191,7 @@ function flash_write(sector, address, buffer)
             // Run flash loader and wait till ready (todo: timeout)
             targetApi.execute(LOADER_ADDR, true)
 
-            // Check flash loader result, if $R2 is 0 then all data is written            
+            // Check flash loader result, if $R2 is 0 then all data is written
             if(targetApi.readReg("R2") != 0)
               throw ERROR_FLASH
         }
@@ -203,9 +203,11 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+      if(catchString(e))
+           return ERROR_NOTIFIED
       if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
-       return ERROR_NOTIFIED
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
+      return ERROR_NOTIFIED
     }
 }
 
@@ -223,6 +225,8 @@ function flash_done()
 
     // Catch all the lock errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
            errorf("Error: locking flash failed!\n")
        return ERROR_NOTIFIED
@@ -237,7 +241,7 @@ function flash_unlock()
 {
     if(intrfApi.readMem32(FLASH_BASE + FLASH_CR) & FLASH_CR_LOCK ){
         // Unlock Flash
-        intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY1 ) 
+        intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY1 )
         intrfApi.writeMem32(FLASH_BASE + FLASH_KEY, FLASH_KEY2 )
 
         if(intrfApi.readMem32(FLASH_BASE + FLASH_CR & FLASH_CR_LOCK )
@@ -304,8 +308,10 @@ function flash_erase_chip()
 
     // Catch all the mass erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }

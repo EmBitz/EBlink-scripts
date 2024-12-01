@@ -91,26 +91,23 @@ enum peMode {
 // Not actively used right now!!
 maxFlashSpeed   <- 4000 // 4MHz is max speed for direct programming (we think)
 
-// Generic Flash Script errors
-require("renesas/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Unlock the flash
 //
 function flash_start()
 {
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // Be sure that the core is halted and all clocks are reset
         targetApi.reset(SYSTEM_RESET)
 
@@ -118,7 +115,7 @@ function flash_start()
         local time = GetTickCount();
         do{
             targetApi.poll()
-            if(GetTickCount() - time > FLASH_TIMEOUT) 
+            if(GetTickCount() - time > FLASH_TIMEOUT)
                 throw ERROR_TIMEOUT
         } while(targetApi.getState() != TARGET_HALTED )
 
@@ -128,8 +125,10 @@ function flash_start()
     }
 
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error unlocking flash! %s\n", flashError(e) )
+           errorf("Error unlocking flash! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -140,18 +139,17 @@ function flash_start()
 //
 function flash_erase(sector, address)
 {
-    if(sector < 1000)
-        switchPeMode(peMode.CODE_PE)
-    else  {
-        // We keep data intact for chip erase, otherwise comment this out
-        if(DeviceAPI().isChipErase()){
-            noticef("Skiped data by chip erase [0x%X]\n", address)
-            return ERROR_OK
-        }
-        switchPeMode(peMode.DATA_PE)
-    }
-
     try{
+        if(sector < 1000)
+            switchPeMode(peMode.CODE_PE)
+        else  {
+            // We keep data intact for chip erase, otherwise comment this out
+            if(DeviceAPI().isChipErase()){
+                noticef("Skiped data by chip erase [0x%X]\n", address)
+                return ERROR_OK
+            }
+            switchPeMode(peMode.DATA_PE)
+        }
 
         setStartAddress(address)
         setEndAddress(address+0x800-4)
@@ -170,8 +168,10 @@ function flash_erase(sector, address)
     }
 
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: erasing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: erasing sector %d failed! [%s]\n", sector, errorToStr(e) )
     }
 
     return ERROR_NOTIFIED
@@ -185,17 +185,17 @@ function flash_erase(sector, address)
 //
 function flash_write(sector, address, buffer)
 {
-    if(sector < 1000) {
-        switchPeMode(peMode.CODE_PE)
-    } else {
-        switchPeMode(peMode.DATA_PE)
-    }
-
-    //Set the first address of the target block to the FSADDR register
-    setStartAddress(address)
-
-    local idx = 0
     try{
+        if(sector < 1000) {
+            switchPeMode(peMode.CODE_PE)
+        } else {
+            switchPeMode(peMode.DATA_PE)
+        }
+
+        //Set the first address of the target block to the FSADDR register
+        setStartAddress(address)
+
+        local idx = 0
         while(idx < buffer.getSize() ) {
             setPgmData(buffer.un32(idx))
             intrfApi._writeMem(FCR_REG, CMD_PROGRAM | CMD_START,8)
@@ -211,8 +211,10 @@ function flash_write(sector, address, buffer)
     }
 
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -224,7 +226,6 @@ function flash_write(sector, address, buffer)
 function flash_done()
 {
     try{
-
         switchPeMode(peMode.READ_PE)
         intrfApi._writeMem(DFLCTL_REG, 0,8)
 
@@ -234,6 +235,8 @@ function flash_done()
     }
 
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
            errorf("Error locking flash!\n")
        return ERROR_NOTIFIED
@@ -332,7 +335,7 @@ function switchPeMode(mode)
     do{
         if(GetTickCount() - time > FLASH_TIMEOUT){
             printf("FENTRYR_REG : 0x%X\n", intrfApi._readMem(FENTRYR_REG, 16))
-            throw ERROR_TIMEOUT 
+            throw ERROR_TIMEOUT
         }
 
     }while(intrfApi._readMem(FENTRYR_REG, 16) != fentry)

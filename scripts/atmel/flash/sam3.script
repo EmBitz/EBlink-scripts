@@ -10,13 +10,8 @@ const FLASH_TIMEOUT     1500 // Generic 1.5sec flash timeout
 
 maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think)
 
-
-// Generic Flash Script errors
-require("atmel/flash/errors.script")
-
 // Whether page should be erased before writing
 local page_erase = array(flash_size/page_size)
-
 
 const FLASH_ADDR 0x00400000
 
@@ -26,22 +21,22 @@ const FLASH_ADDR 0x00400000
 //
 function flash_start()
 {
-	// Initialize our page_erase array
-	for (local i=0;i<flash_size/page_size;i++)
-        page_erase[i] = 0
+    try{    
+        // Initialize our page_erase array
+        for (local i=0;i<flash_size/page_size;i++)
+            page_erase[i] = 0
 
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
-    {
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0)
+        {
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
 
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
 
-    try{
         // Be sure that the core is halted
         targetApi.reset(SYSTEM_RESET)
 
@@ -60,8 +55,10 @@ function flash_start()
 
     // Catch all the errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED        
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: couldn't initialize target! %s\n", flashError(e) )
+           errorf("ERROR: couldn't initialize target! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -87,9 +84,9 @@ function flash_erase(sector, address)
 //
 function flash_write(sector, address, buffer)
 {
-	local flash_cmd
+    try{    
+        local flash_cmd
 
-    try{
 		// Unlock the page to be written
 		intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | FCMD_CLB)
 
@@ -114,8 +111,10 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED        
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: writing sector %d failed! %s\n", sector, flashError(e) )
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -162,8 +161,10 @@ function flash_erase_chip()
 
     // Catch all the sector erase errors
     catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED        
        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: mass erase failed! %s\n", flashError(e) )
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }

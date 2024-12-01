@@ -82,26 +82,23 @@ FLASH_ERROR <- (FLASH_WRPERR | FLASH_PGSERR | FLASH_STRBERR | FLASH_INCERR | FLA
 
 maxFlashSpeed   <- 10000 // 10MHz is max speed for direct programming (we think)
 
-// Generic Flash Script errors
-require("stmicro/flash/errors.script")
-
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Unlock the flash and preload the flash loader called by EBlink
 //
 function flash_start()
 {
-    // Override the maximum flash speed from cli
-    if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
-        maxFlashSpeed = FLASH_SPEED
-        printf("Flash speed set: %d KHz\n", maxFlashSpeed)
-    }
-
-    // Check that we don't go faster than the user selected on the cli
-    if(maxFlashSpeed > intrfApi.getSpeed())
-        maxFlashSpeed = intrfApi.getSpeed()
-
     try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // We reset the system so all clocks are at default values (HSI 64)
         targetApi.reset(SYSTEM_RESET)
 
@@ -112,7 +109,7 @@ function flash_start()
 
           // Timeout of 1sec
             if(GetTickCount() - time > 1000)
-                throw ERROR_TIMEOUT 
+                throw ERROR_TIMEOUT
 
         } while(targetApi.getState() != TARGET_HALTED )
 
@@ -125,11 +122,10 @@ function flash_start()
 
     // Catch the errors
     catch(e){
-        if(catchString(e))
-            return ERROR_NOTIFIED      
-    
+       if(catchString(e))
+           return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error: target initializing! %s\n", flashError(e) )
+           errorf("Error: target initializing! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -142,13 +138,13 @@ function flash_start()
 //
 function flash_erase(sector, address)
 {
-    local regbase = FLASH_REG_BASE_B0 // first flash bank
-
-    // Skip the virtual option sector
-    if(sector == 999)
-      return ERROR_OK
-
     try{
+        local regbase = FLASH_REG_BASE_B0 // first flash bank
+
+        // Skip the virtual option sector
+        if(sector == 999)
+            return ERROR_OK
+
         local bnkSector = sector
 
         // Select the right bank
@@ -179,7 +175,7 @@ function flash_erase(sector, address)
             // Timeout of 5sec
             if(GetTickCount() - time > 5000)
                 throw ERROR_TIMEOUT
-                
+
         }while ( value &  (FLASH_QW | FLASH_BSY) )
 
         // Check for errors
@@ -191,13 +187,11 @@ function flash_erase(sector, address)
 
         return ERROR_OK
     }
-
     catch(e){
-        if(catchString(e))
-            return ERROR_NOTIFIED      
-    
+       if(catchString(e))
+           return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error: sector %d erase failed! %s\n", sector, flashError(e) )
+           errorf("Error: sector %d erase failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -209,7 +203,7 @@ function flash_erase(sector, address)
 //
 function flash_write(sector, address, buffer)
 {
-    try{    
+    try{
         local regbase = FLASH_REG_BASE_B0 // first flash bank
 
         // If this is the virtual option sector, go to options write function
@@ -257,10 +251,9 @@ function flash_write(sector, address, buffer)
 
     catch(e){
        if(catchString(e))
-            return ERROR_NOTIFIED      
-    
+            return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
-           errorf("Error: sector %d writing failed! %s\n", sector, flashError(e) )
+           errorf("Error: sector %d writing failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
 }
@@ -291,8 +284,7 @@ function flash_erase_chip()
 
     catch(e){
        if(catchString(e))
-            return ERROR_NOTIFIED  
-        
+            return ERROR_NOTIFIED
        return e
     }
 }
@@ -322,9 +314,8 @@ function flash_erase_bank(bank, regbase)
 
     catch(e){
        catchThrowStr(e)
-       
        if(e < ERROR_NOTIFIED)
-           errorf("Error: mass erase bank %d! %s\n", bank, flashError(e) )
+           errorf("Error: mass erase bank %d! %s\n", bank, errorToStr(e) )
        throw ERROR_NOTIFIED
     }
 }
@@ -351,13 +342,13 @@ function flash_unlock(regbase)
         // Timeout of 1sec
         if(GetTickCount() - time > 1000)
             throw ERROR_TIMEOUT
-            
+
     }while ( intrfApi.readMem32(regbase + FLASH_SR) &  FLASH_BSY )
 
     // Read flash lock status in FLASH_CR
     // Check if it's locked by the FLASH_CR_LOCK flag
     if( intrfApi.readMem32(regbase + FLASH_CR) & FLASH_LOCK ){
-    
+
         // Write flash KEYR
         intrfApi.writeMem32(regbase + FLASH_KEYR, KEY1)
         intrfApi.writeMem32(regbase + FLASH_KEYR, KEY2)
@@ -393,7 +384,7 @@ function flash_check_busy(regbase, timeout)
         // Timeout of 30sec (it can take quite long
         if(GetTickCount() - time > timeout)
             throw ERROR_TIMEOUT
-            
+
     }while ( intrfApi.readMem32(regbase + FLASH_SR) &  (FLASH_QW|FLASH_BSY) )
 
     AnimateDone()
@@ -420,23 +411,23 @@ function flash_check_busy(regbase, timeout)
 
 
 const FLASH_OPTSR    0
-const FLASH_BOOT     4
-const FLASH_PRAR_x1  8
-const FLASH_PRAR_x2 12
-const FLASH_SCAR_x1 16
-const FLASH_SCAR_x2 20
-const FLASH_WPSN_x1 24
-const FLASH_WPSN_x2 28
+const FLASH_BOOT     1
+const FLASH_PRAR_x1  2
+const FLASH_PRAR_x2  3
+const FLASH_SCAR_x1  4
+const FLASH_SCAR_x2  5
+const FLASH_WPSN_x1  6
+const FLASH_WPSN_x2  7
 
-//  Mapping of the EBlink ebBuffer (virtual sector) and STM32 registers
-OPT_MAPPING <- [[ 0,0x20, "FLASH_OPTSR  : 0x%08x\n"],
-                [ 4,0x44, "FLASH_BOOT   : 0x%08x\n"],
-                [ 8,0x2C, "FLASH_PRAR_x1: 0x%08x\n"],
-                [12,0x12C,"FLASH_PRAR_x2: 0x%08x\n"],
-                [16,0x34, "FLASH_SCAR_x1: 0x%08x\n"],
-                [20,0x134,"FLASH_SCAR_x2: 0x%08x\n"],
-                [24,0x3C, "FLASH_WPSN_x1: 0x%08x\n"],
-                [28,0x13C,"FLASH_WPSN_x2: 0x%08x\n"]]
+//  Mapping of the EBlink EBbuffer (virtual sector) and STM32 registers
+OPT_MAPPING <- [[0x20, "FLASH_OPTSR  : 0x%08x\n"], // EBbuffer[0]
+                [0x44, "FLASH_BOOT   : 0x%08x\n"],
+                [0x2C, "FLASH_PRAR_x1: 0x%08x\n"],
+                [0x12C,"FLASH_PRAR_x2: 0x%08x\n"],
+                [0x34, "FLASH_SCAR_x1: 0x%08x\n"],
+                [0x134,"FLASH_SCAR_x2: 0x%08x\n"],
+                [0x3C, "FLASH_WPSN_x1: 0x%08x\n"],
+                [0x13C,"FLASH_WPSN_x2: 0x%08x\n"]] // EBbuffer[7]
 
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -445,18 +436,24 @@ OPT_MAPPING <- [[ 0,0x20, "FLASH_OPTSR  : 0x%08x\n"],
 //
 function flash_option_write(buffer)
 {
-    local regbase = FLASH_REG_BASE_B0 // first flash bank
-    
-    // Get the current options
-    local curOptions = flash_get_option_buffer()
-
-    // Check if the buffer is valid
-    if(buffer.getSize() != 32){
-       errorf("Error: Option program length is %d, should be 32 bytes\n", buffer.getSize())
-       throw ERROR_NOTIFIED
-    }
-
     try{
+        local regbase = FLASH_REG_BASE_B0 // first flash bank
+
+        // Get the current options
+        local curOptions = flash_get_option_buffer()
+
+        // Check if the options are not already set
+        if(!( buffer <=> curOptions)){
+            debugf("Skipping options writing due equal settings\n")
+            return ERROR_OK
+        }
+
+        // Check if the buffer is valid
+        if(buffer.getSize() != 32){
+            errorf("Error: Option program length is %d, should be 32 bytes\n", buffer.getSize())
+            throw ERROR_NOTIFIED
+        }
+
         //------------- Unlock options  --------------
         // Read flash FLASH_OPTCR
         // Check if options are locked by the FLASH_OPTCR_OPTLOCK flag
@@ -470,14 +467,19 @@ function flash_option_write(buffer)
                 throw ERROR_UNLOCK
         }
 
+        local probeSpeed = intrfApi.getSpeed()
+        intrfApi.setSpeed(maxFlashSpeed)
+
         //-------------- Program the options ---------
         debugf("Write buffer into option registers:\n")
-        foreach(optReg in OPT_MAPPING)
-            // Changed options
-            if(curOptions.un32(optReg[0]) != buffer.un32(optReg[0]) ) {
-                debugf(optReg[2], buffer.un32(optReg[0]))
-                intrfApi.writeMem32(regbase + optReg[1], buffer.un32(optReg[0]) )
+        for(local i=0; i<OPT_MAPPING.len(); i++) {
+            if(curOptions[i] != buffer[i] ) {
+                debugf(OPT_MAPPING[i][1], buffer[i])
+                intrfApi.writeMem32(regbase + OPT_MAPPING[i][0], buffer[i] )
             }
+        }
+
+        intrfApi.setSpeed(probeSpeed)
 
         //------------- Commit options  --------------
 
@@ -511,11 +513,9 @@ function flash_option_write(buffer)
     }
 
     catch(e){
-       catchThrowString(e)
-           
+       catchThrowStr(e)
        if(e < ERROR_NOTIFIED)
-           errorf("Error: options writing failed! %s\n", flashError(e) )
-       
+           errorf("Error: options writing failed! [%s]\n", errorToStr(e) )
        throw ERROR_NOTIFIED
     }
 }
@@ -523,17 +523,17 @@ function flash_option_write(buffer)
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//  This function will return an ebBuffer with the option filled
+//  This function will return an EBbuffer with the option filled
 //
 function flash_get_option_buffer()
 {
     local regbase = FLASH_REG_BASE_B0 // first flash bank
-    local optionBuf = ebBuffer(32)
+    local optionBuf = EBbuffer(8*4)   // Allocate buffer to hold 8 words
 
     debugf("Read option registers in buffer:\n")
-    foreach(optReg in OPT_MAPPING){       
-        optionBuf.put32( optReg[0], intrfApi.readMem32(regbase + optReg[1]))
-        debugf(optReg[2], optionBuf.un32(optReg[0]))
+    for(local i=0; i<OPT_MAPPING.len(); i++) {
+        optionBuf[i] = intrfApi.readMem32(regbase + OPT_MAPPING[i][0])
+        debugf(OPT_MAPPING[i][1], optionBuf[i])
     }
 
     return optionBuf
@@ -541,19 +541,14 @@ function flash_get_option_buffer()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//  This function will return an ebBuffer with the option filled
+//  This function will return an EBbuffer with the option filled
 //
 function flash_write_option_buffer(optionBuf)
 {
-    local probeSpeed = intrfApi.getSpeed()
-    intrfApi.setSpeed(maxFlashSpeed)
-     
     // Reprogram the options
     flash_unlock(FLASH_REG_BASE_B0)
     flash_option_write(optionBuf)
     flash_lock(FLASH_REG_BASE_B0)
-    
-    intrfApi.setSpeed(probeSpeed)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -563,10 +558,8 @@ function flash_write_option_buffer(optionBuf)
 function flash_Clear_RDP(optionBuf)
 {
     // Clear the readout protection level
-    local optsr = optionBuf.un32(FLASH_OPTSR)
-    optsr = optsr & 0xFFFF00FF
-    optsr = optsr | 0x0000AA00 // Level 0
-    optionBuf.put32(FLASH_OPTSR, optsr)
+    local optsr = optionBuf[FLASH_OPTSR] & 0xFFFF00FF
+    optionBuf[FLASH_OPTSR] = optsr | 0x0000AA00 // Level 0
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -575,10 +568,7 @@ function flash_Clear_RDP(optionBuf)
 //
 function flash_RDP_level(optionBuf)
 {
-  local flash_optsr = optionBuf.un32(FLASH_OPTSR)
-
-  flash_optsr = flash_optsr >> 8
-  flash_optsr = flash_optsr & 0xFF
+  local flash_optsr = (optionBuf[FLASH_OPTSR] >> 8) & 0xFF
 
   if( flash_optsr == 0xAA ) return 0
   if( flash_optsr == 0xCc ) return 2
