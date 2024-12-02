@@ -133,7 +133,7 @@ function flash_start()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//   The sector erase is called by EBlink if a sector need to be changed
+//   The sector erase is called by EBlink prior sector flashing
 //   Sector erase sequence according ST user manual
 //
 function flash_erase(sector, address)
@@ -154,7 +154,7 @@ function flash_erase(sector, address)
         }
 
         // After the reset at flash_start we have core clock HSI 64 MHz, adapt FLASH_ACR.
-        intrfApi.writeMem32(regbase + FLASH_ACR, 0)
+        intrfApi.write(regbase + FLASH_ACR, 0)
 
         // 1)  Check and clear (optional) all the error flags due to previous programming/erase
         flash_get_clear_status(regbase)
@@ -164,13 +164,13 @@ function flash_erase(sector, address)
 
         // (3) Set the SER bit and select the sector out of the 8 in the main memory block) you wish to erase (SNB) in the FLASH_CR register
         // (4) Set the STRT bit in the FLASH_CR register also
-        intrfApi.writeMem32(regbase + FLASH_CR, (bnkSector<<8) | FLASH_SER  | FLASH_PG | FLASH_START )
+        intrfApi.write(regbase + FLASH_CR, (bnkSector<<8) | FLASH_SER  | FLASH_PG | FLASH_START )
 
         // (5) Wait for the QW1/2 bit and BSY1/2 to be cleared in the corresponding FLASH_SR1/2 register
         local time = GetTickCount();
         local value
         do{
-            value = intrfApi.readMem32(regbase + FLASH_SR)
+            value = intrfApi.read(regbase + FLASH_SR)
 
             // Timeout of 5sec
             if(GetTickCount() - time > 5000)
@@ -219,29 +219,28 @@ function flash_write(sector, address, buffer)
         // Flash loader works with multiple of 32 bytes.
         buffer.trim(32)
 
-
         // Unlock flash
         flash_unlock(regbase)
 
         // Enable the program flag PG in flash_CR and 32bits parallelism
-        intrfApi.writeMem32(regbase+FLASH_CR, FLASH_PSIZE_32 | FLASH_PG )
+        intrfApi.write(regbase+FLASH_CR, FLASH_PSIZE_32 | FLASH_PG )
 
         // Lower the probe speed
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
-        // Write the buffer direct to flash with 32 bits access
-        intrfApi.writeBuf(address, buffer, 32)
+        // Write the buffer direct to flash
+        intrfApi.writeBuf(buffer, address)
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
 
         // Check and clear (optional) all the error flags due to previous programming/erase
-        if(intrfApi.readMem32(regbase + FLASH_SR) & FLASH_ERROR )
+        if(intrfApi.read(regbase + FLASH_SR) & FLASH_ERROR )
             throw ERROR_FLASH
 
         // Disable the program flag  PG in flash_CR
-        intrfApi.writeMem32(regbase+ FLASH_CR, 0)
+        intrfApi.write(regbase+ FLASH_CR, 0)
 
         // Lock the flash again
         flash_lock(regbase)
@@ -303,7 +302,7 @@ function flash_erase_bank(bank, regbase)
         flash_unlock(regbase)
 
         //  3. BER1 and  START1 to launch bank erase
-        intrfApi.writeMem32(regbase + FLASH_CR,  FLASH_BER | FLASH_START  | FLASH_PG )
+        intrfApi.write(regbase + FLASH_CR,  FLASH_BER | FLASH_START  | FLASH_PG )
 
         // 4. Then wait until QW bit are cleared in the corresponding FLASH_SR1/2
         flash_check_busy(regbase, 30000) // 30 seconds timeout
@@ -326,7 +325,7 @@ function flash_erase_bank(bank, regbase)
 //
 function flash_get_clear_status(regbase)
 {
-    if( intrfApi.readMem32(regbase + FLASH_SR) & FLASH_ERROR )
+    if( intrfApi.read(regbase + FLASH_SR) & FLASH_ERROR )
         throw ERROR_FLASH
 }
 
@@ -343,18 +342,18 @@ function flash_unlock(regbase)
         if(GetTickCount() - time > 1000)
             throw ERROR_TIMEOUT
 
-    }while ( intrfApi.readMem32(regbase + FLASH_SR) &  FLASH_BSY )
+    }while ( intrfApi.read(regbase + FLASH_SR) &  FLASH_BSY )
 
     // Read flash lock status in FLASH_CR
     // Check if it's locked by the FLASH_CR_LOCK flag
-    if( intrfApi.readMem32(regbase + FLASH_CR) & FLASH_LOCK ){
+    if( intrfApi.read(regbase + FLASH_CR) & FLASH_LOCK ){
 
         // Write flash KEYR
-        intrfApi.writeMem32(regbase + FLASH_KEYR, KEY1)
-        intrfApi.writeMem32(regbase + FLASH_KEYR, KEY2)
+        intrfApi.write(regbase + FLASH_KEYR, KEY1)
+        intrfApi.write(regbase + FLASH_KEYR, KEY2)
 
         // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
-        if( intrfApi.readMem32(regbase + FLASH_CR) & FLASH_LOCK )
+        if( intrfApi.read(regbase + FLASH_CR) & FLASH_LOCK )
             throw ERROR_UNLOCK
     }
 }
@@ -365,8 +364,8 @@ function flash_unlock(regbase)
 //
 function flash_lock(regbase)
 {
-    intrfApi.writeMem32(regbase + FLASH_CR, FLASH_LOCK)
-    intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_LOCK)
+    intrfApi.write(regbase + FLASH_CR, FLASH_LOCK)
+    intrfApi.write(regbase + FLASH_OPTCR, OPT_LOCK)
 }
 
 
@@ -385,7 +384,7 @@ function flash_check_busy(regbase, timeout)
         if(GetTickCount() - time > timeout)
             throw ERROR_TIMEOUT
 
-    }while ( intrfApi.readMem32(regbase + FLASH_SR) &  (FLASH_QW|FLASH_BSY) )
+    }while ( intrfApi.read(regbase + FLASH_SR) &  (FLASH_QW|FLASH_BSY) )
 
     AnimateDone()
 }
@@ -457,13 +456,13 @@ function flash_option_write(buffer)
         //------------- Unlock options  --------------
         // Read flash FLASH_OPTCR
         // Check if options are locked by the FLASH_OPTCR_OPTLOCK flag
-        if( intrfApi.readMem32(regbase + FLASH_OPTCR) & OPT_LOCK  ){
+        if( intrfApi.read(regbase + FLASH_OPTCR) & OPT_LOCK  ){
             // Write FLASH_OPTKEYR to unlock
-           intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY1)
-           intrfApi.writeMem32(regbase + FLASH_OPTKEYR, OPTKEY2)
+           intrfApi.write(regbase + FLASH_OPTKEYR, OPTKEY1)
+           intrfApi.write(regbase + FLASH_OPTKEYR, OPTKEY2)
 
             // Reread flash FLASH_OPTCR to check if we are unlocked
-            if( intrfApi.readMem32(regbase + FLASH_OPTCR) & OPT_LOCK  )
+            if( intrfApi.read(regbase + FLASH_OPTCR) & OPT_LOCK  )
                 throw ERROR_UNLOCK
         }
 
@@ -475,7 +474,7 @@ function flash_option_write(buffer)
         for(local i=0; i<OPT_MAPPING.len(); i++) {
             if(curOptions[i] != buffer[i] ) {
                 debugf(OPT_MAPPING[i][1], buffer[i])
-                intrfApi.writeMem32(regbase + OPT_MAPPING[i][0], buffer[i] )
+                intrfApi.write(regbase + OPT_MAPPING[i][0], buffer[i] )
             }
         }
 
@@ -484,10 +483,10 @@ function flash_option_write(buffer)
         //------------- Commit options  --------------
 
         // Remove OPT error flag in FLASH_OPTCCR before programming
-        intrfApi.writeMem32(regbase + FLASH_OPTCCR, OPT_OPTCHANGEERR)
+        intrfApi.write(regbase + FLASH_OPTCCR, OPT_OPTCHANGEERR)
 
         // Set the FLASH_OPTCR_OPTSTART in the FLASH_OPTCR
-        intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_START)
+        intrfApi.write(regbase + FLASH_OPTCR, OPT_START)
 
         local time = GetTickCount();
         do{
@@ -498,15 +497,15 @@ function flash_option_write(buffer)
                 throw ERROR_TIMEOUT
 
             // Read the FLASH_OPTSR_CUR to get the busy flag
-        }while ( intrfApi.readMem32(regbase + FLASH_OPTSR_CUR) &  OPT_BSY )
+        }while ( intrfApi.read(regbase + FLASH_OPTSR_CUR) &  OPT_BSY )
 
         AnimateDone()
 
-        if(intrfApi.readMem32(regbase + FLASH_OPTSR_CUR) & OPT_OPTCHANGEERR)
+        if(intrfApi.read(regbase + FLASH_OPTSR_CUR) & OPT_OPTCHANGEERR)
             throw ERROR_FLASH
 
         // Relock the options bytes
-        intrfApi.writeMem32(regbase + FLASH_OPTCR, OPT_LOCK)
+        intrfApi.write(regbase + FLASH_OPTCR, OPT_LOCK)
 
         printf("Options bytes ready\n\n")
         return ERROR_OK
@@ -532,7 +531,7 @@ function flash_get_option_buffer()
 
     debugf("Read option registers in buffer:\n")
     for(local i=0; i<OPT_MAPPING.len(); i++) {
-        optionBuf[i] = intrfApi.readMem32(regbase + OPT_MAPPING[i][0])
+        optionBuf[i] = intrfApi.read(regbase + OPT_MAPPING[i][0])
         debugf(OPT_MAPPING[i][1], optionBuf[i])
     }
 

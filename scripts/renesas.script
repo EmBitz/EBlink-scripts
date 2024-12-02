@@ -76,7 +76,7 @@ function findDevice()
             break
 
     if(!deviceStr.len())
-        getPartString(intrfApi.readMem32(RENESAS_FMIFRT)+24)
+        getPartString(intrfApi.read(RENESAS_FMIFRT)+24)
 
     if(!deviceStr.len())
         throw ERROR_NOT_FOUND
@@ -108,7 +108,7 @@ function getPartString(addr)
     deviceStr=""
     try{
         for (local i=0;i<4;i++){
-           local value = intrfApi.readMem32(addr+(i*4))
+           local value = intrfApi.read(addr+(i*4))
            if(value==0)
                return false
            preg.append(value)
@@ -154,10 +154,10 @@ function  reset_post(resetType)
         if( resetType != USER_RESET ){
 
             // Set the Stack pointer according the Vector table entry
-            targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
+            targetApi.writeReg("SP", intrfApi.read(0x00000000))
 
             // Set the Program pointer according the Vector table entry
-            targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
+            targetApi.writeReg("PC", intrfApi.read(0x00000004))
         }
     }
     catch(e) {

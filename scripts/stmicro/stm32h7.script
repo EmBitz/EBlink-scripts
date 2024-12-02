@@ -168,19 +168,19 @@ function stm32_device()
     local ram_size
 
     // Enable debug clocks
-    local value = intrfApi.readMem32(DBGMCU_CR)
-    intrfApi.writeMem32(DBGMCU_CR, value | DBGSTBY_D1 | D1DBGCKEN | D3DBGCKEN)
+    local value = intrfApi.read(DBGMCU_CR)
+    intrfApi.write(DBGMCU_CR, value | DBGSTBY_D1 | D1DBGCKEN | D3DBGCKEN)
 
     // Stop watchdog counters during halt: DBGMCU_APB4FZ1 |= DBG_IIWDG1
-    value = intrfApi.readMem32(DBGMCU_APB4FZ1)
-    intrfApi.writeMem32(DBGMCU_APB4FZ1, value | DBG_IIWDG1)
+    value = intrfApi.read(DBGMCU_APB4FZ1)
+    intrfApi.write(DBGMCU_APB4FZ1, value | DBG_IIWDG1)
 
 
     // Get the flash size by reading the info register
     // Be sure that we are usig DAP-AP 0, the user can change the
     // default interface AP-port on the CLI
     local curAp = intrfApi.setDapAp(0)
-    value = intrfApi.readMem32(0x1ff1e880)
+    value = intrfApi.read(0x1ff1e880)
     intrfApi.setDapAp(curAp) // Restore the default DAP-AP!
 
     flash_size = (value & 0xffff) * 1024
@@ -302,11 +302,11 @@ function  reset_post_hook(resetType)
                 cpuVector = CM4_VEC
 
             // Set the Stack pointer according the Vector table entry
-            local value = intrfApi.readMem32(cpuVector)
+            local value = intrfApi.read(cpuVector)
             targetApi.writeReg("SP", value)
 
             // Set the Program pointer according the Vector table entry
-            value = intrfApi.readMem32(cpuVector + 4)
+            value = intrfApi.read(cpuVector + 4)
             targetApi.writeReg("PC", value)
 
             // Print additional info if we have dual core
@@ -387,7 +387,7 @@ function checkDualCore(dap_ap)
 
     // Read the core ID
     local curAp = intrfApi.setDapAp(dap_ap)
-    local value = intrfApi.readMem32(0xE000ED00)
+    local value = intrfApi.read(0xE000ED00)
     intrfApi.setDapAp(curAp)
 
     // Not sure this is right but if the CM4 is invisible because disabled by CM7 then

@@ -84,21 +84,21 @@ function flash_start()
         } while(targetApi.getState() != TARGET_HALTED )
 
         // Read flash lock status
-        if( intrfApi.readMem32(FLASH_BASE|FLASH_CR) & (FLASH_CR_PELOCK|FLASH_CR_PRGLOCK) ){
+        if( intrfApi.read(FLASH_BASE|FLASH_CR) & (FLASH_CR_PELOCK|FLASH_CR_PRGLOCK) ){
             // Unlock
-            intrfApi.writeMem32(FLASH_BASE|FLASH_PEKEYR,PEKEY1)
-            intrfApi.writeMem32(FLASH_BASE|FLASH_PEKEYR,PEKEY2)
+            intrfApi.write(FLASH_BASE|FLASH_PEKEYR,PEKEY1)
+            intrfApi.write(FLASH_BASE|FLASH_PEKEYR,PEKEY2)
 
             // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
-            if( intrfApi.readMem32(FLASH_BASE|FLASH_CR) & FLASH_CR_PELOCK )
+            if( intrfApi.read(FLASH_BASE|FLASH_CR) & FLASH_CR_PELOCK )
                 throw ERROR_UNLOCK
 
             // Unlock flash program
-            intrfApi.writeMem32(FLASH_BASE|FLASH_PRGKEYR,PRGKEY1)
-            intrfApi.writeMem32(FLASH_BASE|FLASH_PRGKEYR,PRGKEY2)
+            intrfApi.write(FLASH_BASE|FLASH_PRGKEYR,PRGKEY1)
+            intrfApi.write(FLASH_BASE|FLASH_PRGKEYR,PRGKEY2)
 
             // check CR.prglock is cleared
-            if( intrfApi.readMem32(FLASH_BASE|FLASH_CR) & FLASH_CR_PRGLOCK )
+            if( intrfApi.read(FLASH_BASE|FLASH_CR) & FLASH_CR_PRGLOCK )
                 throw ERROR_UNLOCK
         }
         return ERROR_OK
@@ -122,16 +122,16 @@ function flash_erase(sector, address)
 {
     try{
         // Set the ERASE and PROG bits in the FLASH_CR register to enable page erasing
-        intrfApi.writeMem32(FLASH_BASE|FLASH_CR, FLASH_CR_ERASE|FLASH_CR_PROG)
+        intrfApi.write(FLASH_BASE|FLASH_CR, FLASH_CR_ERASE|FLASH_CR_PROG)
 
         // Write a 32-bit word value in an address of the selected page to start the erase sequence
-        intrfApi.writeMem32(address, 0 )
+        intrfApi.write(address, 0 )
 
         //  Wait until the BSY bit is reset in the FLASH_SR register
         checkBusy(FLASH_TIMEOUT)
 
         //  Reset the ERASE bits in the FLASH_CR register to disable the page erase
-        intrfApi.writeMem32(FLASH_BASE|FLASH_CR, 0)
+        intrfApi.write(FLASH_BASE|FLASH_CR, 0)
 
         return ERROR_OK
     }
@@ -157,7 +157,7 @@ function flash_write(sector, address, buffer)
 {
     try{
         // Enable the program  FPRG and PRG in FLASH_CR
-        intrfApi.writeMem32( FLASH_BASE|FLASH_CR, FLASH_CR_FPRG |FLASH_CR_PROG )
+        intrfApi.write( FLASH_BASE|FLASH_CR, FLASH_CR_FPRG |FLASH_CR_PROG )
 
         // Adjust the probe speed to the maximum for direct write
         local probeSpeed = intrfApi.getSpeed()
@@ -178,7 +178,7 @@ function flash_write(sector, address, buffer)
         checkBusy(FLASH_TIMEOUT)
 
         // Disable the program flag FPRG in FLASH_CR
-        intrfApi.writeMem32(FLASH_BASE|FLASH_CR, 0x00)
+        intrfApi.write(FLASH_BASE|FLASH_CR, 0x00)
 
         return ERROR_OK
     }
@@ -201,7 +201,7 @@ function flash_done()
 {
     try{
         //  Locks the NVM by setting PELOCK in CR
-        intrfApi.writeMem32(FLASH_BASE|FLASH_CR, FLASH_CR_PELOCK)
+        intrfApi.write(FLASH_BASE|FLASH_CR, FLASH_CR_PELOCK)
         return ERROR_OK
     }
 
@@ -229,7 +229,7 @@ function checkBusy(timeout)
         if(GetTickCount() - time > timeout)
             throw ERROR_TIMEOUT
 
-        status = intrfApi.readMem32(FLASH_BASE|FLASH_SR)
+        status = intrfApi.read(FLASH_BASE|FLASH_SR)
     }while ( status & FLASH_SR_BSY )
 
 

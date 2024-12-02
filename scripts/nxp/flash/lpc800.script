@@ -45,7 +45,7 @@ function flash_start()
         } while(targetApi.getState() != TARGET_HALTED )
 
         // Make sure boot ROM routines are mapped
-        intrfApi.writeMem32(0x40048000,0x0)
+        intrfApi.write(0x40048000,0x0)
 
         // Set Stack Pointer to not interfere with flash routines
         targetApi.writeReg("SP", 0x100007E0)
@@ -130,11 +130,11 @@ function flash_write(sector, address, buffer)
         else writeSize = 1024;
 
         // Write buffer to RAM
-        intrfApi.writeBuf(DATA_ADDR, buffer, 32)
+        intrfApi.writeBuf(buffer, DATA_ADDR)
 
         // Fill up any remaining bytes in the block with 0xFF
         for (local i=buffer.getSize()/4*4;i<writeSize;i+=4) {
-            intrfApi.writeMem32(DATA_ADDR+i, 0x0)
+            intrfApi.write(DATA_ADDR+i, 0x0)
         }
 
         if (sector < 15) {
@@ -183,13 +183,13 @@ function flash_done()
   try
   {
     // Unmap the boot loader from the first 512 bytes of memory
-    intrfApi.writeMem32(0x40048000,0x02)
+    intrfApi.write(0x40048000,0x02)
 
     // Set the Stack pointer according the Vector table entry
-    targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
+    targetApi.writeReg("SP", intrfApi.read(0x00000000))
 
     // Set the Program pointer according the Vector table entry
-    targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
+    targetApi.writeReg("PC", intrfApi.read(0x00000004))
     return ERROR_OK
   }
   catch(e){
@@ -249,12 +249,12 @@ function executeIAP(cmd,result,...)
 
     targetApi.halt()
 
-    intrfApi.writeMem32(RESULT_ADDR, 1)
+    intrfApi.write(RESULT_ADDR, 1)
 
     // Write params to data ram space
-    intrfApi.writeMem32(PARAM_ADDR, cmd)
+    intrfApi.write(PARAM_ADDR, cmd)
     for (i=0;i < 4 && i < vargv.len();i++) {
-        intrfApi.writeMem32(PARAM_ADDR+(i+1)*4, vargv[i])
+        intrfApi.write(PARAM_ADDR+(i+1)*4, vargv[i])
     }
 
     // Write the param and result addresses into R0/R1
@@ -264,13 +264,13 @@ function executeIAP(cmd,result,...)
     // Write the return address to the LR register, and set the BKPT instruction at
     // the return address
     targetApi.writeReg("LR", RETURN_ADDR+1)
-    intrfApi.writeMem32(RETURN_ADDR, 0xBEAABEAA)
+    intrfApi.write(RETURN_ADDR, 0xBEAABEAA)
 
     // Execute the IAP command
     targetApi.execute(IAP_ADDR, true)
 
     // Return results
     for (i=0;i<3;i++) {
-        result[i] = intrfApi.readMem32(RESULT_ADDR+i*4)
+        result[i] = intrfApi.read(RESULT_ADDR+i*4)
     }
 }

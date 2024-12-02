@@ -76,7 +76,7 @@ function renesas_device()
         throw ERROR_NOTIFIED
     }
 
-    intrfApi._writeMem(SYSC_SYOCDCR,SYOCDCR_DBGEN,8)
+    intrfApi.write(SYSC_SYOCDCR,SYOCDCR_DBGEN,8)
 
     printf("Renesas family : R%s (%s)\n", familyStr, deviceStr)
 

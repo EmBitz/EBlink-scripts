@@ -114,7 +114,7 @@ function readKinetisDeviceID()
   // Try to read a DEVICE_ID register
 
   for (local i=0;i<NXP_KINETIS_DEVICEID.len();i++) {
-     local value = intrfApi.readMem32(NXP_KINETIS_DEVICEID[i])
+     local value = intrfApi.read(NXP_KINETIS_DEVICEID[i])
      if (value > 0x1002 || (value < 0 || value > 0x90000000))
         return value
   }
@@ -135,7 +135,7 @@ function readLPCDeviceID()
    // Try to read a DEVICE_ID register
 
    for (local i=0;i<NXP_LPC_DEVICEID.len();i++) {
-    value = intrfApi.readMem32(NXP_LPC_DEVICEID[i])
+    value = intrfApi.read(NXP_LPC_DEVICEID[i])
     if (value >= 0x00007000 && value <= 0x46000000) {
         printf("Device ID found! (%X)\n",value)
         return value
@@ -144,16 +144,16 @@ function readLPCDeviceID()
 
    // Otherwise, check to make sure we're dealing with an NXP LPC device by
    // looking for the IAP signature at the IAP routine memory locations
-   value = intrfApi.readMem32(IAP_ADDR)
+   value = intrfApi.read(IAP_ADDR)
    if (value != IAP_SIG && value != IAP_SIG_176X) {
-        value = intrfApi.readMem32(IAP_ADDR_800)
+        value = intrfApi.read(IAP_ADDR_800)
         if (value != IAP_SIG)
             return 0
    }
 
    // Write params to data ram space
-   intrfApi.writeMem32(PARAM_ADDR, IAP_READPARTID)
-   intrfApi.writeMem32(RESULT_ADDR+4,0)
+   intrfApi.write(PARAM_ADDR, IAP_READPARTID)
+   intrfApi.write(RESULT_ADDR+4,0)
 
    // Write the param and result addresses into R0/R1
    targetApi.writeReg("R0", PARAM_ADDR)
@@ -162,17 +162,17 @@ function readLPCDeviceID()
    // Write the return address to the LR register, and set the BKPT instruction at
    // the return address
    targetApi.writeReg("LR", RETURN_ADDR+1)
-   intrfApi.writeMem32(RETURN_ADDR, BKPT)
+   intrfApi.write(RETURN_ADDR, BKPT)
 
    // Execute the IAP command (If there's nothing at the standard IAP entry address,
    // try the LPC800 entry address)
-   if (intrfApi.readMem32(IAP_ADDR_800) == IAP_SIG)
+   if (intrfApi.read(IAP_ADDR_800) == IAP_SIG)
        targetApi.execute(IAP_ADDR_800, true)
    else
       targetApi.execute(IAP_ADDR, true)
 
    // Read result and return result
-   return intrfApi.readMem32(RESULT_ADDR+4)
+   return intrfApi.read(RESULT_ADDR+4)
 
 }
 

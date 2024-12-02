@@ -38,10 +38,10 @@ function stm32_device()
     local ram_size = 0x2000
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
-    intrfApi.writeMem32(0x40015804, 6)
+    intrfApi.write(0x40015804, 6)
 
     // Get the flash size by reading the info register
-    flash_size = ((intrfApi.readMem32(0x1ff8007c) & ~3) & 0xffff) * 1024
+    flash_size = ((intrfApi.read(0x1ff8007c) & ~3) & 0xffff) * 1024
 
     local deviceStr
     switch(deviceId){

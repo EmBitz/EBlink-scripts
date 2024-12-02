@@ -93,7 +93,7 @@ function lpc_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    intrfApi.writeMem32(0x40048000, 0x02)
+    intrfApi.write(0x40048000, 0x02)
 
     DeviceAPI().memmap( format( mem_template,  ram_size,flash_size,page_size,flash_size,flash1_size,page1_size,flash1_secstart))
 
@@ -119,13 +119,13 @@ function  reset_post_hook(resetType)
     {
         try {
 			// Unmap the boot loader from the first 512 bytes of memory
-            intrfApi.writeMem32(0x40048000,0x02)
+            intrfApi.write(0x40048000,0x02)
 
 			// Set the Stack pointer according the Vector table entry			
-			targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
+			targetApi.writeReg("SP", intrfApi.read(0x00000000))
 
 			// Set the Program pointer according the Vector table entry			
-			targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
+			targetApi.writeReg("PC", intrfApi.read(0x00000004))
 
         }
 

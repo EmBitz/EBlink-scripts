@@ -66,7 +66,7 @@ function stm32_device()
         case 0x436 :
             deviceStr = "(Cat.4/Cat.3 - Medium+/High Density)"
             // Get the flash size by reading the info register
-            flash_size = (intrfApi.readMem32(0x1ff800cc) & ~3) & 0xffff               
+            flash_size = (intrfApi.read(0x1ff800cc) & ~3) & 0xffff               
             
             // 0 is 384k and 1 is 256k
             if(flash_size == 0)
@@ -95,7 +95,7 @@ function stm32_device()
 
     // Get the flash size by reading the info register
     if(fsize_addr)
-        flash_size = ((intrfApi.readMem32(fsize_addr) & ~3) & 0xffff) * 1024    
+        flash_size = ((intrfApi.read(fsize_addr) & ~3) & 0xffff) * 1024    
    
 
     // Inform the user

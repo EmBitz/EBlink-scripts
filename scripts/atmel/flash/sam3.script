@@ -88,12 +88,12 @@ function flash_write(sector, address, buffer)
         local flash_cmd
 
 		// Unlock the page to be written
-		intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | FCMD_CLB)
+		intrfApi.write(EEFC_FCR, FKEY | (sector << 8) | FCMD_CLB)
 
         waitForReady()
 
 		// Write the data to the flash write buffer
-		intrfApi.writeBuf(FLASH_ADDR, buffer, 32)
+		intrfApi.writeBuf(buffer, FLASH_ADDR)
 
 		// Either write and lock or erase, write and lock page
 
@@ -102,7 +102,7 @@ function flash_write(sector, address, buffer)
 		else
             flash_cmd = FCMD_WPL
 
-		intrfApi.writeMem32(EEFC_FCR, FKEY | (sector << 8) | flash_cmd)
+		intrfApi.write(EEFC_FCR, FKEY | (sector << 8) | flash_cmd)
 
         waitForReady()
 
@@ -148,12 +148,12 @@ function flash_erase_chip()
     try{
 		// Clear all locks
 		for (local i=0;i<flash_size/page_size;i+=lock_size/page_size) {
-			intrfApi.writeMem32(EEFC_FCR, FKEY | (i << 8) | FCMD_CLB)
+			intrfApi.write(EEFC_FCR, FKEY | (i << 8) | FCMD_CLB)
             waitForReady()
 		}
 
 		// Erase whole chip
-		intrfApi.writeMem32(EEFC_FCR, FKEY | FCMD_EA)
+		intrfApi.write(EEFC_FCR, FKEY | FCMD_EA)
 
         waitForReady()
         return ERROR_OK
@@ -179,6 +179,6 @@ function waitForReady()
 	do {
         if(GetTickCount() - time > FLASH_TIMEOUT)       
             throw ERROR_UNLOCK
-	} while (!(intrfApi.readMem32(EEFC_FSR) & FRDY))    
+	} while (!(intrfApi.read(EEFC_FSR) & FRDY))    
 }
 

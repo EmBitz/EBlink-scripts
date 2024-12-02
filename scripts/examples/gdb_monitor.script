@@ -49,7 +49,7 @@ function gdb_qRcmd(packet, length, ebBuffer)
                 eb.access(width)
                                         
             // Read the memory into buffer with 'width' access
-            InterfAPI().readMem(addr, eb, 0, num*byteLen, width)
+            InterfAPI().readBuf(eb, addr, num*byteLen, width)
           
             // Create output string 
             local outStr = ("O.K.:")

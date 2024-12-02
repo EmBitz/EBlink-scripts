@@ -50,13 +50,13 @@ function stm32_device()
     local page_size = 0x800 // Default page size
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP
-    intrfApi.writeMem32(DBGMCU_CR, DBG_STANDBY | DBG_STOP | DBG_SLEEP  )
+    intrfApi.write(DBGMCU_CR, DBG_STANDBY | DBG_STOP | DBG_SLEEP  )
 
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
-    ntrfApi.writeMem32(DBGMCU_APB1_FZ, 0x00001800)
+    ntrfApi.write(DBGMCU_APB1_FZ, 0x00001800)
 
     // Get the flash size and translate from Kbytes to bytes
-    flash_size = (intrfApi.readMem32(0x1ffff7cc)  & 0xffff) *1024
+    flash_size = (intrfApi.read(0x1ffff7cc)  & 0xffff) *1024
 
     // Set the memory map argument(s) according the device ID
       local deviceStr

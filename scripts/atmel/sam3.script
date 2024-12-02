@@ -148,18 +148,18 @@ function atmel_device()
 	local flash_desc = array(8)
 
 	try {
-		intrfApi.writeMem32(EEFC_FCR, FKEY | FCMD_GETD)
+		intrfApi.write(EEFC_FCR, FKEY | FCMD_GETD)
 
         // Wait for ready with 2 sec timeout
         local time = GetTickCount()
         do {
             if(GetTickCount() - time > 2000)       
                 throw ERROR_UNLOCK
-        } while (!(intrfApi.readMem32(EEFC_FSR) & FRDY)) 
+        } while (!(intrfApi.read(EEFC_FSR) & FRDY)) 
 
         // Read the description
 		for (local i=0;i<8;i++) {
-			flash_desc[i] = intrfApi.readMem32(EEFC_FRR)
+			flash_desc[i] = intrfApi.read(EEFC_FRR)
 		}
 	}
 	// Catch the errors

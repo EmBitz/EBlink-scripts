@@ -67,15 +67,15 @@ function findDevice()
         case "M0+":
 
             // Get the JEP106 code and check if it's Atmel
-            local JEP106 =  (intrfApi.readMem32(SAMD_DSU_PID1) >> 4)
-            JEP106 += ((intrfApi.readMem32(SAMD_DSU_PID2) & 7) << 4)
+            local JEP106 =  (intrfApi.read(SAMD_DSU_PID1) >> 4)
+            JEP106 += ((intrfApi.read(SAMD_DSU_PID2) & 7) << 4)
 
             debugf("Atmel JEP106: %x\n", JEP106)
             if( JEP106 != ATMEL_JEP106)
                    throw ERROR_NOT_FOUND
 
             // Get the part info from the DSU
-            deviceId = intrfApi.readMem32(SAMD_DSU_ID)
+            deviceId = intrfApi.read(SAMD_DSU_ID)
 
             // Check if we have a meaningful device ID
             if(deviceId == 0)
@@ -87,7 +87,7 @@ function findDevice()
             
         case "M3":
 
-            deviceId = intrfApi.readMem32(SAM3_CHIPID)
+            deviceId = intrfApi.read(SAM3_CHIPID)
 
             if (deviceId >= 0x28000961 && deviceId <= 0x29AB0A60){
                 require("atmel/sam3.script")
@@ -98,8 +98,8 @@ function findDevice()
             break
 
             // Todo: Other Atmel families
-            // intrfApi.readMem32(0x400E0740)
-            // intrfApi.readMem32(0x400E0940)
+            // intrfApi.read(0x400E0740)
+            // intrfApi.read(0x400E0940)
 
         default:
             throw ERROR_NOT_FOUND
@@ -131,10 +131,10 @@ function  reset_post(resetType)
         if( resetType != USER_RESET ){
 
             // Set the Stack pointer according the Vector table entry
-            targetApi.writeReg("SP", intrfApi.readMem32(0x00000000))
+            targetApi.writeReg("SP", intrfApi.read(0x00000000))
 
             // Set the Program pointer according the Vector table entry
-            targetApi.writeReg("PC", intrfApi.readMem32(0x00000004))
+            targetApi.writeReg("PC", intrfApi.read(0x00000004))
         }
     }
     catch(e) {

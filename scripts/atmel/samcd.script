@@ -48,7 +48,7 @@ const SAMD_SERIES_10    0x02
 const SAMD_SERIES_11    0x03
 const SAMD_SERIES_09    0x04
 
-const SAMD_DSU			0x41002000	// Device Service Unit
+const SAMD_DSU          0x41002000  // Device Service Unit
 const SAMD_DSU_STATUSA  1           // DSU status register
 
 //------------------------------------
@@ -289,12 +289,12 @@ function atmel_device()
         // Device not found signaled to parent script
         throw ERROR_NOT_FOUND;
     }
- 
+
     // We get the ram size from the lookup table
     local ram_size = devInfo[2]*1024
 
     // Get the info about the flash
-    local flashInfo = intrfApi.readMem32(SAMD_NVMCTRL + SAMD_NVMCTRL_PARAM)
+    local flashInfo = intrfApi.read(SAMD_NVMCTRL + SAMD_NVMCTRL_PARAM)
 
      // The PSZ field (bits 18:16) indicate the page size bytes as 2^(3+n)
      // so 0 is 8KB and 7 is 1024KB.
@@ -373,7 +373,7 @@ function getDeviceInfo(deviceId)
 //                          Atmel Alternative reset strategy
 //=======================================================================================
 
-const CORTEXM_DHCSR	0xE000EDF0
+const CORTEXM_DHCSR 0xE000EDF0
 const CORTEXM_AIRCR 0xE000ED0C
 const CORTEXM_DFSR  0xE000ED30
 
@@ -386,9 +386,9 @@ const CORTEXM_DHCSR_S_RESET_ST  (1 << 25)
 const SAMD_DSU_CTRLSTAT     0x41002100
 const SAMD_STATUSA_CRSTEXT  (1 << 9)
 
-const DBGKEY	(0xA05F << 16)
-const C_DEBUGEN	(1 << 0)
-const C_HALT	(1 << 1)
+const DBGKEY    (0xA05F << 16)
+const C_DEBUGEN (1 << 0)
+const C_HALT    (1 << 1)
 
 /////////////////////////////////////////////////////
 //
@@ -426,13 +426,13 @@ function reset(resetType)
 
     try{
         // Halt the core
-        intrfApi.writeMem32(CORTEXM_DHCSR, DBGKEY | C_HALT | C_DEBUGEN)
+        intrfApi.write(CORTEXM_DHCSR, DBGKEY | C_HALT | C_DEBUGEN)
 
         // The actual device reset according user request
         if(resetType == CORE_RESET)
         {
             printf("Reset: core\n")
-            intrfApi.writeMem32(CORTEXM_AIRCR, CORTEXM_AIRCR_VECTKEY | CORTEXM_AIRCR_VECTRESET)
+            intrfApi.write(CORTEXM_AIRCR, CORTEXM_AIRCR_VECTKEY | CORTEXM_AIRCR_VECTRESET)
         }
         else
         {
@@ -443,7 +443,7 @@ function reset(resetType)
             else
               printf("Reset: system\n")
 
-            intrfApi.writeMem32(CORTEXM_AIRCR, CORTEXM_AIRCR_VECTKEY | CORTEXM_AIRCR_SYSRESETREQ)
+            intrfApi.write(CORTEXM_AIRCR, CORTEXM_AIRCR_VECTKEY | CORTEXM_AIRCR_SYSRESETREQ)
         }
 
         // Exit Atmel's extended reset
@@ -452,9 +452,9 @@ function reset(resetType)
         // Poll for release from reset with 1sec timeout
         local time = GetTickCount()
         do {
-            if(GetTickCount() - time > 1000) 
-                break           
-        } while( intrfApi.readMem32(CORTEXM_DHCSR) & CORTEXM_DHCSR_S_RESET_ST)
+            if(GetTickCount() - time > 1000)
+                break
+        } while( intrfApi.read(CORTEXM_DHCSR) & CORTEXM_DHCSR_S_RESET_ST)
     }
     catch(e){
        if(e < ERROR_NOTIFIED)
@@ -471,12 +471,12 @@ function reset(resetType)
 function dsu_deassert()
 {
     try{
-        // Exit extended reset if active        
-        if(  intrfApi.readMem32(SAMD_DSU_CTRLSTAT) & SAMD_STATUSA_CRSTEXT)
+        // Exit extended reset if active
+        if(  intrfApi.read(SAMD_DSU_CTRLSTAT) & SAMD_STATUSA_CRSTEXT)
         {
             // If verbose level is debugging, inform user we are doing this
             debugf("Exit Atmel's extended reset\n")
-            intrfApi.writeMem32(SAMD_DSU_CTRLSTAT, SAMD_STATUSA_CRSTEXT)
+            intrfApi.write(SAMD_DSU_CTRLSTAT, SAMD_STATUSA_CRSTEXT)
         }
     }
     catch(e){

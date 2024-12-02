@@ -109,7 +109,7 @@ function flash_start()
         } while(targetApi.getState() != TARGET_HALTED )
 
         // Unlock Flash
-        intrfApi.writeMem32( NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_UNLOCK)
+        intrfApi.write( NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_UNLOCK)
 
         return ERROR_OK
     }
@@ -132,10 +132,10 @@ function flash_erase(sector, address)
 {
     try{
         // Set address to be erased
-        intrfApi.writeMem32( NVMCTRL + NVMCTRL_ADDR, address >> 1)
+        intrfApi.write( NVMCTRL + NVMCTRL_ADDR, address >> 1)
 
         // Erase the page
-        intrfApi.writeMem32( NVMCTRL + NVMCTRL_CTRLA,  CTRLA_CMD_KEY | CTRLA_CMD_ERASEROW)
+        intrfApi.write( NVMCTRL + NVMCTRL_CTRLA,  CTRLA_CMD_KEY | CTRLA_CMD_ERASEROW)
 
         // Wait for ready
         local time = GetTickCount()
@@ -143,7 +143,7 @@ function flash_erase(sector, address)
             // Check for time out of 2 seconds
             if(GetTickCount() - time > 2000)
                 throw ERROR_TIMEOUT
-        }while ( (intrfApi.readMem32( NVMCTRL + NVMCTRL_INTFLAG) & NVMC_READY) == 0 )
+        }while ( (intrfApi.read( NVMCTRL + NVMCTRL_INTFLAG) & NVMC_READY) == 0 )
 
         return ERROR_OK
     }
@@ -180,14 +180,14 @@ function flash_write(sector, address, buffer)
             local wrlen = ( length > pageSize ? pageSize : length)
 
             // Write page
-            targetApi.writeMem(address, buffer, offset, wrlen)
+            intrfApi.writeBuf(buffer, address, 32, offset, wrlen)
 
             offset  += wrlen
             length  -= wrlen
             address += wrlen
 
             // write page
-            intrfApi.writeMem32(NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_WRITEPAGE)
+            intrfApi.write(NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_WRITEPAGE)
 
             // Wait for ready
             local time = GetTickCount()
@@ -197,7 +197,7 @@ function flash_write(sector, address, buffer)
                 if(GetTickCount() - time > 2000)
                     throw ERROR_TIMEOUT
 
-            }while ( (intrfApi.readMem32( NVMCTRL + NVMCTRL_INTFLAG) & NVMC_READY) == 0 )
+            }while ( (intrfApi.read( NVMCTRL + NVMCTRL_INTFLAG) & NVMC_READY) == 0 )
 
         }
 
@@ -224,7 +224,7 @@ function flash_done()
 {
     try{
         // lock the flash
-        intrfApi.writeMem32(NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_LOCK)
+        intrfApi.write(NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_LOCK)
         return ERROR_OK
     }
 
@@ -251,10 +251,10 @@ function flash_erase_chip()
         targetApi.halt()
 
         // Clear DSU status
-        intrfApi.writeMem32( DSU + DSU_CTRLSTAT, STATUSA_DONE | STATUSA_PERR | STATUSA_FAIL)
+        intrfApi.write( DSU + DSU_CTRLSTAT, STATUSA_DONE | STATUSA_PERR | STATUSA_FAIL)
 
         // Erase all
-        intrfApi.writeMem32(DSU + DSU_CTRLSTAT, CTRL_CHIP_ERASE)
+        intrfApi.write(DSU + DSU_CTRLSTAT, CTRL_CHIP_ERASE)
 
         // Wait for ready
         local status
@@ -266,7 +266,7 @@ function flash_erase_chip()
             if(GetTickCount() - time > 5000)
                 throw ERROR_TIMEOUT
 
-            status = intrfApi.readMem32( DSU + DSU_CTRLSTAT)
+            status = intrfApi.read( DSU + DSU_CTRLSTAT)
         }while ( (status & (STATUSA_DONE | STATUSA_PERR | STATUSA_FAIL)) == 0 )
 
         AnimateDone()

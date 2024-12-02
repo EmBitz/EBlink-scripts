@@ -80,7 +80,7 @@ function stm32_device()
     local ram_size
 
     // Get the flash size in KB
-    flash_size = ( intrfApi.readMem32(0x08fff80c) &0xFFFF) *1024
+    flash_size = ( intrfApi.read(0x08fff80c) &0xFFFF) *1024
 
     flashDataSectorCnt_1 = highCycleFlashSec(FLASH_HIGH_CNF_1)
     flashDataSectorCnt_2 = highCycleFlashSec(FLASH_HIGH_CNF_2)
@@ -157,7 +157,7 @@ function stm32_device()
 //
 function checkHighCycleFlash(flashReg)
 {
-    return (intrfApi.readMem32(flashReg) & FLASH_HIGH_EN ? true : false)
+    return (intrfApi.read(flashReg) & FLASH_HIGH_EN ? true : false)
 }
 
 /////////////////////////////////////////////////////
@@ -169,7 +169,7 @@ function highCycleFlashSec(flashReg)
     if( !checkHighCycleFlash(flashReg) )
         return 0
     
-    return ( intrfApi.readMem32(flashReg) & FLASH_HIGH_SEC ) + 1
+    return ( intrfApi.read(flashReg) & FLASH_HIGH_SEC ) + 1
 }
 
 /////////////////////////////////////////////////////

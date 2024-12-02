@@ -113,16 +113,16 @@ function stm32_device()
     local ram_size
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
-    intrfApi.writeMem32(0xE0042004, 7)
+    intrfApi.write(0xE0042004, 7)
 
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
-    intrfApi.writeMem32(0xE0042008, 0x00001800)
+    intrfApi.write(0xE0042008, 0x00001800)
 
     // Get the flash size by reading the info register
     if(deviceId == 0x452)
-        flash_size = intrfApi.readMem32(0x1FF07A22) >> 16
+        flash_size = intrfApi.read(0x1FF07A22) >> 16
     else
-        flash_size = intrfApi.readMem32(0x1ff0f442) >> 16
+        flash_size = intrfApi.read(0x1ff0f442) >> 16
 
     flash_size = (flash_size & 0xffff) * 1024
 

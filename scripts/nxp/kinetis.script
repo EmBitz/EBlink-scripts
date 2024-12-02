@@ -114,7 +114,7 @@ function kinetis_device()
         throw ERROR_NOT_FOUND
 
 	// Read FLASH size
-    local value = intrfApi.readMem32( deviceStr == "32L2B" ? SIM_FCFG1_L2B : SIM_FCFG1 )
+    local value = intrfApi.read( deviceStr == "32L2B" ? SIM_FCFG1_L2B : SIM_FCFG1 )
 	for (local i=0;i<FLASHCONFIG.len();i++) {
 		if ((value & 0x0F000000) == FLASHCONFIG[i][0]) 
             flash_size = FLASHCONFIG[i][1]

@@ -163,7 +163,7 @@ function flash_erase(sector, address)
 
         // (2) Set the SER bit and select the sector out of the 8 in the main memory block) you wish to erase (SNB) in the FLASH_CR register
         // (3) Set the STRT bit in the FLASH_CR register also
-        intrfApi.writeMem32(FLASH_CR, (secReg<<3) | pgSize | FLASH_CR_SER | FLASH_CR_STRT)
+        intrfApi.write(FLASH_CR, (secReg<<3) | pgSize | FLASH_CR_SER | FLASH_CR_STRT)
 
 
         // (4) Wait for the BSY bit to be cleared
@@ -191,7 +191,7 @@ function flash_write(sector, address, buffer)
 {
     try{
         // Enable the program flag PG in flash_CR together with the right parallelism
-        intrfApi.writeMem32(FLASH_CR, pgSize | FLASH_CR_PG )
+        intrfApi.write(FLASH_CR, pgSize | FLASH_CR_PG )
 
         // Trim the buffer on the right byte lengths
         buffer.trim(pgWidth/8)
@@ -202,7 +202,7 @@ function flash_write(sector, address, buffer)
         intrfApi.setSpeed(maxFlashSpeed)
 
         // Write the buffer with the program width which belongs to the current voltage
-        intrfApi.writeBuf(address, buffer, pgWidth )
+        intrfApi.writeBuf(buffer, address, pgWidth )
 
         // Restore the probe speed
         intrfApi.setSpeed(probeSpeed)
@@ -211,7 +211,7 @@ function flash_write(sector, address, buffer)
         flash_check_busy(5000)
 
         // Disable the program flag  PG in flash_CR
-        intrfApi.writeMem32(FLASH_CR, 0)
+        intrfApi.write(FLASH_CR, 0)
 
         return ERROR_OK
     }
@@ -236,7 +236,7 @@ function flash_done()
 {
     try{
         // Relock the flash by setting the FLASH_CR_LOCK in the flash CR register
-        intrfApi.writeMem32(FLASH_CR, FLASH_CR_LOCK)
+        intrfApi.write(FLASH_CR, FLASH_CR_LOCK)
         return ERROR_OK
     }
 
@@ -273,16 +273,16 @@ function flash_erase_chip()
 
         // (2)(3)Set the MER and STRT bit in the FLASH_CR register
         if(DeviceAPI().sectorCount() > 12)
-            intrfApi.writeMem32(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_MER1 | FLASH_CR_STRT)
+            intrfApi.write(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_MER1 | FLASH_CR_STRT)
         else
-            intrfApi.writeMem32(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_STRT)
+            intrfApi.write(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_STRT)
 
         // (4) Wait for the BSY bit to be cleared (worst case at low voltage > 40sec)
         // (5) Check for errors
         flash_check_busy(40000)
 
         // Relock
-        intrfApi.writeMem32(FLASH_CR, FLASH_CR_LOCK)
+        intrfApi.write(FLASH_CR, FLASH_CR_LOCK)
 
         printf("Flash: chip erased.\n");
         return ERROR_OK
@@ -313,7 +313,7 @@ function flash_check_busy(timeout)
         if( (GetTickCount() - time) > timeout)
            throw ERROR_TIMEOUT
 
-        status = intrfApi.readMem32(FLASH_SR)
+        status = intrfApi.read(FLASH_SR)
 
     } while ( status &  FLASH_SR_BSY )
 
@@ -332,13 +332,13 @@ function flash_check_busy(timeout)
 function flash_unlock()
 {
     // Check if it's locked by the FLASH_CR_LOCK flag
-    if( intrfApi.readMem32(FLASH_CR) & FLASH_CR_LOCK ){
+    if( intrfApi.read(FLASH_CR) & FLASH_CR_LOCK ){
         // Write flash KEYR
-        intrfApi.writeMem32(FLASH_KEYR,KEY1)
-        intrfApi.writeMem32(FLASH_KEYR,KEY2)
+        intrfApi.write(FLASH_KEYR,KEY1)
+        intrfApi.write(FLASH_KEYR,KEY2)
 
         // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
-        if( intrfApi.readMem32(FLASH_CR) & FLASH_CR_LOCK )
+        if( intrfApi.read(FLASH_CR) & FLASH_CR_LOCK )
           throw ERROR_UNLOCK
     }
 }

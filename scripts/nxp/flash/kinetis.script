@@ -124,26 +124,26 @@ function executeFTFA(cmd,...)
 
     // Check for busy
     do {
-    } while(!(intrfApi.readMem32(FTFA_FSTAT) & FSTAT_CCIF))
+    } while(!(intrfApi.read(FTFA_FSTAT) & FSTAT_CCIF))
 
     // Clear any old errors
-    intrfApi.writeMem32(FTFA_FSTAT,0x30)
+    intrfApi.write(FTFA_FSTAT,0x30)
 
     // Write command to FCCOB
-    intrfApi.writeMem32(FTFA_FCCOB, cmd)
+    intrfApi.write(FTFA_FCCOB, cmd)
 
     // Write params to FCCOB
     for (local i=0;i < 2 && i < vargv.len();i++) {
-       intrfApi.writeMem32(FTFA_FCCOB+(i+1)*4, vargv[i])
+       intrfApi.write(FTFA_FCCOB+(i+1)*4, vargv[i])
     }
 
     // Execute
-    intrfApi.writeMem32(FTFA_FSTAT, FSTAT_CCIF)
+    intrfApi.write(FTFA_FSTAT, FSTAT_CCIF)
 
     // Check for busy
     local value
     do {
-        value = intrfApi.readMem32(FTFA_FSTAT)
+        value = intrfApi.read(FTFA_FSTAT)
     } while(!(value & FSTAT_CCIF))
 
     if (value & 0x31)

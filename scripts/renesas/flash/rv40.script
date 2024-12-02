@@ -101,7 +101,7 @@ function flash_start()
                 throw ERROR_TIMEOUT
         } while(targetApi.getState() != TARGET_HALTED )
 
-        intrfApi._writeMem(FWEPROR_REG, FWEPROR_PERMIT,8)
+        intrfApi.write(FWEPROR_REG, FWEPROR_PERMIT,8)
 
         return ERROR_OK
     }
@@ -133,11 +133,11 @@ function flash_erase(sector, address)
             switchPeMode(peMode.DATA_PE)
         }
 
-        intrfApi._writeMem(FCPSR_REG, FCPSR_ESUSPMD, 16)
-        intrfApi.writeMem32(FSADDR_REG, address)
+        intrfApi.write(FCPSR_REG, FCPSR_ESUSPMD, 16)
+        intrfApi.write(FSADDR_REG, address)
 
-        intrfApi._writeMem(CMD_REG, CMD_BLOCK_ERASE,8)
-        intrfApi._writeMem(CMD_REG, CMD_FINAL,8)
+        intrfApi.write(CMD_REG, CMD_BLOCK_ERASE,8)
+        intrfApi.write(CMD_REG, CMD_FINAL,8)
         checkBusy(FLASH_TIMEOUT)
         error_check(FSTATR_ERSERR | FSTATR_ILGLERR)
         return ERROR_OK
@@ -181,23 +181,23 @@ function flash_write(sector, address, buffer)
                writeSize = len
 
             //Set the first address of the target block to the FSADDR register
-            intrfApi.writeMem32(FSADDR_REG, address)
+            intrfApi.write(FSADDR_REG, address)
             address += writeSize
 
             // Write E8h to the FACI command-issuing area
-            intrfApi._writeMem(CMD_REG, CMD_PROGRAM, 8)
+            intrfApi.write(CMD_REG, CMD_PROGRAM, 8)
 
             // Write N to the FACI command-issuing area
-            intrfApi._writeMem(CMD_REG, writeSize/2, 8)
+            intrfApi.write(CMD_REG, writeSize/2, 8)
 
             for (local i= 0; i < (writeSize/2); i++) {
                 // Write next 2 bytes of data to the FACI commandissuing area
-                intrfApi._writeMem(CMD_REG, buffer.get16(idx),16)
+                intrfApi.write(CMD_REG, buffer.get16(idx),16)
                 idx += 2
                 len -= 2
             }
 
-            intrfApi._writeMem(CMD_REG, CMD_FINAL,8)
+            intrfApi.write(CMD_REG, CMD_FINAL,8)
             checkBusy(FLASH_TIMEOUT)
         }
         error_check(FSTATR_PRGERR  | FSTATR_ILGLERR)
@@ -222,7 +222,7 @@ function flash_done()
     try{
 
         switchPeMode(peMode.READ_PE)
-        intrfApi._writeMem(FWEPROR_REG, FWEPROR_PROHIB,8)
+        intrfApi.write(FWEPROR_REG, FWEPROR_PROHIB,8)
 
         // A reset works perhaps nicer because target can resume rigth away
 //        targetApi.reset(SYSTEM_RESET)
@@ -249,7 +249,7 @@ function checkBusy(timeout)
     do{
         if(GetTickCount() - time > timeout)
             throw ERROR_TIMEOUT
-    }while ( !(intrfApi.readMem32(FSTATR_REG) & FSTATR_RDY) )
+    }while ( !(intrfApi.read(FSTATR_REG) & FSTATR_RDY) )
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -258,21 +258,21 @@ function checkBusy(timeout)
 //
 function error_check(errors)
 {
-   local status = intrfApi.readMem32(FSTATR_REG)
+   local status = intrfApi.read(FSTATR_REG)
 
 
-   if( intrfApi._readMem(FASTAT_REG, 8) & FASTAT_CMDLK){
+   if( intrfApi.read(FASTAT_REG, 8) & FASTAT_CMDLK){
        debugf("Recovery from the Command-Locked State\n")
        if(status & FSTATR_ILGLERR){
             debugf("If an illegal error occurred read and clear CFAE and DFAE in FASTAT\n")
-           intrfApi._readMem(FASTAT_REG, 8)
-           intrfApi._writeMem(FASTAT_REG, 0, 8)
+           intrfApi.read(FASTAT_REG, 8)
+           intrfApi.write(FASTAT_REG, 0, 8)
            checkBusy(FLASH_TIMEOUT)
          }
    }
 
    if(status & errors){
-       intrfApi._writeMem(CMD_REG, CMD_FORCED_STOP, 8)
+       intrfApi.write(CMD_REG, CMD_FORCED_STOP, 8)
        throw ERROR_FLASH
    }
 }
@@ -283,7 +283,7 @@ function error_check(errors)
 //
 function switchPeMode(mode)
 {
-    local entryr = intrfApi._readMem(FENTRYR_REG, 16)
+    local entryr = intrfApi.read(FENTRYR_REG, 16)
 
     switch(mode){
         case peMode.CODE_PE:
@@ -299,12 +299,12 @@ function switchPeMode(mode)
             checkBusy(FLASH_TIMEOUT)
     }
 
-    intrfApi._writeMem(FMEPROT_REG, FMEPROT_UNLOCK, 16)
+    intrfApi.write(FMEPROT_REG, FMEPROT_UNLOCK, 16)
 
     // If we switch from flash modes we have to go via read mode
     if( mode && entryr){
         checkBusy(FLASH_TIMEOUT)
-        intrfApi._writeMem(FENTRYR_REG, FENTRYR_KEY, 16)
+        intrfApi.write(FENTRYR_REG, FENTRYR_KEY, 16)
     }
 
     local fev = 0
@@ -319,17 +319,17 @@ function switchPeMode(mode)
             checkBusy(FLASH_TIMEOUT)
     }
 
-    intrfApi._writeMem(FENTRYR_REG, FENTRYR_KEY | fev, 16)
+    intrfApi.write(FENTRYR_REG, FENTRYR_KEY | fev, 16)
 
     local time = GetTickCount()
     do{
         if(GetTickCount() - time > FLASH_TIMEOUT)
             throw ERROR_TIMEOUT
 
-    }while(intrfApi._readMem(FENTRYR_REG, 16) != fev)
+    }while(intrfApi.read(FENTRYR_REG, 16) != fev)
 
     if(fev == 0)
-       intrfApi._writeMem(FMEPROT_REG, FMEPROT_LOCK, 16)
+       intrfApi.write(FMEPROT_REG, FMEPROT_LOCK, 16)
 
     error_check(FSTATR_ILGLERR)
 }
