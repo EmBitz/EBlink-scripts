@@ -167,39 +167,23 @@ function flash_erase(sector, address)
 function flash_write(sector, address, buffer)
 {
     try{
-        local length = buffer.getSize()  // The number of bytes in the data buffer
-        local offset = 0                 // Buffer offset for writing
-
         // For direct flash writing we can't be too fast.
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
-        while(length)
-        {
-            // Do we have a whole page length or less
-            local wrlen = ( length > pageSize ? pageSize : length)
+        // Transfer the buffer into the flash
+        intrfApi.writeBuf(buffer, address)
 
-            // Write page
-            intrfApi.writeBuf(buffer, address, 32, offset, wrlen)
+        // write page command
+        intrfApi.write(NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_WRITEPAGE)
 
-            offset  += wrlen
-            length  -= wrlen
-            address += wrlen
-
-            // write page
-            intrfApi.write(NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_WRITEPAGE)
-
-            // Wait for ready
-            local time = GetTickCount()
-            do{
-
-                // Check for time out of 2 seconds
-                if(GetTickCount() - time > 2000)
-                    throw ERROR_TIMEOUT
-
-            }while ( (intrfApi.read( NVMCTRL + NVMCTRL_INTFLAG) & NVMC_READY) == 0 )
-
-        }
+        // Wait for ready
+        local time = GetTickCount()
+        do{
+            // Check for time out of 2 seconds
+            if(GetTickCount() - time > 2000)
+                throw ERROR_TIMEOUT
+        }while ( (intrfApi.read( NVMCTRL + NVMCTRL_INTFLAG) & NVMC_READY) == 0 )
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
@@ -266,7 +250,7 @@ function flash_erase_chip()
             if(GetTickCount() - time > 5000)
                 throw ERROR_TIMEOUT
 
-            status = intrfApi.read( DSU + DSU_CTRLSTAT)
+            status = intrfApi.read(DSU + DSU_CTRLSTAT)
         }while ( (status & (STATUSA_DONE | STATUSA_PERR | STATUSA_FAIL)) == 0 )
 
         AnimateDone()
@@ -282,6 +266,7 @@ function flash_erase_chip()
             errorf("Erase failed.\n");
             throw ERROR_NOTIFIED
         }
+
         return ERROR_OK
     }
 

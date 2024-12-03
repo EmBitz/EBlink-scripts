@@ -1,6 +1,8 @@
 /////////////////////////////////////////////////////
 //
+// Monitor command: ReadMemAP  <APBaseAddr> <Addr>  <NumItems> <Flags>
 //
+//   Implementation with "amregex" which will fill an array with regex matches
 //
 function gdb_qRcmd(packet, length, ebBuffer)
 { 
@@ -14,36 +16,13 @@ function gdb_qRcmd(packet, length, ebBuffer)
             local num    = strToNumber(matches[3])
             local flags  = strToNumber(matches[4])
                         
-            local byteLen = 4      
-            local width   = -1   // Auto(=32)      
-            local fspec   = "0x%08X"            
+            local byteLen = (flags == 0 ? 4  : flags)
+            local width   = (flags == 0 ? -1 : byteLen*8)
+            local fspec   = format("0x%%0%dX",byteLen*2)
             
-            // Handle the width specifier flags
-            switch(flags & 7){
-                case 0: 
-                    // Default
-                    break
-
-                case 1:
-                    width =  8;
-                    byteLen= 1;
-                    fspec = "0x%02X" 
-                    break
-
-                case 2:
-                    width = 16
-                    byteLen= 2
-                    fspec = "0x%04X" 
-                    break
-
-                case 4:
-                default:
-                    width =  32
-                    break
-            }
+            // Allocate an EBbuffer
+            local eb = EBbuffer()
             
-            // Allocate an EBbuffer with enough space
-            local eb = EBbuffer(num*byteLen)
             // Set the EBbuffer access '[]' width
             if(width > 0)
                 eb.access(width)
@@ -58,8 +37,11 @@ function gdb_qRcmd(packet, length, ebBuffer)
                 if( i < num -1) outStr += ","
             }
             
+            // Print info if verbose level includes debug info
+            debugf("My monitor output: "+outStr+"\n")            
+            
             // Return answer to GDB (we return the number of bytes writen)
-            return ebBuffer.printf(outStr+"\n")
+            return ebBuffer.format(outStr+"\n")
         }                   
         return ERROR_OK
     }

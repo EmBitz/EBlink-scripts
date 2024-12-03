@@ -470,18 +470,21 @@ function reset(resetType)
 //
 function dsu_deassert()
 {
-    try{
-        // Exit extended reset if active
-        if(  intrfApi.read(SAMD_DSU_CTRLSTAT) & SAMD_STATUSA_CRSTEXT)
-        {
-            // If verbose level is debugging, inform user we are doing this
-            debugf("Exit Atmel's extended reset\n")
-            intrfApi.write(SAMD_DSU_CTRLSTAT, SAMD_STATUSA_CRSTEXT)
+    local time = GetTickCount()
+    do{
+        try{
+            // Exit extended reset if active
+            if(  intrfApi.read(SAMD_DSU_CTRLSTAT) & SAMD_STATUSA_CRSTEXT)
+            {
+                // If verbose level is debugging, inform user we are doing this
+                debugf("Exit Atmel's extended reset\n")
+                intrfApi.write(SAMD_DSU_CTRLSTAT, SAMD_STATUSA_CRSTEXT)
+            }
+            return
         }
-    }
-    catch(e){
-       if(e < ERROR_NOTIFIED)
-           errorf("ERROR: SAM DSU deassert failed\n")
-       throw ERROR_NOTIFIED
-    }
+        catch(e){ debugf("Failure Atmel's extended reset\n")  }
+
+        if(GetTickCount() - time > 1000)
+                break
+    }while(1)
 }
