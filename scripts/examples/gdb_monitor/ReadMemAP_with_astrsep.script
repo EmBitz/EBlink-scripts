@@ -28,12 +28,12 @@ function gdb_qRcmd(packet, length, ebBuffer)
 
             local eb = EBbuffer()
 
-            // Set the EBbuffer access '[]' width
-            if(width > 0)
-                eb.access(width)
-
             // Read the memory into buffer with 'width' access
             InterfAPI().readBuf(eb, addr, num*byteLen, width)
+
+            // Set the EBbuffer index '[]' access width
+            if(width > 0)
+                eb.access(width)
 
             // Create output string
             local outStr = ("O.K.:")
@@ -45,9 +45,12 @@ function gdb_qRcmd(packet, length, ebBuffer)
             // Print info if verbose level includes debug info
             debugf("My monitor output: "+outStr+"\n")
 
-            // Return answer to GDB (we return the number of bytes writen)
-            return ebBuffer.format(outStr+"\n")
+            // Return answer to GDB
+            ebBuffer.format(outStr+"\n")
         }
+
+        // Add other commnds here...
+
         return ERROR_OK
     }
     catch(e){
