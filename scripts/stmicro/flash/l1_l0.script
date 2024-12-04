@@ -86,16 +86,16 @@ function flash_start()
         // Read flash lock status
         if( intrfApi.read(FLASH_BASE|FLASH_CR) & (FLASH_CR_PELOCK|FLASH_CR_PRGLOCK) ){
             // Unlock
-            intrfApi.write(FLASH_BASE|FLASH_PEKEYR,PEKEY1)
-            intrfApi.write(FLASH_BASE|FLASH_PEKEYR,PEKEY2)
+            intrfApi.write(FLASH_BASE|FLASH_PEKEYR, PEKEY1)
+            intrfApi.write(FLASH_BASE|FLASH_PEKEYR, PEKEY2)
 
             // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
             if( intrfApi.read(FLASH_BASE|FLASH_CR) & FLASH_CR_PELOCK )
                 throw ERROR_UNLOCK
 
             // Unlock flash program
-            intrfApi.write(FLASH_BASE|FLASH_PRGKEYR,PRGKEY1)
-            intrfApi.write(FLASH_BASE|FLASH_PRGKEYR,PRGKEY2)
+            intrfApi.write(FLASH_BASE|FLASH_PRGKEYR, PRGKEY1)
+            intrfApi.write(FLASH_BASE|FLASH_PRGKEYR, PRGKEY2)
 
             // check CR.prglock is cleared
             if( intrfApi.read(FLASH_BASE|FLASH_CR) & FLASH_CR_PRGLOCK )
@@ -165,11 +165,14 @@ function flash_write(sector, address, buffer)
 
         // Write halfpages, the buffer size is always the same as sector size (no sector trim)
         local halfPageSize = buffer.getSize()/2
-        intrfApi.writeMem(address, buffer, 0, halfPageSize, 32 )
+       brkPt()         
+        intrfApi.writeBuf(buffer, address, 32, 0, halfPageSize )
 
         checkBusy(FLASH_TIMEOUT)
 
-        intrfApi.writeMem(address+halfPageSize, buffer, halfPageSize, halfPageSize, 32 )
+        // Second half of the page
+        intrfApi.writeBuf(buffer, address+halfPageSize, 32, halfPageSize, halfPageSize )
+
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)

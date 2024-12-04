@@ -209,6 +209,7 @@ function flash_done()
     try{
         // lock the flash
         intrfApi.write(NVMCTRL + NVMCTRL_CTRLA, CTRLA_CMD_KEY | CTRLA_CMD_LOCK)
+        targetApi.reset(0)
         return ERROR_OK
     }
 

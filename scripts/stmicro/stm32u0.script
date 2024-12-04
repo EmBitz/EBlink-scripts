@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////
 //
-//                   STM32L0x
+//                   STM32U0x
 //
 
 /////////////////////////////////////////////////////
@@ -22,6 +22,9 @@ const mem_template = @@"
  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
 </memory-map>"
 
+// The U5 has a 128 width program word
+const pgmBitsWidth 64
+
 // The flash parameters needed by the flash loader script
 const FLASH_BASE 0x40022000
 
@@ -34,49 +37,34 @@ const FLASH_BASE 0x40022000
 function stm32_device()
 {
     local flash_size
-    local page_size = 0x80
-    local ram_size = 0x2000
-
-    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
-    intrfApi.write(0x40015804, 6)
-
-    // Get the flash size by reading the info register
-    flash_size = intrfApi.read(0x1ff8007c)
-    flash_size = flash_size & ~3
-    flash_size = (flash_size & 0xffff) * 1024
+    local page_size
+    local ram_size
 
     local deviceStr
     switch(deviceId){
-        case 0x417 :0
-            deviceStr = "(Cat. 3)"
-            page_size = 0x80
-            ram_size = 0x2000
-            break
-
-        case 0x425 :
-            deviceStr = "(Cat. 2)"
-            page_size = 0x80
-            ram_size = 0x2000
-            break
-
-        case 0x447 :
-            deviceStr = "(Cat. 5)"
-            page_size = 0x80
-            ram_size = 0x5000
-            break
-
-        case 0x457 :
-            deviceStr = "(Cat. 1)"
-            page_size = 0x80
-            ram_size = 0x2000
+        // STM32U031xx flash page 
+        case 0x459 :
+            deviceStr = "31xx"
+            page_size = 0x400  // 2KB pages
+            ram_size  = 0x3000 // 12KB
+            flash_size = intrfApi.read(0x1fff3ea0) // flash size register
+        // STM32U073xx has 2K flash pages
+        case 0x489 :
+            deviceStr = "73x/083x"
+            page_size = 0x400  // 2KB pages
+            ram_size  = 0xA000 // 40KB
+            flash_size = intrfApi.read(0x1fff6ea0) // flash size register
             break
 
         default:
             throw ERROR_NOT_FOUND
     }
 
+    // Get the flash size by reading the info register
+    flash_size = (flash_size & 0xffff) * 1024
+
     // Inform user of the device found
-    printf("STmicro family : STM32L0xx %s\n", deviceStr)
+    printf("STmicro family : STM32U0%s\n", deviceStr)
 
     // Inform the user
     printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
@@ -95,13 +83,11 @@ function stm32_device()
 
     DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size, page_size) )
 
-    // The erased value of these chips is not 0xFF but 0x00
-    DeviceAPI().setFlashEraseValue(0x00)
-
     // Don't trim the sectors, only whole sector sizes are programmed
     DeviceAPI().setFlashDontTrim(true)
 
     // Flash loader script
-    require("stmicro/flash/l1_l0.script")
+    require("stmicro/flash/u0.script")
+
 }
 
