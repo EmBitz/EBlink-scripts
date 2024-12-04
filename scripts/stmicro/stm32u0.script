@@ -1,0 +1,95 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32U0x
+//
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces. (we omit the DOCTYPE, GDB isn't using it. )
+//
+const mem_template = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <memory type=\"rom\" start=\"0x00000000\" length=\"0x%x\"/>
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+  <property name=\"blocksize\">0x%x</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <memory type=\"rom\" start=\"0x1FF80000\" length=\"20\"/>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+// The U5 has a 128 width program word
+const pgmBitsWidth 64
+
+// The flash parameters needed by the flash loader script
+const FLASH_BASE 0x40022000
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local flash_sreg
+    local flash_size
+    local page_size
+    local ram_size
+
+    local deviceStr
+    switch(deviceId){
+        // STM32U031xx flash page 
+        case 0x459 :
+            deviceStr  = "31xx"
+            page_size  = 0x400  // 2KB pages
+            ram_size   = 0x3000 // 12KB
+            flash_sreg = 0x1fff3ea0 // flash size register
+        // STM32U073xx has 2K flash pages
+        case 0x489 :
+            deviceStr  = "73x/083x"
+            page_size  = 0x400  // 2KB pages
+            ram_size   = 0xA000 // 40KB
+            flash_sreg = 0x1fff6ea0 // flash size register
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    _n_throw(intrfApi.readMem32(flash_sreg))
+    flash_size = (intrfApi.value32 &0xFFFF)*1024
+
+
+    // Inform user of the device found
+    printf("STmicro family : STM32U0%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+    }
+
+    DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size, page_size) )
+
+    // Don't trim the sectors, only whole sector sizes are programmed
+    DeviceAPI().setFlashDontTrim(true)
+
+    // Flash loader script
+    require("stmicro/flash/u0.script")
+
+}
+
