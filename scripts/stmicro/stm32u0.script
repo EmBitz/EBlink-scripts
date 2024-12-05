@@ -17,12 +17,12 @@ const mem_template = @@"
   <property name=\"blocksize\">0x%x</property>
   <property name=\"secstart\">0</property>
  </memory>
- <memory type=\"rom\" start=\"0x1FF80000\" length=\"20\"/>
- <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
- <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+ <memory type=\"rom\" start=\"0x1FFF0000\" length=\"0x8000\"/>
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x26400\"/>
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x20000000\"/>
 </memory-map>"
 
-// The U5 has a 128 width program word
+// The U0 has a 64 bits width program word
 const pgmBitsWidth 64
 
 // The flash parameters needed by the flash loader script
@@ -43,17 +43,17 @@ function stm32_device()
 
     local deviceStr
     switch(deviceId){
-        // STM32U031xx flash page 
         case 0x459 :
             deviceStr  = "31xx"
-            page_size  = 0x400  // 2KB pages
-            ram_size   = 0x3000 // 12KB
+            page_size  = 0x800      // 2KB
+            ram_size   = 0x3000     // 12KB
             flash_sreg = 0x1fff3ea0 // flash size register
-        // STM32U073xx has 2K flash pages
+            break;
+
         case 0x489 :
             deviceStr  = "73x/083x"
-            page_size  = 0x400  // 2KB pages
-            ram_size   = 0xA000 // 40KB
+            page_size  = 0x800      // 2KB
+            ram_size   = 0xA000     // 40KB
             flash_sreg = 0x1fff6ea0 // flash size register
             break
 
