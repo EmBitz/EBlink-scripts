@@ -27,14 +27,14 @@ const mem_template_H5 = @@"
    <property name=\"secstart\">0</property>
   </memory>
 
-  <!-- Highcycle data flash #1 -->
+  <!-- Highcycle data flash 1 -->
   <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
    <property name=\"blocksize\">0x1800</property>
    <property name=\"secstart\">%d</property>
    <property name=\"sectype\">nocache</property>
   </memory>
 
-  <!-- Highcycle data flash #2 -->
+  <!-- Highcycle data flash 2 -->
   <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
    <property name=\"blocksize\">0x1800</property>
    <property name=\"secstart\">%d</property>
