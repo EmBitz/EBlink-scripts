@@ -8,6 +8,7 @@
 // Used parameters from parent script(s)
 //
 // - flashBank2Start
+// - startHcSec
 //
 
 const FLASH_BASE 0x40022000
@@ -16,27 +17,54 @@ const FLASH_BASE 0x40022000
 const FLASH_ACCESS_CTRL (0x00)
 const FLASH_KEYR        (0x04)
 const FLASH_OPTION_KEY  (0x0c)
-const FLASH_STATUS      (0x20)
-const FLASH_CR          (0x28)
-const FLASH_CLEAR_CTRL  (0x30)
+const FLASH_NSSR        (0x20)
+const FLASH_NSCR        (0x28)
+const FLASH_NSCCR       (0x30)
 
 // FLASH_NSCR control bit flags
-const FLASH_CR_LOCK         (1 << 0)
-const FLASH_CR_PROGRAM      (1 << 1)
-const FLASH_CR_SECTOR_ERASE (1 << 2)
-const FLASH_CR_BANK_ERASE   (1 << 3)
-const FLASH_CR_START        (1 << 5)
-const FLASH_CR_MASS_ERASE   (1 << 15)
-const FLASH_CR_BKSEL        (1 << 31)
+const FLASH_NSCR_LOCK         (1 << 0)
+const FLASH_NSCR_PGM          (1 << 1)
+const FLASH_NSCR_SER          (1 << 2)
+const FLASH_NSCR_BER          (1 << 3)
+const FLASH_NSCR_FW           (1 << 4)
+const FLASH_NSCR_START        (1 << 5)
+const FLASH_NSCR_MASS_MER     (1 << 15)
+const FLASH_NSCR_EOPIE        (1 << 16)
+const FLASH_NSCR_WRPERRIE     (1 << 17)
+const FLASH_NSCR_PGSERRIE     (1 << 18)
+const FLASH_NSCR_STRBERRIE    (1 << 19)
+const FLASH_NSCR_INCERRIE     (1 << 20)
+const FLASH_NSCR_OBKERRIE     (1 << 21)
+const FLASH_NSCR_OBKWERRIE    (1 << 22)
+const FLASH_NSCR_OPTCHGERRIE  (1 << 23)
+const FLASH_NSCR_BKSEL        (1 << 31)
+const FLASH_NSCR_PAGE_SHIFT   (6)
 
-const FLASH_CR_PAGE_SHIFT   (6)
+// Flash NSSR flags
+const FLASH_NSSR_BUSY       (1 << 0)
+const FLASH_NSSR_WBNE       (1 << 1)
+const FLASH_NSSR_BUSY       (1 << 3)
+const FLASH_NSSR_EOP        (1 << 16)
+const FLASH_NSSR_WRPERR     (1 << 17)
+const FLASH_NSSR_PGSERR     (1 << 18)
+const FLASH_NSSR_STRBERR    (1 << 19)
+const FLASH_NSSR_INCERR     (1 << 20)
+const FLASH_NSSR_OBKERR     (1 << 21)
+const FLASH_NSSR_OBKWERR    (1 << 22)
+const FLASH_NSSR_OPTCHGERR  (1 << 23)
 
-// FLASH status bit flags
-const FLASH_STATUS_BUSY       (1 << 0)
-const FLASH_STATUS_EOP        (1 << 16)
+// FLASH_NSCCR  flags
+const FLASH_NSCCR_CLREOP        (1 << 16)
+const FLASH_NSCCR_CLRWRPERR     (1 << 17)
+const FLASH_NSCCR_CLRPGSERR     (1 << 18)
+const FLASH_NSCCR_CLRSTRBERR    (1 << 19)
+const FLASH_NSCCR_CLRINCERR     (1 << 20)
+const FLASH_NSCCR_CLROBKERR     (1 << 21)
+const FLASH_NSCCR_CLROBKWERR    (1 << 22)
+const FLASH_NSCCR_CLROPTCHGERR  (1 << 23)
 
 // All the possible errors mask
-const FLASH_STATUS_ERROR_MASK 0xFC0000
+const FLASH_NSSR_ERROR_MASK 0xFC0000
 
 const FLASH_KEYR1  0x45670123
 const FLASH_KEYR2  0xCDEF89AB
@@ -104,13 +132,17 @@ function flash_start()
 function flash_erase(sector, address)
 {
     try{
-        local eraseFlags = FLASH_CR_SECTOR_ERASE | FLASH_CR_START  |  (sector << FLASH_CR_PAGE_SHIFT )
+        // If this is high cycle calculate the right sector number
+        if(address >= 0x09000000)
+            sector += startHcSec;
+
+        local eraseFlags = (sector << FLASH_NSCR_PAGE_SHIFT ) | FLASH_NSCR_SER | FLASH_NSCR_START
 
         // Is this flash bank 1 or 2 ?
-        if(address >= flashBank2Start)
-            eraseFlags  = eraseFlags | FLASH_CR_BKSEL
+        if( (address >= flashBank2Start && address < 0x09000000 ) || address >= 0x0900C000 )
+            eraseFlags  = eraseFlags | FLASH_NSCR_BKSEL
 
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, eraseFlags ) )
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, eraseFlags ) )
 
         flash_check_busy(10000)
         return ERROR_OK
@@ -136,21 +168,19 @@ function flash_erase(sector, address)
 function flash_write(sector, address, buffer)
 {
     try{
-        // Flash loader works with multiple of 16 bytes.
-        buffer.trim(16)
+        // Handle highCycle must be flashed with multiplies of 2
+        // Normal memory must be flashed with multiplies of 16
+        buffer.trim(address >= 0x09000000 ? 2 : 16 )
 
-        // Check and clear all error programming flags due to a previous programming. If not, PGSERR is set.
-        clear_flash_errors()
-
-        // Set the PG bit of the FLASH control register (FLASH_CR)
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR,  FLASH_CR_PROGRAM ) )
+        // Set the PG bit of the FLASH control register
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR,  FLASH_NSCR_PGM ) )
 
         // Adjust the probe speed to the maximum for direct write
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
-        // Program the flash with 32 bit width memory access
-        _n_throw( intrfApi.writeBuf(address, buffer, 32) )
+        // Program the flash with 32 bit and highCycle with 16 bit width memory access
+        _n_throw( intrfApi.writeBuf(address, buffer, (address >= 0x09000000 ? 16 :32) ) )
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
@@ -175,8 +205,8 @@ function flash_write(sector, address, buffer)
 function flash_done()
 {
     try{
-        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, intrfApi.value32 | FLASH_CR_LOCK) )
+        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, intrfApi.value32 | FLASH_NSCR_LOCK) )
         return ERROR_OK
     }
     catch(e) {
@@ -188,15 +218,6 @@ function flash_done()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//   Clear error's
-//
-function clear_flash_errors()
-{
-    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CLEAR_CTRL, intrfApi.value32 & (FLASH_STATUS_ERROR_MASK | FLASH_STATUS_EOP)  ) )
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-//
 //   Lock the flash
 //
 function flash_check_busy(timeout)
@@ -204,19 +225,20 @@ function flash_check_busy(timeout)
     local time = GetTickCount()
     do{
         AnimateCursor()
-        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_STATUS) )
+        _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSSR) )
 
         if(GetTickCount() - time > timeout)
             _n_throw(ERROR_TIMEOUT)
 
-    }while ( (intrfApi.value32 & FLASH_STATUS_BUSY) && !( intrfApi.value32 & FLASH_STATUS_EOP))
+    }while ( (intrfApi.value32 & FLASH_NSSR_BUSY) )// && !( intrfApi.value32 & FLASH_NSSR_EOP))
 
     AnimateDone()
 
-    if( intrfApi.value32 & FLASH_STATUS_ERROR_MASK)
+    if( intrfApi.value32 & FLASH_NSSR_ERROR_MASK)
             _n_throw( ERROR_FLASH )
 
-    clear_flash_errors()
+    _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCCR,
+                    intrfApi.value32 & (FLASH_NSSR_ERROR_MASK | FLASH_NSSR_EOP)  ) )
 }
 
 
@@ -230,8 +252,8 @@ function flash_unlock()
     _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEYR1 ) )
     _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_KEYR, FLASH_KEYR2 ) )
 
-    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_CR) )
-    if(intrfApi.value32 & FLASH_CR_LOCK )
+    _n_throw( intrfApi.readMem32(FLASH_BASE + FLASH_NSCR) )
+    if(intrfApi.value32 & FLASH_NSCR_LOCK )
        _n_throw(ERROR_UNLOCK)
 }
 
@@ -251,7 +273,7 @@ function flash_erase_chip()
 
         _n_throw( targetApi.halt() )
         flash_unlock()
-        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_CR, FLASH_CR_MASS_ERASE |  FLASH_CR_START ) )
+        _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_MASS_MER |  FLASH_NSCR_START ) )
 
         flash_check_busy(10000)
         flash_done()
