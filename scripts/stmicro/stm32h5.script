@@ -27,18 +27,18 @@ const mem_template_H5 = @@"
    <property name=\"secstart\">0</property>
   </memory>
 
-  <!-- Highcycle data flash #1 -->
+  <!-- Highcycle data flash 1 -->
   <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
    <property name=\"blocksize\">0x1800</property>
    <property name=\"secstart\">%d</property>
-   <property name=\"sectype\">nocache</property>
+   <property name=\"sectype\">virtual</property>
   </memory>
 
-  <!-- Highcycle data flash #2 -->
+  <!-- Highcycle data flash 2 -->
   <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
    <property name=\"blocksize\">0x1800</property>
    <property name=\"secstart\">%d</property>
-   <property name=\"sectype\">nocache</property>
+   <property name=\"sectype\">virtual</property>
   </memory>
 
   <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
@@ -54,7 +54,9 @@ const FLASH_HIGH_EN    (1<<15)
 const FLASH_HIGH_SEC   0x7
 
 // The start address of flash bank 2
-flashBank2Start      <- 0
+flashBank2Start <- 0
+// The start sector of HighCycle
+startHcSec <- 0
 
 /////////////////////////////////////////////////////
 //
@@ -110,16 +112,19 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
+    // Set the first sector number of highCycle area
+    startHcSec = (flash_size < 1024*1024 ? 24 : 120)
+
     // Calculate start address of flashbank 2
     flashBank2Start = 0x08000000 + flash_size/2
 
     // Check if there are any HighCycle sectors active in one of the two banks
     local flashDataSectorCnt_1 = highCycleFlashSec(FLASH_HIGH_CNF_1)
     local flashDataSectorCnt_2 = highCycleFlashSec(FLASH_HIGH_CNF_2)
-    
+
      // Calculate the bank sizes according HighCycle options (H503 both are zero)
     local bankSize_1 = getFlashBankSize(flash_size, flashDataSectorCnt_1)
-    local bankSize_2 = getFlashBankSize(flash_size, flashDataSectorCnt_2)    
+    local bankSize_2 = getFlashBankSize(flash_size, flashDataSectorCnt_2)
 
     // Inform the user about the HighCycle data flash
     if(flashDataSectorCnt_1)
@@ -147,7 +152,7 @@ function stm32_device()
 //
 function highCycleFlashSec(flashReg)
 {
-    local regVal = intrfApi.read(flashReg) 
+    local regVal = intrfApi.read(flashReg)
     return ( regVal & FLASH_HIGH_EN  ? (regVal & FLASH_HIGH_SEC)+1 : 0)
 }
 
