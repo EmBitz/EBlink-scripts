@@ -3,6 +3,11 @@
 //                   STM32H5
 //
 //  ToDo:  - option programming
+//         - HighCycle data programming
+//
+// Used parameters from parent script(s)
+//
+// - flashBank2Start
 //
 
 const FLASH_BASE 0x40022000
@@ -37,7 +42,6 @@ const FLASH_KEYR1  0x45670123
 const FLASH_KEYR2  0xCDEF89AB
 
 maxFlashSpeed   <- 24000 // Can be changed from CLI
-halfOfSectors   <- 0     // The half of the number of sectors of the current device
 
 /////////////////////////////////////////////////////////////////////////////////
 //
@@ -48,8 +52,6 @@ halfOfSectors   <- 0     // The half of the number of sectors of the current dev
 function flash_start()
 {
     try{
-        halfOfSectors = DeviceAPI().sectorCount()/2
-
         // Override the maximum flash speed from cli
         if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
             maxFlashSpeed = FLASH_SPEED
@@ -93,16 +95,19 @@ function flash_start()
 // EBlink callback
 //
 //   Erase sequence according ST user manual
+//   Addr -  >=0x0900C000      : HighCycle #2 secNumber = 8-sector (inverse sector count)
+//   Addr -  >=0x09000000      : HighCycle #1 secNumber = 8-sector (inverse sector count)
+//   Addr -  >=flashBank2Start : Flash bank 2 secNumber = sector
+//   Addr -  >=0x08000000      : Flash bank 1 secNumber = sector
 //
 function flash_erase(sector, address)
 {
     try{
-        local eraseFlags = FLASH_CR_SECTOR_ERASE | FLASH_CR_START
+        local eraseFlags = FLASH_CR_SECTOR_ERASE | FLASH_CR_START  |  (sector << FLASH_CR_PAGE_SHIFT )
 
-        if(sector >= halfOfSectors)
-            eraseFlags  = eraseFlags | ( (sector-halfOfSectors)<< FLASH_CR_PAGE_SHIFT | FLASH_CR_BKSEL )
-        else
-            eraseFlags  = eraseFlags | (sector<< FLASH_CR_PAGE_SHIFT )
+        // Is this flash bank 1 or 2 ?
+        if(address >= flashBank2Start)
+            eraseFlags  = eraseFlags | FLASH_CR_BKSEL
 
         intrfApi.write(FLASH_BASE + FLASH_CR, eraseFlags )
 
@@ -125,9 +130,7 @@ function flash_erase(sector, address)
 //
 // EBlink callback
 //
-//  We don't use a flash loader here. We just write the pages word by word.
-//  Because every word needs to be transported by USB, we don't check the busy
-//  flag in between because we are not that fast.
+// Flash write according ST user manual
 //
 function flash_write(sector, address, buffer)
 {

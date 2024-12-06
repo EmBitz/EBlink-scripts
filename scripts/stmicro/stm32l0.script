@@ -41,8 +41,7 @@ function stm32_device()
     intrfApi.write(0x40015804, 6)
 
     // Get the flash size by reading the info register
-    flash_size = intrfApi.read(0x1ff8007c)
-    flash_size = flash_size & ~3
+    flash_size = intrfApi.read(0x1ff8007c) & ~3
     flash_size = (flash_size & 0xffff) * 1024
 
     local deviceStr
