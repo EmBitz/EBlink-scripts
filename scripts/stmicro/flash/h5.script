@@ -274,10 +274,7 @@ function flash_erase_chip()
         _n_throw( targetApi.halt() )
         flash_unlock()
         _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_MASS_MER |  FLASH_NSCR_START ) )
-
         flash_check_busy(10000)
-        flash_done()
-
         printf("done\n")
         return ERROR_OK
     }
