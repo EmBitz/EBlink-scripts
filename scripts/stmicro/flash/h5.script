@@ -275,6 +275,8 @@ function flash_erase_chip()
         flash_unlock()
         _n_throw( intrfApi.writeMem32(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_MASS_MER |  FLASH_NSCR_START ) )
         flash_check_busy(10000)
+        Sleep(500) // We need some back-off time here
+        flash_done()
         printf("done\n")
         return ERROR_OK
     }
