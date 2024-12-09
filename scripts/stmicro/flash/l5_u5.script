@@ -78,7 +78,7 @@ halfOfSectors   <- 0
 //
 //   Unlock the flash
 //
-function flash_start()
+function ebFlashStart()
 {
     try{
         // Set the half sector size global
@@ -107,7 +107,7 @@ function flash_start()
             targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
-        flash_unlock()
+        flashUnlock()
         return ERROR_OK
     }
 
@@ -127,7 +127,7 @@ function flash_start()
 //
 //   Erase sequence according ST user manual
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try{
         local eraseFlags = FLASH_NSCR_NSPER | FLASH_NSCR_NSSTRT
@@ -150,7 +150,7 @@ function flash_erase(sector, address)
 
         // 5. Wait until the BSY bit of the flash_SR
         // 10.000 msec timeoucd ..t sometimes erasing can take long
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
         return ERROR_OK
     }
 
@@ -173,7 +173,7 @@ function flash_erase(sector, address)
 //  Because every word needs to be transported by USB, we don't check the busy
 //  flag in between because we are not that fast.
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try{
         // Trim the output buffer to match the program width
@@ -181,7 +181,7 @@ function flash_write(sector, address, buffer)
 
         // 1. Check that no Flash memory operation is ongoing by checking the NSBSY bit in the FLASH_NSSR register.
         // 2. Check and clear all non-secure error programming flags due to a previous programming. If not, NSPGSERR is set.
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
 
         // 3. Set the NSPG bit in the FLASH_NSCR register.
         intrfApi.write(FLASH_BASE + FLASH_NSCR,  FLASH_NSCR_NSPG )
@@ -197,7 +197,7 @@ function flash_write(sector, address, buffer)
         intrfApi.setSpeed(probeSpeed)
 
         // 5. Wait until the NSBSY bit is cleared in the FLASH_NSSR register
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
 
         // 6. Check that NSEOP flag is set in the FLASH_NSSR register (meaning that the
         // programming operation has succeed), and clear it by software.
@@ -223,11 +223,11 @@ function flash_write(sector, address, buffer)
 //
 // EBlink callback
 //
-function flash_done()
+function ebFlashDone()
 {
     try{
         // Lock the flash again
-        flash_lock()
+        flashLock()
         return ERROR_OK
     }
     catch(e) {
@@ -243,7 +243,7 @@ function flash_done()
 //
 //   Lock the flash
 //
-function flash_check_busy(timeout)
+function flashCheckBusy(timeout)
 {
     local status
     local time = GetTickCount()
@@ -279,7 +279,7 @@ function clear_flash_errors()
 //
 //   Unlock the flash
 //
-function flash_unlock()
+function flashUnlock()
 {
     // Unlock Flash
     intrfApi.write(FLASH_BASE + FLASH_NSKEYR, FLASH_KEY1 )
@@ -293,7 +293,7 @@ function flash_unlock()
 //
 //   Lock the flash
 //
-function flash_lock()
+function flashLock()
 {
     // Lock Flash and option register
     intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSLOCK )
@@ -306,33 +306,33 @@ function flash_lock()
 //
 //   Erase the whole chip
 //   - If this function is not defined, sector by sector erase is used by EBlink.
-//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EBlink
 //
-function flash_erase_chip()
+function ebFlashEraseChip()
 {
     try{
         // Be sure that the target is halted
         targetApi.halt()
 
         // Unlock flash
-        flash_unlock()
+        flashUnlock()
 
         // 1. Check that no Flash memory operation is ongoing by checking the NSBSY bit in the FLASH_NSSR register.
         // 2. Check and clear all non-secure error programming flags due to a previous programming. If not, NSPGSERR is set.
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
 
         // 3. Set the NSMER1 bit and NSMER2 bits in the FLASH_NSCR register
         // 4. Set the NSSTRT bit in the FLACH_NSCR register.
         intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSMER1 | FLASH_NSCR_NSMER2  | FLASH_NSCR_NSSTRT )
 
         // 5. Wait for the NSBSY bit to be cleared in the FLASH_NSSR.
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
 
         // 6. The NSMER1 and NSMER2 bit can be cleared if no more non-secure mass erase is requested.
         intrfApi.write(FLASH_BASE + FLASH_NSCR, 0 )
 
         // Lock the flash again
-        flash_lock()
+        flashLock()
 
         return ERROR_OK
     }
@@ -371,7 +371,7 @@ function setDualBank(dmode)
             targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
-        flash_unlock()
+        flashUnlock()
 
         // Unlock flash options
         intrfApi.write(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 )
@@ -389,10 +389,10 @@ function setDualBank(dmode)
 
         intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT)
 
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
         intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH)
 
-        flash_lock()
+        flashLock()
         return ERROR_OK
     }
 
@@ -435,7 +435,7 @@ function restoreDualBankMode()
             targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
-        flash_unlock()
+        flashUnlock()
 
         // Unlock flash options
         intrfApi.write(FLASH_BASE + FLASH_OPTKEYR, OPT_KEY1 )
@@ -447,10 +447,10 @@ function restoreDualBankMode()
         intrfApi.write(FLASH_BASE + FLASH_OPTR,  defaultOptrValue)
         intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSOPTSTRT)
 
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
         intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_OBL_LAUNCH)
 
-        flash_lock()
+        flashLock()
 
         printf("Flash option restore (0x%X) done\n", defaultOptrValue)
         return ERROR_OK

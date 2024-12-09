@@ -110,17 +110,17 @@ function kinetis_device()
 		}
 	}
 
-	if (ram_size == 0) 
+	if (ram_size == 0)
         throw ERROR_NOT_FOUND
 
 	// Read FLASH size
     local value = intrfApi.read( deviceStr == "32L2B" ? SIM_FCFG1_L2B : SIM_FCFG1 )
 	for (local i=0;i<FLASHCONFIG.len();i++) {
-		if ((value & 0x0F000000) == FLASHCONFIG[i][0]) 
+		if ((value & 0x0F000000) == FLASHCONFIG[i][0])
             flash_size = FLASHCONFIG[i][1]
 	}
 
-	if (flash_size == 0) 
+	if (flash_size == 0)
         throw ERROR_NOT_FOUND
 
     // Inform user of the device found
@@ -149,7 +149,7 @@ function kinetis_device()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-// We overrule the default reset_post function
+// We overrule the default ebResetPost function
 //
 // resetType:
 //        SYSTEM_RESET
@@ -157,7 +157,7 @@ function kinetis_device()
 //        JTAG_RESET
 //        USER_RESET
 //
-function  reset_post_hook(resetType)
+function  ebResetPost_hook(resetType)
 {
 	local tmp
 

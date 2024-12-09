@@ -407,23 +407,6 @@ function reset(resetType)
     // If verbose level is debugging inform user we are here
     debugf("Using Atmel reset override script\n")
 
-    // If it's a user-type reset we will call the user defined function
-    // reset_user just as the normal EBlink reset would do.
-    if( resetType == USER_RESET)
-    {
-        // Check if we have an user_reset script function
-        if( isScriptObject("reset_user") )
-        {
-            printf("Reset: user script\n")
-            reset_user()
-            return ERROR_OK
-        }
-
-        // This user_reset script is mandatory so signal an error
-        errorf("User defined reset script is missing\n")
-        return ERROR_NOTIFIED
-    }
-
     try{
         // Halt the core
         intrfApi.write(CORTEXM_DHCSR, DBGKEY | C_HALT | C_DEBUGEN)

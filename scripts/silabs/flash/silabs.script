@@ -23,7 +23,7 @@ const MSC_MASS_KEY    0x631A
 //
 //   Unlock the flash and prepare erasing and writing
 //
-function flash_start()
+function ebFlashStart()
 {
     try{
         // Be sure that the core is halted
@@ -63,7 +63,7 @@ function flash_start()
 //
 //   Erase sequence of one sector
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try{
         //MSC->ADDRB = address
@@ -180,14 +180,14 @@ function flash_done()
 //
 //   Erase the whole chip
 //   - If this function is not defined, sector by sector erase is used by EB-link.
-//   - This is an isolated function, flash_start and flash_done are not
+//   - This is an isolated function, ebFlashStart and flash_done are not
 //     called by EB-link so we have to explicit unlock and lock in this function.
 //
-function flash_erase_chip()
+function ebFlashEraseChip()
 {
     try{
         // Unlock device, see above
-        if( flash_start() < ERROR_OK)
+        if( ebFlashStart() < ERROR_OK)
             throw ERROR_NOTIFIED
 
         // MSC->MASSLOCK = MSC_MASSLOCK_LOCKKEY_UNLOCK

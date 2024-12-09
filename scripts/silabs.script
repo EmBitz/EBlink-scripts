@@ -15,14 +15,14 @@
  //   Global variables also for all included scripts
  //
 intrfApi  <- InterfAPI() // Global so that all included scripts files also have access
-targetApi <- TargetAPI() // Global interface to the target class, our reset_post need it and this is faster than local defined
+targetApi <- TargetAPI() // Global interface to the target class, our ebResetPost need it and this is faster than local defined
 deviceId  <- 0           // Global deviceId
 
 /////////////////////////////////////////////////////
 //
 //  The entry point for this script
 //
-function main()
+function ebMain()
 {
     try{
         findDevice()
@@ -77,14 +77,14 @@ function findDevice()
 //        JTAG_RESET
 //        USER_RESET
 //
-function  reset_post(resetType)
+function  ebResetPost(resetType)
 {
     try {
         // Check if there is an user defined post reset hook, the user
         // can add his own reset strategy with -S <myscript> as last
         // defined script on the cli.
-        if (isScriptObject("reset_post_hook"))
-            return reset_post_hook(resetType);
+        if (isScriptObject("ebResetPost_hook"))
+            return ebResetPost_hook(resetType);
 
         // We don't use this if the reset is a user_script type. In that
         // case, the user is responsible for the initialization.
@@ -99,7 +99,7 @@ function  reset_post(resetType)
         }
     }
     catch(e) {
-        // Catch Squirrel errors in other optional scripts (e.g. reset_post_hook)
+        // Catch Squirrel errors in other optional scripts (e.g. ebResetPost_hook)
         if(catchString(e))
             return ERROR_NOTIFIED
 

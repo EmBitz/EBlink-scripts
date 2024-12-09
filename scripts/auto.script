@@ -18,7 +18,7 @@ MCU_VENDORS <- [
 //
 //  The entry point for this script
 //
-function main()
+function ebMain()
 {
     foreach(vendor in MCU_VENDORS){
         try {

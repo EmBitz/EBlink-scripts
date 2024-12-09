@@ -60,7 +60,7 @@ halfOfSectors   <- 0    // The half of the number of sectors of the current devi
 //
 //   Unlock the flash
 //
-function flash_start()
+function ebFlashStart()
 {
     try{
         halfOfSectors = DeviceAPI().sectorCount()/2
@@ -88,7 +88,7 @@ function flash_start()
             targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
-        flash_unlock()
+        flashUnlock()
         return ERROR_OK
     }
 
@@ -109,7 +109,7 @@ function flash_start()
 //
 //   Erase sequence according ST user manual
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try{
 
@@ -132,7 +132,7 @@ function flash_erase(sector, address)
 
         // 5. Wait until the BSY bit of the flash_SR
         // 10.000 msec timeoucd ..t sometimes erasing can take long
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
         return ERROR_OK
     }
 
@@ -155,7 +155,7 @@ function flash_erase(sector, address)
 //  Because every word needs to be transported by USB, we don't check the busy
 //  flag in between because we are not that fast.
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try{
 
@@ -179,7 +179,7 @@ function flash_write(sector, address, buffer)
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
 
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
 
 
         // 7. Clear the PG bit of the FLASH control register (FLASH_CR) if there no more
@@ -204,7 +204,7 @@ function flash_write(sector, address, buffer)
 //
 // EBlink callback
 //
-function flash_done()
+function ebFlashDone()
 {
     try{
         // Write the CR register to lock (LOCK)
@@ -225,7 +225,7 @@ function flash_done()
 //
 //   Lock the flash
 //
-function flash_check_busy(timeout)
+function flashCheckBusy(timeout)
 {
     local value
     local time = GetTickCount()
@@ -258,7 +258,7 @@ function clear_flash_errors()
 //
 //   Unlock the flash
 //
-function flash_unlock()
+function flashUnlock()
 {
     // Unlock Flash
     intrfApi.write(FLASH_BASE + FLASH_KEYR, FLASH_KEY1 )
@@ -275,9 +275,9 @@ function flash_unlock()
 //
 //   Erase the whole chip
 //   - If this function is not defined, sector by sector erase is used by EBlink.
-//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EBlink
 //
-function flash_erase_chip()
+function ebFlashEraseChip()
 {
     try{
         printf("Flash chip erase ")
@@ -286,7 +286,7 @@ function flash_erase_chip()
         targetApi.halt()
 
         // Unlock flash
-        flash_unlock()
+        flashUnlock()
 
         // (1) Set the MER1 and MER2 bit in the FLASH_CR register to enable mass erasing
         intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_MER1)

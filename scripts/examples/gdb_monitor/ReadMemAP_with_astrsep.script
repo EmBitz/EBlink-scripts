@@ -4,7 +4,7 @@
 //
 //   Implementation with "astrsep" which will fill an array with tokens
 //
-function gdb_qRcmd(packet, length, ebBuffer)
+function ebGDBqRcmd(packet, length, ebBuffer)
 {
     try{
         local tokens = []
@@ -41,7 +41,7 @@ function gdb_qRcmd(packet, length, ebBuffer)
                 outStr += format(fspec, eb[i])
                 if( i < num -1) outStr += ","
             }
-             
+
             // Print info if verbose level includes debug info
             debugf("My monitor output: "+outStr+"\n")
 

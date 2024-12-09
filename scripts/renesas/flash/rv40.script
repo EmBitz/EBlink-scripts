@@ -76,7 +76,7 @@ maxFlashSpeed   <- 4000 // 4MHz is max speed for direct programming (we think)
 //
 //   Unlock the flash
 //
-function flash_start()
+function ebFlashStart()
 {
     try{
         // Override the maximum flash speed from cli
@@ -119,7 +119,7 @@ function flash_start()
 //
 //
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try{
         if(sector < 1000)

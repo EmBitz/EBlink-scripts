@@ -70,7 +70,7 @@ function lpc_device()
 		}
 	}
 
-	if (deviceStr == "") 
+	if (deviceStr == "")
         throw ERROR_NOT_FOUND
 
 	flash1_secstart = flash_size/page_size;
@@ -103,7 +103,7 @@ function lpc_device()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-// We overrule the default reset_post function
+// We overrule the default ebResetPost function
 //
 // resetType:
 //        SYSTEM_RESET
@@ -111,7 +111,7 @@ function lpc_device()
 //        JTAG_RESET
 //        USER_RESET
 //
-function  reset_post_hook(resetType)
+function  ebResetPost_hook(resetType)
 {
     // We don't use this if the reset is a user_script type. In that
     // case, the user is responsible for the initialization.
@@ -121,10 +121,10 @@ function  reset_post_hook(resetType)
 			// Unmap the boot loader from the first 512 bytes of memory
             intrfApi.write(0x40048000,0x02)
 
-			// Set the Stack pointer according the Vector table entry			
+			// Set the Stack pointer according the Vector table entry
 			targetApi.writeReg("SP", intrfApi.read(0x00000000))
 
-			// Set the Program pointer according the Vector table entry			
+			// Set the Program pointer according the Vector table entry
 			targetApi.writeReg("PC", intrfApi.read(0x00000004))
 
         }

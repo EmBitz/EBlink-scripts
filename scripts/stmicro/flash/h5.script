@@ -77,7 +77,7 @@ maxFlashSpeed   <- 24000 // Can be changed from CLI
 //
 //   Unlock the flash
 //
-function flash_start()
+function ebFlashStart()
 {
     try{
         // Override the maximum flash speed from cli
@@ -103,7 +103,7 @@ function flash_start()
             targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
-        flash_unlock()
+        flashUnlock()
         return ERROR_OK
     }
 
@@ -128,7 +128,7 @@ function flash_start()
 //   Addr -  >=flashBank2Start : Flash bank 2 secNumber = sector
 //   Addr -  >=0x08000000      : Flash bank 1 secNumber = sector
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try{
         // If this is high cycle calculate the right sector number
@@ -143,7 +143,7 @@ function flash_erase(sector, address)
 
         intrfApi.write(FLASH_BASE + FLASH_NSCR, eraseFlags )
 
-        flash_check_busy(10000)
+        flashCheckBusy(10000)
 
         return ERROR_OK
     }
@@ -161,11 +161,9 @@ function flash_erase(sector, address)
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-// EBlink callback
-//
 // Flash write according ST user manual
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try{
         // Handle highCycle must be flashed with multiplies of 2
@@ -185,7 +183,7 @@ function flash_write(sector, address, buffer)
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
 
-        flash_check_busy(2000)
+        flashCheckBusy(2000)
         return ERROR_OK
     }
 
@@ -203,7 +201,7 @@ function flash_write(sector, address, buffer)
 //
 // EBlink callback
 //
-function flash_done()
+function ebFlashDone()
 {
     try{
         intrfApi.write( FLASH_BASE + FLASH_NSCR,
@@ -221,9 +219,41 @@ function flash_done()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EBlink
+//
+function ebFlashEraseChip()
+{
+    try{
+        printf("Flash chip erase ")
+
+        targetApi.halt()
+        flashUnlock()
+        intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_MASS_MER |  FLASH_NSCR_START )
+        flashCheckBusy(10000)
+        printf("done\n")
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+        if(catchString(e))
+           return ERROR_NOTIFIED
+        if(e < ERROR_NOTIFIED)
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
+        return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
 //   Lock the flash
 //
-function flash_check_busy(timeout)
+function flashCheckBusy(timeout)
 {
     local time = GetTickCount()
     local value
@@ -251,7 +281,7 @@ function flash_check_busy(timeout)
 //
 //   Unlock the flash
 //
-function flash_unlock()
+function flashUnlock()
 {
     // Unlock Flash
     intrfApi.write(FLASH_BASE + FLASH_KEYR, FLASH_KEYR1 )
@@ -260,40 +290,4 @@ function flash_unlock()
     if(intrfApi.read(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_LOCK )
        throw ERROR_UNLOCK
 }
-
-
-/////////////////////////////////////////////////////////////////////////////////
-//
-//  Called by EBlink if chip erase is needed (e.g. command line flashing)
-//
-//   Erase the whole chip
-//   - If this function is not defined, sector by sector erase is used by EBlink.
-//   - This is an isolated function, flash_start and flash_done are not called by EBlink
-//
-function flash_erase_chip()
-{
-    try{
-        printf("Flash chip erase ")
-
-        targetApi.halt()
-        flash_unlock()
-        intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_MASS_MER |  FLASH_NSCR_START )
-
-        flash_check_busy(10000)
-        flash_done()
-
-        printf("done\n")
-        return ERROR_OK
-    }
-
-    // Catch all the sector write errors
-    catch(e){
-        if(catchString(e))
-           return ERROR_NOTIFIED
-        if(e < ERROR_NOTIFIED)
-           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
-        return ERROR_NOTIFIED
-    }
-}
-
 

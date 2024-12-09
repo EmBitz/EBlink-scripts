@@ -58,7 +58,7 @@ deviceId <- 0            // Global deviceId
 //
 //  EBlink called Entry point
 //
-function main()
+function ebMain()
 {
     try{
         findDevice()
@@ -131,14 +131,14 @@ function findDevice()
 //        JTAG_RESET
 //        USER_RESET
 //
-function  reset_post(resetType)
+function  ebResetPost(resetType)
 {
     try {
         // Check if there is an user defined post reset hook, the user
         // can add his own reset strategy with -S <myscript> as last
-        // defined script on the cli.
-        if (isScriptObject("reset_post_hook"))
-            return reset_post_hook(resetType);
+        // defined script on the cli. (also used by dualCore e.g. H7)
+        if (isScriptObject("ebResetPostHook"))
+            return ebResetPostHook(resetType);
 
         // We don't use this if the reset is a user_script type. In that
         // case, the user is responsible for the initialization.
@@ -153,7 +153,7 @@ function  reset_post(resetType)
         }
     }
     catch(e) {
-        // Catch Squirrel errors in other optional scripts (e.g. reset_post_hook)
+        // Catch Squirrel errors in other optional scripts (e.g. ebResetPostHook)
         if(catchString(e))
             return ERROR_NOTIFIED
 

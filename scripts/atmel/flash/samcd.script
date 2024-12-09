@@ -81,7 +81,7 @@ maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think
 //
 //   Called by EBlink to initialize upcoming flash operations.
 //
-function flash_start()
+function ebFlashStart()
 {
     try{
         // Override the maximum flash speed from cli
@@ -128,7 +128,7 @@ function flash_start()
 //
 //   Called by EBlink to erase a sector
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try{
         // Set address to be erased
@@ -164,7 +164,7 @@ function flash_erase(sector, address)
 //  Called by EBlink to write a sector.
 //  We have to write a single page at the time, a sector has 4 pages
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try{
         // For direct flash writing we can't be too fast.
@@ -204,7 +204,7 @@ function flash_write(sector, address, buffer)
 //
 //   Finalize the flash operations
 //
-function flash_done()
+function ebFlashDone()
 {
     try{
         // lock the flash
@@ -227,9 +227,9 @@ function flash_done()
 //
 //   Erase the whole chip
 //   - If this function is not defined, sector by sector erase is used by EBlink.
-//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EBlink
 //
-function flash_erase_chip()
+function ebFlashEraseChip()
 {
     try{
         // Be sure that the target is halted

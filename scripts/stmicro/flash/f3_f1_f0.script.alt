@@ -55,7 +55,7 @@ maxFlashSpeed   <-10000 // 10MHz is max speed for direct programming (we think)
 //   Called by EBlink to initialize upcoming flash operations.
 //   Unlock the flash and preload the flash loader
 //
-function flash_start()
+function ebFlashStart()
 {
     try{
         // Override the maximum flash speed from cli
@@ -83,7 +83,7 @@ function flash_start()
         } while(targetApi.getState() != TARGET_HALTED )
 
         // Unlock flash
-        flash_unlock()
+        flashUnlock()
 
         // Load the flash loader in advance in target RAM in case we need it
         intrfApi.loadString(LOADER_ADDR, extFlashLoader, EXT_LOADER_SIZE)
@@ -107,7 +107,7 @@ function flash_start()
 //    - flash_start() is already called
 //    - flash_done() will be called if all flash operations are ready
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try{
         // (1) Set the PER bit in the FLASH_CR register to enable page erasing
@@ -159,7 +159,7 @@ function flash_erase(sector, address)
 //
 //  Called by EBlink to write a sector.
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try{
         // Enable the program flag PG in flash_CR
@@ -220,7 +220,7 @@ function flash_write(sector, address, buffer)
 //
 // Called by EBlink if all flash operations are ready
 //
-function flash_done()
+function ebFlashDone()
 {
     try{
         // Relock the flash by setting the FLASH_CR_LOCK in the flash CR register
@@ -242,7 +242,7 @@ function flash_done()
 //
 //   Unlock the flash
 //
-function flash_unlock()
+function flashUnlock()
 {
     if(intrfApi.read(FLASH_BASE + FLASH_CR) & FLASH_CR_LOCK ){
         // Unlock Flash
@@ -262,7 +262,7 @@ function flash_unlock()
 //   - If this function is not defined, sector by sector erase is used by EBlink.
 //   - This is an isolated function, flash_start and flash_done are not called by EBlink
 //
-function flash_erase_chip()
+function ebFlashEraseChip()
 {
     try{
         printf("Flash chip erase ");
@@ -271,7 +271,7 @@ function flash_erase_chip()
         targetApi.halt()
 
         // Unlock flash
-        flash_unlock()
+        flashUnlock()
 
         // (1) Set the MER bit in the FLASH_CR register to enable mass erasing
         intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_MER )

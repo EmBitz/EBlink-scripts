@@ -69,7 +69,7 @@ maxFlashSpeed   <- 10000 // 10MHz is max speed for direct programming (we think)
 //
 //   Unlock the flash
 //
-function flash_start()
+function ebFlashStart()
 {
     try{
         local voltage
@@ -98,7 +98,7 @@ function flash_start()
 
         } while(targetApi.getState() != TARGET_HALTED )
 
-        flash_unlock()
+        flashUnlock()
 
         // Check the voltage and set the right flash strategy
         if (isScriptObject("VCC_VOLTAGE") && VCC_VOLTAGE>0){
@@ -148,9 +148,9 @@ function flash_start()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//   Sector erase sequence according ST user manual (Unlocking is already done by flash_start )
+//   Sector erase sequence according ST user manual (Unlocking is already done by ebFlashStart )
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try{
         // Check for large memory devices
@@ -167,7 +167,7 @@ function flash_erase(sector, address)
 
 
         // (4) Wait for the BSY bit to be cleared
-        flash_check_busy(15000)
+        flashCheckBusy(15000)
 
         return ERROR_OK
     }
@@ -185,9 +185,9 @@ function flash_erase(sector, address)
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//  Flash the sector according the parallelism determined at flash_start
+//  Flash the sector according the parallelism determined at ebFlashStart
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try{
         // Enable the program flag PG in flash_CR together with the right parallelism
@@ -208,7 +208,7 @@ function flash_write(sector, address, buffer)
         intrfApi.setSpeed(probeSpeed)
 
         // Wait for ready (timeout 5 sec)
-        flash_check_busy(5000)
+        flashCheckBusy(5000)
 
         // Disable the program flag  PG in flash_CR
         intrfApi.write(FLASH_CR, 0)
@@ -232,7 +232,7 @@ function flash_write(sector, address, buffer)
 //
 //
 //
-function flash_done()
+function ebFlashDone()
 {
     try{
         // Relock the flash by setting the FLASH_CR_LOCK in the flash CR register
@@ -255,16 +255,16 @@ function flash_done()
 //
 //   Erase the whole chip
 //   - If this function is not defined, sector by sector erase is used.
-//   - This is an isolated function, flash_start and flash_done are not called by EB-link
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EB-link
 //
-function flash_erase_chip()
+function ebFlashEraseChip()
 {
     try{
         // Be sure that the core is halted
         targetApi.halt()
 
         // Enable the flash engine
-        flash_unlock()
+        flashUnlock()
 
         // Chip erase sequence according ST user manual
         //
@@ -279,7 +279,7 @@ function flash_erase_chip()
 
         // (4) Wait for the BSY bit to be cleared (worst case at low voltage > 40sec)
         // (5) Check for errors
-        flash_check_busy(40000)
+        flashCheckBusy(40000)
 
         // Relock
         intrfApi.write(FLASH_CR, FLASH_CR_LOCK)
@@ -302,7 +302,7 @@ function flash_erase_chip()
 //
 //  Check for busy and erros
 //
-function flash_check_busy(timeout)
+function flashCheckBusy(timeout)
 {
     local status
     local time = GetTickCount()
@@ -329,7 +329,7 @@ function flash_check_busy(timeout)
 //
 //
 //
-function flash_unlock()
+function flashUnlock()
 {
     // Check if it's locked by the FLASH_CR_LOCK flag
     if( intrfApi.read(FLASH_CR) & FLASH_CR_LOCK ){

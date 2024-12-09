@@ -17,7 +17,7 @@ const FCMD_ERASEALLBLKSU (0x49 << 24)
 //
 //   Called by EBlink to initialize upcoming flash operations.
 //
-function flash_start()
+function ebFlashStart()
 {
     try {
         // Be sure that the core is halted
@@ -36,10 +36,10 @@ function flash_start()
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Called by EBlink to erase a sector
-//    - flash_start() is already called
-//    - flash_done() will be called if all flash operations are ready
+//    - ebFlashStart() is already called
+//    - ebFlashDone() will be called if all flash operations are ready
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try {
 
@@ -49,7 +49,7 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
-       flash_done()
+       ebFlashDone()
 
         if(catchString(e))
             return ERROR_NOTIFIED
@@ -65,7 +65,7 @@ function flash_erase(sector, address)
 //
 //  Called by EBlink to write a sector.
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try {
         local len = buffer.getSize();
@@ -79,7 +79,7 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
-       flash_done()
+       ebFlashDone()
 
        if(catchString(e))
           return ERROR_NOTIFIED
@@ -96,10 +96,10 @@ function flash_write(sector, address, buffer)
 //
 //   Erase the whole chip
 //   - If this function is not defined, sector by sector erase is used by EBlink.
-//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EBlink
 //
 
-function flash_erase_chip()
+function ebFlashEraseChip()
 {
     try {
         executeFTFA(FCMD_ERASEALLBLKSU)

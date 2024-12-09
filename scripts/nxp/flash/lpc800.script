@@ -28,7 +28,7 @@ const IAP_ERASEPAGES     59
 //
 //   Called by EBlink to initialize upcoming flash operations.
 //
-function flash_start()
+function ebFlashStart()
 {
    try {
         // Be sure that the core is halted
@@ -55,7 +55,7 @@ function flash_start()
 
     // Catch all the sector write errors
     catch(e){
-       flash_done()
+       ebFlashDone()
        if(catchString(e))
             return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
@@ -67,10 +67,10 @@ function flash_start()
 /////////////////////////////////////////////////////////////////////////////////
 //
 //   Called by EBlink to erase a sector
-//    - flash_start() is already called
-//    - flash_done() will be called if all flash operations are ready
+//    - ebFlashStart() is already called
+//    - ebFlashDone() will be called if all flash operations are ready
 //
-function flash_erase(sector, address)
+function ebFlashErase(sector, address)
 {
     try {
         local result=[0,0,0,0],page
@@ -101,7 +101,7 @@ function flash_erase(sector, address)
 
     // Catch all the sector erase errors
     catch(e){
-       flash_done()
+       ebFlashDone()
        if(catchString(e))
             return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
@@ -115,7 +115,7 @@ function flash_erase(sector, address)
 //
 //  Called by EBlink to write a sector.
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try {
         local result=[1,0,0,0],writeSize,page;
@@ -165,7 +165,7 @@ function flash_write(sector, address, buffer)
 
     // Catch all the sector write errors
     catch(e){
-        flash_done()
+        ebFlashDone()
         if(catchString(e))
             return ERROR_NOTIFIED
         if(e < ERROR_NOTIFIED)
@@ -178,7 +178,7 @@ function flash_write(sector, address, buffer)
 //
 // Called by EBlink if all flash operations are ready
 //
-function flash_done()
+function ebFlashDone()
 {
   try
   {
@@ -207,14 +207,14 @@ function flash_done()
 //
 //   Erase the whole chip
 //   - If this function is not defined, sector by sector erase is used by EBlink.
-//   - This is an isolated function, flash_start and flash_done are not called by EBlink
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EBlink
 //
-function flash_erase_chip()
+function ebFlashEraseChip()
 {
     try {
         local result=[1,0,0,0]
 
-        if( flash_start() != ERROR_OK)
+        if( ebFlashStart() != ERROR_OK)
             throw ERROR_FLASH
 
         // Prepare all sectors for erasing
@@ -225,13 +225,13 @@ function flash_erase_chip()
         if (result[0] != 0)
             throw ERROR_FLASH
 
-        flash_done()
+        ebFlashDone()
         return ERROR_OK
     }
 
     // Catch all the sector erase errors
     catch(e){
-       flash_done()
+       ebFlashDone()
        if(catchString(e))
             return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)

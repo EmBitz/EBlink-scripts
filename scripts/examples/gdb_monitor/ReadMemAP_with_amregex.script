@@ -4,45 +4,45 @@
 //
 //   Implementation with "amregex" which will fill an array with regex matches
 //
-function gdb_qRcmd(packet, length, ebBuffer)
-{ 
-    try{ 
+function ebGDBqRcmd(packet, length, ebBuffer)
+{
+    try{
         local matches = []
                                      //ReadMemAP           <APBaseAddr>              <Addr>                          <NumItems>                        <Flags>
         if( amregex(matches, packet, @"ReadMemAP\s+\b(0x[0-9a-fA-F]+|[0-9]+)\b\s+\b(0x[0-9a-fA-F]+|[0-9]+)\b\s+\b(0x[0-9a-fA-F]+|[0-9]+)\b\s+\b(0x[0-9a-fA-F]+|[0-9]+)\b") > 0)
-        {        
+        {
             local APbase = strToNumber(matches[1])
             local addr   = strToNumber(matches[2])
             local num    = strToNumber(matches[3])
             local flags  = strToNumber(matches[4])
-                        
+
             local byteLen = (flags == 0 ? 4  : flags)
             local width   = (flags == 0 ? -1 : byteLen*8)
             local fspec   = format("0x%%0%dX",byteLen*2)
-            
+
             // Allocate an EBbuffer
             local eb = EBbuffer()
-                                        
+
             // Read the memory into buffer with 'width' access
             InterfAPI().readBuf(eb, addr, num*byteLen, width)
-            
+
             // Set the EBbuffer index '[]' access width
             if(width > 0)
-                eb.access(width)            
-          
-            // Create output string 
+                eb.access(width)
+
+            // Create output string
             local outStr = ("O.K.:")
             for(local i=0; i<num; i++){
                 outStr += format(fspec, eb[i])
                 if( i < num -1) outStr += ","
             }
-            
+
             // Print info if verbose level includes debug info
-            debugf("My monitor output: "+outStr+"\n")            
-            
+            debugf("My monitor output: "+outStr+"\n")
+
             // Return answer to GDB
             ebBuffer.format(outStr+"\n")
-        }              
+        }
 
         // Add other commnds here...
 
@@ -54,6 +54,6 @@ function gdb_qRcmd(packet, length, ebBuffer)
             return ERROR_NOTIFIED
         printf("GDb error %s\n", errorToStr(e) )
         return ERROR_NOTIFIED
-    }    
-    
+    }
+
 }

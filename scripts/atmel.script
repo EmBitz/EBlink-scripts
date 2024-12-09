@@ -27,7 +27,7 @@ const SAM3_CHIPID   0x400E0740
 //
 //  EBlink called Entry point
 //
-function main( )
+function ebMain( )
 {
     try{
         debugf("Looking for Atmel\n")
@@ -84,7 +84,7 @@ function findDevice()
             require("atmel/samcd.script")
             atmel_device()
             break
-            
+
         case "M3":
 
             deviceId = intrfApi.read(SAM3_CHIPID)
@@ -116,14 +116,14 @@ function findDevice()
 //        JTAG_RESET
 //        USER_RESET
 //
-function  reset_post(resetType)
+function  ebResetPost(resetType)
 {
     try {
         // Check if there is an user defined post reset hook, the user
         // can add his own reset strategy with -S <myscript> as last
         // defined script on the cli.
-        if (isScriptObject("reset_post_hook"))
-            return reset_post_hook(resetType);
+        if (isScriptObject("ebResetPost_hook"))
+            return ebResetPost_hook(resetType);
 
         // We don't use this if the reset is a user_script type. In that
         // case, the user is responsible for the initialization.
@@ -138,7 +138,7 @@ function  reset_post(resetType)
         }
     }
     catch(e) {
-        // Catch Squirrel errors in other optional scripts (e.g. reset_post_hook)
+        // Catch Squirrel errors in other optional scripts (e.g. ebResetPost_hook)
         if(catchString(e))
             return ERROR_NOTIFIED
 
@@ -147,7 +147,6 @@ function  reset_post(resetType)
 
        return ERROR_NOTIFIED
     }
-
     return ERROR_OK
 }
 
