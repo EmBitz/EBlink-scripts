@@ -147,6 +147,7 @@ function  ebResetPost(resetType)
 
        return ERROR_NOTIFIED
     }
+
     return ERROR_OK
 }
 

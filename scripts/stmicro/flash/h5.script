@@ -234,6 +234,9 @@ function ebFlashEraseChip()
         flashUnlock()
         intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_MASS_MER |  FLASH_NSCR_START )
         flashCheckBusy(10000)
+        // We need some back-off time here before we can lock it again
+        Sleep(500) 
+        ebFlashDone()
         printf("done\n")
         return ERROR_OK
     }
@@ -264,7 +267,7 @@ function flashCheckBusy(timeout)
         if(GetTickCount() - time > timeout)
             throw ERROR_TIMEOUT
 
-    }while ( (value & FLASH_NSSR_BUSY) ) //&& !( value & FLASH_NSSR_EOP))
+    }while(value & FLASH_NSSR_BUSY)
 
     AnimateDone()
 

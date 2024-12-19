@@ -97,7 +97,6 @@ function findDevice()
 
     foreach(arch in STMICRO)
       if(arch[0] == targetApi.getCpuName()){
-
           foreach(addr in arch[1]) {
               try{ devReg = intrfApi.read(addr); if(devReg) break; }
               catch(e){}
@@ -136,7 +135,7 @@ function  ebResetPost(resetType)
     try {
         // Check if there is an user defined post reset hook, the user
         // can add his own reset strategy with -S <myscript> as last
-        // defined script on the cli. (also used by dualCore e.g. H7)
+        // defined script on the cli.
         if (isScriptObject("ebResetPostHook"))
             return ebResetPostHook(resetType);
 
