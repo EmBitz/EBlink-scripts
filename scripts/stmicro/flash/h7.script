@@ -21,7 +21,7 @@ const FLASH_WPSN_PRG  0x3C
 
 
 // FLASH_CR register bits
-const flashLock     (1 << 0)
+const FLASH_LOCK     (1 << 0)
 const FLASH_PG       (1 << 1)
 const FLASH_SER      (1 << 2)
 const FLASH_BER      (1 << 3)
@@ -346,14 +346,14 @@ function flashUnlock(regbase)
 
     // Read flash lock status in FLASH_CR
     // Check if it's locked by the FLASH_CR_LOCK flag
-    if( intrfApi.read(regbase + FLASH_CR) & flashLock ){
+    if( intrfApi.read(regbase + FLASH_CR) & FLASH_LOCK ){
 
         // Write flash KEYR
         intrfApi.write(regbase + FLASH_KEYR, KEY1)
         intrfApi.write(regbase + FLASH_KEYR, KEY2)
 
         // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
-        if( intrfApi.read(regbase + FLASH_CR) & flashLock )
+        if( intrfApi.read(regbase + FLASH_CR) & FLASH_LOCK )
             throw ERROR_UNLOCK
     }
 }
@@ -364,7 +364,7 @@ function flashUnlock(regbase)
 //
 function flashLock(regbase)
 {
-    intrfApi.write(regbase + FLASH_CR, flashLock)
+    intrfApi.write(regbase + FLASH_CR, FLASH_LOCK)
     intrfApi.write(regbase + FLASH_OPTCR, OPT_LOCK)
 }
 
