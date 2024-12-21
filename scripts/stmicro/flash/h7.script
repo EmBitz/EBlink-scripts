@@ -157,7 +157,7 @@ function ebFlashErase(sector, address)
         intrfApi.write(regbase + FLASH_ACR, 0)
 
         // 1)  Check and clear (optional) all the error flags due to previous programming/erase
-        flash_get_clear_status(regbase)
+        flashCheckStatus(regbase)
 
         // 2) Unlock the flash bank
         flashUnlock(regbase)
@@ -296,7 +296,7 @@ function flashEraseBank(bank, regbase)
 {
     try{
         // 1. Check and clear (optional) all the error flags due to previous programming/erase
-        flash_get_clear_status(regbase)
+        flashCheckStatus(regbase)
 
         // 2. Unlock the two FLASH_CR1/2 registers and FLASH_OPTCR register
         flashUnlock(regbase)
@@ -323,7 +323,7 @@ function flashEraseBank(bank, regbase)
 //
 //   Get (and clear) the flash status
 //
-function flash_get_clear_status(regbase)
+function flashCheckStatus(regbase)
 {
     if( intrfApi.read(regbase + FLASH_SR) & FLASH_ERROR )
         throw ERROR_FLASH

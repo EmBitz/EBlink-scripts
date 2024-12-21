@@ -19,7 +19,7 @@ const mem_template = @@"
  </memory>
  <memory type=\"rom\" start=\"0x1FFF0000\" length=\"0x8000\"/>
  <memory type=\"ram\" start=\"0x40000000\" length=\"0x26400\"/>
- <memory type=\"ram\" start=\"0xe0000000\" length=\"0x20000000\"/> 
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x20000000\"/>
 </memory-map>"
 
 // The U0 has a 64 bits width program word
@@ -41,31 +41,31 @@ function stm32_device()
     local ram_size
 
     local deviceStr
-    switch(deviceId){        
+    switch(deviceId){
         case 0x459 :
             deviceStr = "31xx"
             page_size = 0x800  // 2KB pages
             ram_size  = 0x3000 // 12KB
-            flash_size = intrfApi.read(0x1fff3ea0) // flash size register        
+            flash_size = intrfApi.read(0x1fff3ea0)
 
         case 0x489 :
             deviceStr = "73x/083x"
             page_size = 0x800  // 2KB pages
             ram_size  = 0xA000 // 40KB
-            flash_size = intrfApi.read(0x1fff6ea0) // flash size register
+            flash_size = intrfApi.read(0x1fff6ea0)
             break
 
         default:
             throw ERROR_NOT_FOUND
     }
 
-    // Get the flash size by reading the info register
+    // Calculate real flash size
     flash_size = (flash_size & 0xffff) * 1024
 
-    // Inform user of the device found
+    // Inform user type of device
     printf("STmicro family : STM32U0%s\n", deviceStr)
 
-    // Inform the user
+    // Inform the user about memory
     printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
 
     // The user specified the size of flash memory

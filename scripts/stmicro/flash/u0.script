@@ -129,8 +129,7 @@ function ebFlashErase(sector, address)
 {
     try{
         local eraseFlags = FLASH_CR_PER | FLASH_CR_STRT
-
-        // Check if we are in the second bank in case of dual bank
+        
         eraseFlags  = eraseFlags | (sector << 3 )
 
         // 1. Check that no Flash memory operation is ongoing by checking the BSY1 in the SR
@@ -168,7 +167,7 @@ function ebFlashErase(sector, address)
 //  Because every word needs to be transported by USB, we don't check the busy
 //  flag in between because we are not that fast.
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try{
         // Trim the output buffer to match the program width
@@ -218,7 +217,7 @@ function flash_write(sector, address, buffer)
 //
 // EBlink callback
 //
-function flash_done()
+function ebFlashDone()
 {
     try{
         // Lock the flash again
