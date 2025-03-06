@@ -88,6 +88,20 @@ const mem_template_2MB = @@"
 </memory-map>"
 
 
+// Supported F4 devices
+STF4_DEV <- [
+//   DevID    RAM      Name
+    [0x411, 0x30000, "x5/4x7"],  // Fix chip_id for F4 rev A errata
+    [0x413, 0x30000, "x5/4x7"],
+    [0x419, 0x40000, "2x/43x"],
+    [0x421, 0x20000, "46"],
+    [0x423, 0x10000, "01xB/C (Low Power)"],
+    [0x431, 0x20000, "11"],
+    [0x433, 0x18000, "01xD/E"],
+    [0x434, 0x40000, "69/479"],
+    [0x441, 0x40000, "12"],
+    [0x458, 0x08000, "10"]
+]
 
 /////////////////////////////////////////////////////
 //
@@ -95,8 +109,9 @@ const mem_template_2MB = @@"
 //
 function stm32_device()
 {
+    local deviceStr
     local flash_size
-    local ram_size
+    local ram_size = -1
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
     intrfApi.write(0xE0042004, 7)
@@ -104,63 +119,20 @@ function stm32_device()
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
     intrfApi.write(0xE0042008, 0x00001800)
 
+    foreach(dev in STF4_DEV)
+        if( dev[0] == deviceId ) {
+            ram_size = dev[1]
+            deviceStr = dev[2]
+            break
+        }
+
+    // Throw error if device is not in the F4 mapping
+    if( ram_size == -1)
+        throw ERROR_NOT_FOUND
+
     // Get the flash size
     flash_size = intrfApi.read(0x1FFF7A22) >>16
     flash_size = (flash_size & 0xffff) *1024
-
-
-    // Set the memory map argument(s) according the device ID
-    local deviceStr
-    switch(deviceId) {
-        case 0x411 : // Fix chip_id for F4 rev A errata , Read CPU ID, as CoreID is the same for F2/F4
-        case 0x413 : // CHIPID_STM32_F4
-            deviceStr = "05/407/415/417"
-            ram_size = 0x30000
-            break
-
-        case 0x419 : // CHIPID_STM32_F4_HD
-            deviceStr = "2x/43x"
-            ram_size = 0x40000
-            break
-
-        case 0x421 : // CHIPID_STM32_F446
-            deviceStr = "46"
-            ram_size = 0x20000
-            break
-
-        case 0x423 : // CHIPID_STM32_F4_LP
-            deviceStr = "01xB/C (Low Power)"
-            ram_size = 0x10000
-            break
-
-        case 0x431 : // CHIPID_STM32_F411RE
-            deviceStr = "11"
-            ram_size = 0x20000
-            break
-
-        case 0x433 : // CHIPID_STM32_F4_DE
-            deviceStr = "01xD/E"
-            ram_size = 0x18000
-            break
-
-        case 0x434 : // CHIPID_STM32_F4_DSI
-            deviceStr = "69/479"
-            ram_size = 0x40000
-            break
-
-        case 0x441 : // CHIPID_STM32_F412
-            deviceStr = "12"
-            ram_size = 0x40000
-            break
-
-        case 0x458 : // CHIPID_STM32_F410
-            deviceStr = "10"
-            ram_size = 0x8000
-            break
-
-        default:
-            throw ERROR_NOT_FOUND
-    }
 
     // Inform user of the device found
     printf("STmicro family : STM32F4%s\n", deviceStr)
