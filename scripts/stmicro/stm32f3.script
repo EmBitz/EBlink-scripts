@@ -19,7 +19,7 @@ const mem_template = @@"
   <memory type=\"ram\" start=\"0x10000000\" length=\"0x4000\"/>
   <memory type=\"ram\" start=\"0x20000000\" length=\"0x%X\"/>
   <memory type=\"flash\" start=\"0x08000000\" length=\"0x%X\">
-   <property name=\"blocksize\">0x%X</property>
+   <property name=\"blocksize\">0x800</property>
    <property name=\"secstart\">0</property>
   </memory>
   <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
@@ -29,13 +29,22 @@ const mem_template = @@"
   <memory type=\"rom\" start=\"0x1fffc000\" length=\"0x10\"/>
  </memory-map>"
 
-
 const DBGMCU_CR      0xE0042004
 const DBGMCU_APB1_FZ 0xE0042008
 
 const DBG_SLEEP     (1<<0)
 const DBG_STOP      (1<<1)
 const DBG_STANDBY   (1<<2)
+
+// Supported F3 devices
+ST_DEV <- [
+    //   DevID    RAM      Name
+    [0x422, 0x0A000, "02/3xB/C"],  // Fix chip_id for F4 rev A errata
+    [0x432, 0x0A000, "7x"],
+    [0x438, 0x03000, "3x"],
+    [0x439, 0x0A000, "03xD/E"],
+    [0x446, 0x10000, "01xB/C (Low Power)"],
+]
 
 /////////////////////////////////////////////////////
 //
@@ -45,9 +54,9 @@ const DBG_STANDBY   (1<<2)
 //
 function stm32_device()
 {
+    local deviceStr
     local flash_size
-    local ram_size
-    local page_size = 0x800 // Default page size
+    local ram_size = -1
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP
     intrfApi.write(DBGMCU_CR, DBG_STANDBY | DBG_STOP | DBG_SLEEP  )
@@ -55,40 +64,19 @@ function stm32_device()
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
     ntrfApi.write(DBGMCU_APB1_FZ, 0x00001800)
 
+    foreach(dev in ST_DEV)
+    if( dev[0] == deviceId ) {
+            ram_size = dev[1]
+            deviceStr = dev[2]
+            break
+        }
+
+    // Throw error if device is not in the mapping
+    if( ram_size == -1)
+        throw ERROR_NOT_FOUND
+
     // Get the flash size and translate from Kbytes to bytes
     flash_size = (intrfApi.read(0x1ffff7cc)  & 0xffff) *1024
-
-    // Set the memory map argument(s) according the device ID
-      local deviceStr
-      switch(deviceId) {
-        case 0x422 : // CHIPID_STM32_F3
-            deviceStr = "02/3xB/C"
-            ram_size = 0xa000
-            break
-
-        case 0x432 : // CHIPID_STM32_F37x
-            deviceStr = "7x"
-            ram_size = 0xa000
-            break
-
-        case 0x438 : // CHIPID_STM32_F334
-            deviceStr = "3x"
-            ram_size = 0x3000
-            break
-
-        case 0x439 : // CHIPID_STM32_F3_SMALL
-            deviceStr = "02x6/8"
-            ram_size = 0xa000
-            break
-
-        case 0x446 : // CHIPID_STM32_F303_HIGH
-            deviceStr = "03xD/E"
-            ram_size = 0x10000
-            break
-
-        default:
-            throw ERROR_NOT_FOUND
-    }
 
     // Inform user of the device found
     printf("STmicro family : STM32F3%s\n", deviceStr)
@@ -108,7 +96,7 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    DeviceAPI().memmap( format( mem_template, ram_size, flash_size, page_size ))
+    DeviceAPI().memmap( format( mem_template, ram_size, flash_size))
 
     // Include flash loader script
     require("stmicro/flash/f3_f1_f0.script")

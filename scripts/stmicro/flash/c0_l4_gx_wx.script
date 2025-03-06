@@ -17,14 +17,11 @@ const FLASH_WRP1BR      0x30
 const FLASH_WRP2AR      0x4c
 const FLASH_WRP2BR      0x50
 
-
-
 // FLASH_CR register bits
 const FLASH_CR_PG           (1 << 0)
 const FLASH_CR_PER          (1 << 1)
 const FLASH_CR_MER1         (1 << 2)
 const FLASH_CR_PAGE_SHIFT   3
-const FLASH_CR_BKER         (1 << 11)
 const FLASH_CR_MER2         (1 << 15)
 const FLASH_CR_STRT         (1 << 16)
 const FLASH_CR_OPTSTRT      (1 << 17)
@@ -46,6 +43,11 @@ const FLASH_SR_EOP          (1 << 0) // End of operation
 
 const FLASH_KEY1        0x45670123
 const FLASH_KEY2        0xCDEF89AB
+
+// The G4 has a different bank erase flag position
+FLASH_CR_BKER <- ( deviceId == 0x468 || deviceId == 0x469 || deviceId == 0x479 ?
+                    1 << 11 : // G4
+                    1 << 13)  // Others
 
 // All the possible errors mask
 FLASH_ERROR <- ( FLASH_SR_PGSERR | FLASH_SR_SIZERR  | FLASH_SR_PGAERR |
