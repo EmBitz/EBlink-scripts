@@ -252,7 +252,7 @@ function ebFlashEraseChip()
             throw ERROR_FLASH
 
         // (5) Clear EOP flag by software by writing EOP at 1
-        intrfApi.write(FLASH_BASE + FLASH_SR, status | FLASH_SR_EOP) )
+        intrfApi.write(FLASH_BASE + FLASH_SR, status | FLASH_SR_EOP)
 
         // (6) Reset the PER Bit to disable the mass erase
         intrfApi.write(FLASH_BASE + FLASH_CR, 0 )
