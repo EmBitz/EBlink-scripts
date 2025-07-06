@@ -260,7 +260,7 @@ function stm32_device()
 
             // Remark: If other options should be cleared
             //         Do it here!
-            flash_write_option_buffer(devOpt)
+            flashOptionWrite(devOpt)
         }
         else {
             errorf("This device is protected with level 1\nDevice not accessible\n")
