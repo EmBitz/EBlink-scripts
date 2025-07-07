@@ -25,6 +25,13 @@ const mem_template = @@"
   <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
   <memory type=\"rom\" start=\"0x1fff0000\" length=\"0x7800\"/>
   <memory type=\"rom\" start=\"0x1fffc000\" length=\"0x10\"/>
+
+  <!-- option byte area (virtual sector) -->
+  <memory type=\"flash\" start=\"0x1ff20000\" length=\"20\">
+    <property name=\"blocksize\">20</property>
+    <property name=\"secstart\">999</property>
+    <property name=\"sectype\">virtual</property>
+  </memory>
  </memory-map>"
 
 // The parameters for the flash script
@@ -99,4 +106,38 @@ function stm32_device()
 
     // include flash loader
     require("stmicro/flash/c0_l4_gx_wx.script")
+
+    // =================== Read level protection (RDP) check =================
+
+    // Get an ebBuffer with the current options
+    local devOpt = flashGetOptionBuffer()
+
+    // Check the readout level
+    local rdpLevel = flashRDPlevel(devOpt)
+
+
+    if(rdpLevel == 2){
+        errorf("This device is protected with level 2\nNo debug possible\n")
+        throw ERROR_NOTIFIED
+    }
+
+    if(rdpLevel == 1){
+        if( yesNof(1, "Read protection level 1 active\nClear (chip will erase) to level 0?") ) {
+            printf("\nReset the RDP level to 0\nThis can take a while due to erasing\n")
+
+            // Clear the readout level inside out option buffer
+            flashClearRDP(devOpt)
+
+            // Remark: If other options should be cleared
+            //         Do it here!
+           flashOptionWrite(devOpt)
+           printf("\nOptions bytes ready\nPlease power cycle the device in order to continue!!\n\n")
+        }
+        else {
+            errorf("This device is protected with level 1\nDevice not accessible\n")
+        }
+
+        // We quit EBlink because the MCU needs power reset in order to release the debug interface
+        throw ERROR_NOTIFIED
+    }
 }

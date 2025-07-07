@@ -2,7 +2,8 @@
 //
 //                   STM32 /WB /WG / L4 /Gx
 //
-//  ToDo:  - option programming
+//  ToDo:  - Currently only the first 5 option registers can be programmed.
+//           We have to make this device related.
 //
 
 // Flash registers offsets
@@ -12,10 +13,18 @@ const FLASH_OPTKEYR     0x0c
 const FLASH_SR          0x10
 const FLASH_CR          0x14
 const FLASH_OPTR        0x20
-const FLASH_WRP1AR      0x2c
+const FLASH_PCROP1SR    0x24
+const FLASH_PCROP1ER    0x28
+const FLASH_WRP1AR      0x2C
 const FLASH_WRP1BR      0x30
-const FLASH_WRP2AR      0x4c
+
+// Gx additional options
+const FLASH_PCROP2SR    0x44
+const FLASH_PCROP2ER    0x48
+const FLASH_WRP2AR      0x4C
 const FLASH_WRP2BR      0x50
+const FLASH_SEC1R       0x70
+const FLASH_SEC2R       0x74
 
 // FLASH_CR register bits
 const FLASH_CR_PG           (1 << 0)
@@ -41,8 +50,13 @@ const FLASH_SR_PROGERR      (1 << 3) // Programming error
 const FLASH_SR_OPERR        (1 << 1) // Operation error
 const FLASH_SR_EOP          (1 << 0) // End of operation
 
+// Flash unlock key
 const FLASH_KEY1        0x45670123
 const FLASH_KEY2        0xCDEF89AB
+
+// Option register unlock key
+const OPTKEY1                 0x08192A3B
+const OPTKEY2                 0x4C5D6E7F
 
 // The G4 has a different bank erase flag position
 FLASH_CR_BKER <- ( deviceId == 0x468 || deviceId == 0x469 || deviceId == 0x479 ?
@@ -114,8 +128,11 @@ function ebFlashStart()
 function ebFlashErase(sector, address)
 {
     try{
-
         local eraseFlags = FLASH_CR_PER | FLASH_CR_STRT
+
+        // Skip the virtual option sector
+        if(sector == 999)
+            return ERROR_OK
 
         if(hasDualBank && (sector >= halfOfSectors) )
             eraseFlags  = eraseFlags | ( (sector-halfOfSectors)<< FLASH_CR_PAGE_SHIFT | FLASH_CR_BKER )
@@ -160,6 +177,13 @@ function ebFlashErase(sector, address)
 function ebFlashWrite(sector, address, buffer)
 {
     try{
+
+
+        // If this is the virtual option sector, go to options write function
+        if(sector == 999) {
+            printf("\n\nStart writing option bytes virtual sector 999\n")
+            return flashOptionWrite(buffer)
+        }
 
         // Check if the buffer size is multiple of 64bits
         // Flash loader works with multiple of 8 bytes.
@@ -328,4 +352,147 @@ function ebFlashEraseChip()
     }
 }
 
+//===================================================================================
+//                            Option byte programming
+//
+//  Virtual sector 999 of 20 bytes with format as below.
+//  Be aware of reserved reset values!! (otherwise program errors)
+//
+//  typedef struct {        //   Reset
+//     un32 FLASH_OPTR;     // 0xFFEFF8AA
+//     un32 FLASH_PCROP1SR; // 0xFFFFFFFF
+//     un32 FLASH_PCROP1ER; // 0xFFFF0000
+//     un32 FLASH_WRP1AR;   // 0xFF00FFFF
+//     un32 FLASH_WRP1BR;   // 0xFF00FFFF
+//  } STM32_options;
+//
+//  Todo: expand this for e.g. Gx with more option registers
+//
 
+// The index in the ebBuffer of the options
+const FLASH_OPTR_IDX     0
+const FLASH_PCROP1SR_IDX 1
+const FLASH_PCROP1ER_IDX 2
+const FLASH_WRP1AR_IDX   3
+const FLASH_WRP1BR_IDX   4
+
+//  Mapping of the EBlink EBbuffer (virtual sector) and STM32 registers
+OPT_MAPPING <- [[FLASH_OPTR,     "FLASH_OPTR    : 0x%08x\n"], // EBbuffer[0]
+                [FLASH_PCROP1SR, "FLASH_PCROP1SR: 0x%08x\n"],
+                [FLASH_PCROP1ER, "FLASH_PCROP1ER: 0x%08x\n"],
+                [FLASH_WRP1AR,   "FLASH_WRP1AR  : 0x%08x\n"],
+                [FLASH_WRP1BR,   "FLASH_WRP1BR  : 0x%08x\n"]] // EBbuffer[4]
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Write STM32H7 option bytes
+//
+function flashOptionWrite(optionBuf)
+{
+    try{
+        // Get the current options
+        local curOptions = flashGetOptionBuffer()
+
+        // Check if the options are not already set
+        if(!( optionBuf <=> curOptions)){
+            debugf("Skipping options writing due equal settings\n")
+            return ERROR_OK
+        }
+
+        // Check if the buffer is valid ( Todo: support larger option arrays like Gx)
+        if(optionBuf.getSize() != 20){
+            errorf("Error: Option program length is %d, should be 20 bytes\n", optionBuf.getSize())
+            throw ERROR_NOTIFIED
+        }
+
+        // Generic flash unlock
+        flashUnlock()
+
+        //------------- Unlock options  --------------
+        // Check if options are locked by the FLASH_OPTCR_OPTLOCK flag
+        if( intrfApi.read(FLASH_BASE + FLASH_CR) & FLASH_CR_OPTLOCK  ){
+
+            // Write FLASH_OPTKEYR to unlock
+           intrfApi.write(FLASH_BASE + FLASH_OPTKEYR, OPTKEY1)
+           intrfApi.write(FLASH_BASE + FLASH_OPTKEYR, OPTKEY2)
+
+            // Reread flash FLASH_OPTCR to check if we are unlocked
+            if( intrfApi.read(FLASH_BASE + FLASH_CR) & FLASH_CR_OPTLOCK  )
+                throw ERROR_UNLOCK
+        }
+
+        //-------------- Program the options ---------
+        printf("Write buffer into option registers:\n")
+        for(local i=0; i<OPT_MAPPING.len(); i++) {
+            if(curOptions[i] != optionBuf[i] ) {
+                debugf(OPT_MAPPING[i][1], optionBuf[i])
+                intrfApi.write(FLASH_BASE + OPT_MAPPING[i][0], optionBuf[i] )
+            }
+        }
+
+        //------------- Commit options  --------------
+        intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_OPTSTRT)
+        flashCheckBusy(1000)
+        intrfApi.write(FLASH_BASE + FLASH_CR, intrfApi.read(FLASH_BASE + FLASH_CR) & ~FLASH_CR_OPTSTRT)
+
+
+        // Relock the flash
+        intrfApi.write(FLASH_BASE + FLASH_CR, intrfApi.read(FLASH_BASE + FLASH_CR) | FLASH_CR_LOCK)
+
+        // Check for errors
+        if(intrfApi.read(FLASH_BASE + FLASH_SR) & FLASH_SR_OPERR)
+            throw ERROR_FLASH
+
+        return ERROR_OK
+    }
+
+    catch(e){
+       catchThrowStr(e)
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: options writing failed! [%s]\n", errorToStr(e) )
+       throw ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  This function will return an EBbuffer filled with options values
+//
+function flashGetOptionBuffer()
+{
+    local optionBuf = EBbuffer(5*4)   // Allocate buffer to hold 5 words
+
+    debugf("Read option registers in buffer:\n")
+    for(local i=0; i<OPT_MAPPING.len(); i++) {
+        optionBuf[i] = intrfApi.read(FLASH_BASE + OPT_MAPPING[i][0])
+        debugf(OPT_MAPPING[i][1], optionBuf[i])
+    }
+
+    return optionBuf
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Get the readout protection level from an ebBuffer option copy.
+//
+function flashRDPlevel(optionBuf)
+{
+  switch(optionBuf[FLASH_OPTR_IDX] & 0xFF) {
+    case 0xAA : return 0
+    case 0xCC : return 2
+    default   : return 1  // Everything else is level 1 (protected)
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//
+//  This is a standalone function to clear the RDP level in an ebBuffer options copy
+//
+function flashClearRDP(optionBuf)
+{
+    // Clear the readout protection level
+    local optsr = optionBuf[FLASH_OPTR_IDX] & 0xFFFFFF00
+    optionBuf[FLASH_OPTR_IDX] = optsr | 0x000000AA // Level 0
+}
