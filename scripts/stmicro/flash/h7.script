@@ -540,7 +540,7 @@ function flashGetOptionBuffer()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//  This function will return an EBbuffer with the option filled
+//  This function will write an EBbuffer to the options area
 //
 function flashWriteOptionBuffer(optionBuf)
 {
@@ -563,13 +563,13 @@ function flashClearRDP(optionBuf)
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//  Get the readout protoection level
+//  Get the readout protection level
 //
 function flashRDPlevel(optionBuf)
 {
   local flash_optsr = (optionBuf[FLASH_OPTSR] >> 8) & 0xFF
 
   if( flash_optsr == 0xAA ) return 0
-  if( flash_optsr == 0xCc ) return 2
+  if( flash_optsr == 0xCC ) return 2
   return 1
 }

@@ -355,8 +355,9 @@ function ebServicesSetup()
 
         // Remark:
         //  We start the GDB servers with the original GDB options from the command line (like no-caching etc)
-        //  and override the dap-ap port id.
-        //  Place the "ap=%d" at the end of the options!!
+        //  and override the dap-ap port id. The original cli options are retrieved with "cliSwitch" with as
+        //  argument the cli switch of interest.
+        //  Place the "ap=%d" at the end of the options to prevent overriding by original cli options!!
     }
 
     // Catch the errors

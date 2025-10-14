@@ -62,7 +62,7 @@ function stm32_device()
     intrfApi.write(DBGMCU_CR, DBG_STANDBY | DBG_STOP | DBG_SLEEP  )
 
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
-    ntrfApi.write(DBGMCU_APB1_FZ, 0x00001800)
+    intrfApi.write(DBGMCU_APB1_FZ, 0x00001800)
 
     foreach(dev in ST_DEV)
     if( dev[0] == deviceId ) {
