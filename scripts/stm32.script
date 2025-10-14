@@ -14,37 +14,41 @@
 //
 
 // The supported device matrix
-STMICRO <- [
-["M0+", [0x40015800],
-                   [["l0", [ 0x417, 0x425, 0x447, 0x457 ]],
-                    ["gx", [ 0x466, 0x456, 0x460, 0x467 ]],
-                    ["c0", [ 0x443, 0x453 ]],
-                    ["u0", [ 0x459, 0x489 ]]]],
+STMICRO <-{
 
-["M0",  [0x40015800],
-                   [["f0", [ 0x440, 0x442, 0x444, 0x445, 0x448 ]]]],
+// Arch    ID register(s)   script        dev ID code(s)
+["M0+"] = [[0x40015800],
+                           [["l0", [ 0x417, 0x425, 0x447, 0x457 ]],
+                            ["gx", [ 0x466, 0x456, 0x460, 0x467 ]],
+                            ["c0", [ 0x443, 0x453 ]],
+                            ["u0", [ 0x459, 0x489 ]]]],
 
-["M3",  [0xE0042000],
-                   [["f1", [ 0x410, 0x412, 0x414, 0x418, 0x420, 0x428, 0x430 ]],
-                    ["f2", [ 0x411 ]],
-                    ["l1", [ 0x416, 0x427, 0x429, 0x436, 0x437 ]]]],
+["M0"]  = [[0x40015800],
+                           [["f0", [ 0x440, 0x442, 0x444, 0x445, 0x448 ]]]],
 
-["M4",  [0xE0042000],
-                   [["f4", [ 0x413, 0x419, 0x421, 0x423, 0x431, 0x433, 0x434, 0x441, 0x458, 0x411 /* <- patch*/ ]],
-                    ["f3", [ 0x422, 0x432, 0x438, 0x439, 0x446 ]],
-                    ["l4", [ 0x415, 0x435, 0x461, 0x462, 0x464, 0x470, 0x471 ]],
-                    ["gx", [ 0x468, 0x469, 0x479 ]],
-                    ["wx", [ 0x495, 0x496, 0x497 ]]]],
+["M3"]  = [[0xE0042000],
+                           [["f1", [ 0x410, 0x412, 0x414, 0x418, 0x420, 0x428, 0x430 ]],
+                            ["f2", [ 0x411 ]],
+                            ["l1", [ 0x416, 0x427, 0x429, 0x436, 0x437 ]]]],
 
-["M7",  [0x5C001000, 0xE0042000],
-                   [["f7", [ 0x449, 0x451, 0x452 ]],
-                    ["h7", [ 0x450, 0x480, 0x483 ]]]],
+["M4"]  = [[0xE0042000],
+                           [["f4", [ 0x413, 0x419, 0x421, 0x423, 0x431, 0x433, 0x434, 0x441, 0x458, 0x411 /* <- patch*/ ]],
+                            ["f3", [ 0x422, 0x432, 0x438, 0x439, 0x446 ]],
+                            ["l4", [ 0x415, 0x435, 0x461, 0x462, 0x464, 0x470, 0x471 ]],
+                            ["gx", [ 0x468, 0x469, 0x479 ]],
+                            ["wx", [ 0x495, 0x496, 0x497 ]]]],
 
-["M33", [0xE0044000, 0x44024000],
-                   [["u5", [ 0x455, 0x476, 0x481, 0x482 ]],
-                    ["l5", [ 0x472 ]],
-                    ["h5", [ 0x474, 0x478, 0x484 ]]]]
-]
+["M7"]  = [[0x5C001000,
+            0xE0042000],
+                           [["f7", [ 0x449, 0x451, 0x452 ]],
+                            ["h7", [ 0x450, 0x480, 0x483 ]]]],
+
+["M33"] = [[0xE0044000,
+            0x44024000],
+                           [["u5", [ 0x455, 0x476, 0x481, 0x482 ]],
+                            ["l5", [ 0x472 ]],
+                            ["h5", [ 0x474, 0x478, 0x484 ]]]]
+}
 
 intrfApi <- InterfAPI()  // Global so that all included script files also have access
 targetApi<- TargetAPI()  // Global interface to the target class
@@ -88,34 +92,36 @@ function ebMain()
 //
 function findDevice()
 {
-    local devReg
-
     if( VERSION < 6.0){
        errorf("Error:\n\nIncompatiable EBlink version %.2f\n\tPlease update\n", VERSION)
        throw ERROR_NOTIFIED
     }
 
-    foreach(arch in STMICRO)
-      if(arch[0] == targetApi.getCpuName()){
-          foreach(addr in arch[1]) {
-              try{ devReg = intrfApi.read(addr); if(devReg) break; }
-              catch(e){}
-          }
+    // Check the architecture
+    if( targetApi.getCpuName() in STMICRO ) {
 
-          if(devReg) {
-            deviceId = devReg & 0xfff
+       // Scan all the device registers in this architecture
+       foreach(addr in STMICRO[targetApi.getCpuName()][0]) {
+       try{ deviceId = intrfApi.read(addr) & 0xfff; if(deviceId) break; }
+           catch(e){}
+       }
+
+       // If we have a valid device ID
+       if(deviceId) {
             noticef("STmicro device : 0x%X\n", deviceId)
 
-            foreach(script in arch[2])
+            // Search every script file if it supports the device ID
+            foreach(script in STMICRO[targetApi.getCpuName()][1])
               foreach(devId in script[1])
                   if( devId == deviceId){
+                    // Include the corresponding script file
                     require("stmicro/stm32"+script[0]+".script")
+                    // Continue with the initalization of the rigth STM32 device
                     stm32_device()
                     return
                   }
           }
-          break
-      }
+    }
 
     throw ERROR_NOT_FOUND
 }
