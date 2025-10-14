@@ -3,6 +3,25 @@
 //                   STM32F4x
 //
 
+F4TBL <- { // Supported F4 devices table
+// DevID   RAM size   Name
+[0x411] = [0x30000, "x5/4x7"],  // Fix chip_id for F4 rev A errata
+[0x413] = [0x30000, "x5/4x7"],
+[0x419] = [0x40000, "2x/43x"],
+[0x421] = [0x20000, "46"],
+[0x423] = [0x10000, "01xB/C (Low Power)"],
+[0x431] = [0x20000, "11"],
+[0x433] = [0x18000, "01xD/E"],
+[0x434] = [0x40000, "69/479"],
+[0x441] = [0x40000, "12"],
+[0x458] = [0x08000, "10"]
+}
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces.
+//
 
 //---------- Memory map of the F4 < 1MB
 const mem_template = @@"
@@ -88,30 +107,15 @@ const mem_template_2MB = @@"
 </memory-map>"
 
 
-// Supported F4 devices
-STF4_DEV <- [
-//   DevID    RAM      Name
-    [0x411, 0x30000, "x5/4x7"],  // Fix chip_id for F4 rev A errata
-    [0x413, 0x30000, "x5/4x7"],
-    [0x419, 0x40000, "2x/43x"],
-    [0x421, 0x20000, "46"],
-    [0x423, 0x10000, "01xB/C (Low Power)"],
-    [0x431, 0x20000, "11"],
-    [0x433, 0x18000, "01xD/E"],
-    [0x434, 0x40000, "69/479"],
-    [0x441, 0x40000, "12"],
-    [0x458, 0x08000, "10"]
-]
-
 /////////////////////////////////////////////////////
 //
 //  Entry point of this script called by parent script
 //
 function stm32_device()
 {
-    local deviceStr
-    local flash_size
-    local ram_size = -1
+    // Throw error if device is not in the table mapping
+    if(deviceId in F4TBL == false)
+         throw ERROR_NOT_FOUND
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
     intrfApi.write(0xE0042004, 7)
@@ -119,23 +123,14 @@ function stm32_device()
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
     intrfApi.write(0xE0042008, 0x00001800)
 
-    foreach(dev in STF4_DEV)
-        if( dev[0] == deviceId ) {
-            ram_size = dev[1]
-            deviceStr = dev[2]
-            break
-        }
-
-    // Throw error if device is not in the F4 mapping
-    if( ram_size == -1)
-        throw ERROR_NOT_FOUND
+    local ram_size = F4TBL[deviceId][0]
 
     // Get the flash size
-    flash_size = intrfApi.read(0x1FFF7A22) >>16
+    local flash_size = intrfApi.read(0x1FFF7A22) >>16
     flash_size = (flash_size & 0xffff) *1024
 
     // Inform user of the device found
-    printf("STmicro family : STM32F4%s\n", deviceStr)
+    printf("STmicro family : STM32F4%s\n", F4TBL[deviceId][1])
 
     // Inform the user
     printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)

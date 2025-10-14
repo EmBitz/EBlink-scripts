@@ -3,6 +3,17 @@
 //                   STM32F3x
 //
 
+
+F3TBL <- { // Supported F3 devices table
+// DevID   RAM size   Name
+[0x422] = [ 0x0A000, "0x"],  // Fix chip_id for F4 rev A errata
+[0x432] = [ 0x0A000, "7x"],
+[0x438] = [ 0x03000, "03x6/8, STM32F328"],
+[0x439] = [ 0x0A000, "02x/8"],
+[0x446] = [ 0x10000, "03xD/E, STM32F398xE"],
+}
+
+
 /////////////////////////////////////////////////////
 //
 //   Memory map template of this device(s)
@@ -36,16 +47,6 @@ const DBG_SLEEP     (1<<0)
 const DBG_STOP      (1<<1)
 const DBG_STANDBY   (1<<2)
 
-// Supported F3 devices
-ST_DEV <- [
-    //   DevID    RAM      Name
-    [0x422, 0x0A000, "02/3xB/C"],  // Fix chip_id for F4 rev A errata
-    [0x432, 0x0A000, "7x"],
-    [0x438, 0x03000, "3x"],
-    [0x439, 0x0A000, "03xD/E"],
-    [0x446, 0x10000, "01xB/C (Low Power)"],
-]
-
 /////////////////////////////////////////////////////
 //
 //  Entry point of this script called by parent script
@@ -54,9 +55,9 @@ ST_DEV <- [
 //
 function stm32_device()
 {
-    local deviceStr
-    local flash_size
-    local ram_size = -1
+    // Throw error if device is not in the table mapping
+    if(deviceId in F3TBL == false)
+         throw ERROR_NOT_FOUND
 
     // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP
     intrfApi.write(DBGMCU_CR, DBG_STANDBY | DBG_STOP | DBG_SLEEP  )
@@ -64,22 +65,13 @@ function stm32_device()
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
     intrfApi.write(DBGMCU_APB1_FZ, 0x00001800)
 
-    foreach(dev in ST_DEV)
-    if( dev[0] == deviceId ) {
-            ram_size = dev[1]
-            deviceStr = dev[2]
-            break
-        }
-
-    // Throw error if device is not in the mapping
-    if( ram_size == -1)
-        throw ERROR_NOT_FOUND
+    local ram_size = F3TBL[deviceId][0]
 
     // Get the flash size and translate from Kbytes to bytes
-    flash_size = (intrfApi.read(0x1ffff7cc)  & 0xffff) *1024
+    local flash_size = (intrfApi.read(0x1ffff7cc)  & 0xffff) *1024
 
     // Inform user of the device found
-    printf("STmicro family : STM32F3%s\n", deviceStr)
+    printf("STmicro family : STM32F3%s\n", F3TBL[deviceId][1])
 
     // Inform the user
     printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
