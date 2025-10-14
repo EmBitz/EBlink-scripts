@@ -13,8 +13,7 @@
 //     so we have 0x411 also as a cortex-M4 in the list (see patch).
 //
 
-// The supported device matrix
-STMICRO <-{
+STMICRO <-{  // The supported STM32 device table
 
 // Arch    ID register(s)   script        dev ID code(s)
 ["M0+"] = [[0x40015800],
@@ -98,16 +97,16 @@ function findDevice()
     }
 
     // Check the architecture
-    if( targetApi.getCpuName() in STMICRO ) {
+    if( targetApi.getCpuName() in STMICRO ){
 
        // Scan all the device registers in this architecture
-       foreach(addr in STMICRO[targetApi.getCpuName()][0]) {
-       try{ deviceId = intrfApi.read(addr) & 0xfff; if(deviceId) break; }
-           catch(e){}
+       foreach(addr in STMICRO[targetApi.getCpuName()][0]){
+            try{ deviceId = intrfApi.read(addr) & 0xfff; if(deviceId) break; }
+            catch(e){}
        }
 
        // If we have a valid device ID
-       if(deviceId) {
+       if(deviceId){
             noticef("STmicro device : 0x%X\n", deviceId)
 
             // Search every script file if it supports the device ID
@@ -116,11 +115,10 @@ function findDevice()
                   if( devId == deviceId){
                     // Include the corresponding script file
                     require("stmicro/stm32"+script[0]+".script")
-                    // Continue with the initalization of the rigth STM32 device
                     stm32_device()
                     return
                   }
-          }
+       }
     }
 
     throw ERROR_NOT_FOUND
