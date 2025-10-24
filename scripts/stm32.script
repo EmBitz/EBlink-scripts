@@ -97,28 +97,28 @@ function findDevice()
     }
 
     // Check the architecture
-    if( targetApi.getCpuName() in STMICRO ){
+    if( targetApi.getCpuName() in STMICRO == false)
+        throw ERROR_NOT_FOUND
 
-       // Scan all the device registers in this architecture
-       foreach(addr in STMICRO[targetApi.getCpuName()][0]){
-            try{ deviceId = intrfApi.read(addr) & 0xfff; if(deviceId) break; }
-            catch(e){}
-       }
+    // Scan all the device registers in this architecture
+    foreach(addr in STMICRO[targetApi.getCpuName()][0]){
+        try{ deviceId = intrfApi.read(addr) & 0xfff; if(deviceId) break; }
+        catch(e){}
+    }
 
-       // If we have a valid device ID
-       if(deviceId){
-            noticef("STmicro device : 0x%X\n", deviceId)
+    // If we have a valid device ID
+    if(deviceId){
+        noticef("STmicro device : 0x%X\n", deviceId)
 
-            // Search every script file if it supports the device ID
-            foreach(script in STMICRO[targetApi.getCpuName()][1])
-              foreach(devId in script[1])
-                  if( devId == deviceId){
-                    // Include the corresponding script file
-                    require("stmicro/stm32"+script[0]+".script")
-                    stm32_device()
-                    return
-                  }
-       }
+        // Search every script file if it supports the device ID
+        foreach(script in STMICRO[targetApi.getCpuName()][1])
+            foreach(devId in script[1])
+               if( devId == deviceId){
+                // Include the corresponding script file and initialize the device
+                require("stmicro/stm32"+script[0]+".script")
+                stm32_device()
+                return
+               }
     }
 
     throw ERROR_NOT_FOUND
@@ -141,7 +141,7 @@ function  ebResetPost(resetType)
         // can add his own reset strategy with -S <myscript> as last
         // defined script on the cli.
         if (isScriptObject("ebResetPostHook"))
-            return ebResetPostHook(resetType);
+            return ebResetPostHook(resetType)
 
         // We don't use this if the reset is a user_script type. In that
         // case, the user is responsible for the initialization.

@@ -350,8 +350,8 @@ function ebServicesSetup()
 
         //                       service        Name                  service-options
         //------------------------------------------------------------------------------------------------------
-        servicesApi.addService("GDB-target", "GDB_CM7",  format("%s,ap=%d", cliSwitch("-G"),CM7_AP )) // Add GDB server for cpu1
-        servicesApi.addService("GDB-target", "GDB_CM4",  format("%s,ap=%d", cliSwitch("-G"),CM4_AP )) // Add GDB server for cpu2
+        servicesApi.addService("GDB-server", "GDB_CM7",  format("%s,ap=%d", cliSwitch("-G"),CM7_AP )) // Add GDB server for cpu1
+        servicesApi.addService("GDB-server", "GDB_CM4",  format("%s,ap=%d", cliSwitch("-G"),CM4_AP )) // Add GDB server for cpu2
 
         // Remark:
         //  We start the GDB servers with the original GDB options from the command line (like no-caching etc)
