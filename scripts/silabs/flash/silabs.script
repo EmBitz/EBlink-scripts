@@ -49,7 +49,7 @@ function ebFlashStart()
     }
 
     // Catch all the sector write errors
-    catch(e
+    catch(e) {
        if(catchString(e))
             return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
