@@ -120,17 +120,20 @@ function ebFlashWrite(sector, address, buffer)
         // Buffer access is 32 bits
         buffer.access(32);
 
+        // The buffer length in 32bits words
+        local bufLength = buffer.getSize()/4
+
         // Write the flash content and use the auto address increment
         // of the MSC engine.
         local idx = 0
-        while(idx < buffer.getSize()/4 )
+        while(idx < bufLength )
         {
             // Write word to MSC_DATA
             intrfApi.write( mscBase|MSC_WDATA, buffer[idx] )
 
             // Initiate write with auto increment, 1 to WRITETRIG in MSC_WRITECMD
             intrfApi.write(mscBase|MSC_WRITECMD, 0x10)
-            idx += 4
+            idx++
         }
 
         // End writing  MSC->WRITECMD = MSC_WRITECMD_WRITEEND
