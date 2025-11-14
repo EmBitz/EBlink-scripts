@@ -101,7 +101,7 @@ function ebFlashErase(sector, address)
 //  The actual flash writing. The length is always 32 bits boundary but can be
 //  smaller than a sector size.
 //
-function flash_write(sector, address, buffer)
+function ebFlashWrite(sector, address, buffer)
 {
     try{
         //while ( MSC->STATUS & MSC_STATUS_BUSY )
@@ -117,13 +117,16 @@ function flash_write(sector, address, buffer)
         // MSC->WRITECMD = MSC_WRITECMD_LADDRIM
         intrfApi.write(mscBase|MSC_WRITECMD, 0x01)
 
+        // Buffer access is 32 bits
+        buffer.access(32);
+
         // Write the flash content and use the auto address increment
         // of the MSC engine.
         local idx = 0
-        while(idx < buffer.getSize() )
+        while(idx < buffer.getSize()/4 )
         {
             // Write word to MSC_DATA
-            intrfApi.write( mscBase|MSC_WDATA, buffer.get32(idx) )
+            intrfApi.write( mscBase|MSC_WDATA, buffer[idx] )
 
             // Initiate write with auto increment, 1 to WRITETRIG in MSC_WRITECMD
             intrfApi.write(mscBase|MSC_WRITECMD, 0x10)
@@ -149,7 +152,7 @@ function flash_write(sector, address, buffer)
 //
 //   Finalize the flash operations
 //
-function flash_done()
+function ebFlashDone()
 {
     try{
         //while ( MSC->STATUS & MSC_STATUS_BUSY )
@@ -219,7 +222,7 @@ function ebFlashEraseChip()
         }
 
         // Lock the flash, see above
-        if( flash_done() < ERROR_OK)
+        if( ebFlashDone() < ERROR_OK)
             throw ERROR_NOTIFIED
 
         // Inform the user what we did
