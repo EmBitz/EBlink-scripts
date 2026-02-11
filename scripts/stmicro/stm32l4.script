@@ -68,29 +68,36 @@ function stm32_device()
       local deviceStr
       switch(deviceId) {
         case 0x415 : // CHIPID_STM32_L47/L48
-        case 0x461 : // CHIPID_STM32_L49X/L4A
-            deviceStr = ( deviceId == 0x415 ? "L47/L48xx" : "L49/L4Axx")
+            deviceStr = "L47/L48xx"
             if( (flash_size == (1024*1024)) && readDualBankOption(21) )
                 hasDualBank = true
-            ram_size = 0x18000
+            ram_size = 0x20000 //128kB
+            page_size = 0x800
+            break
+
+        case 0x461 : // CHIPID_STM32_L49X/L4A
+            deviceStr = "L49/L4Axx"
+            if( (flash_size == (1024*1024)) && readDualBankOption(21) )
+                hasDualBank = true
+            ram_size = 0x50000 //320kB
             page_size = 0x800
             break
 
         case 0x435 :
             deviceStr = "L43/L44xx"
-            ram_size = 0x10000
+            ram_size = 0x10000 //64kB
             page_size = 0x800
             break
 
         case 0x462 :
             deviceStr = "L45/L46xx"
-            ram_size = 0x10000
+            ram_size = 0x28000 //160kB
             page_size = 0x800
             break
 
         case 0x464 :
             deviceStr = "L41/L42xx"
-            ram_size = 0x10000
+            ram_size = 0xA000 //40kB
             page_size = 0x800
             break
 
