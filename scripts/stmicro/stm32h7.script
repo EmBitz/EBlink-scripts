@@ -252,6 +252,10 @@ function stm32_device()
     }
 
     if(rdpLevel == 1){
+	
+	        // yesNof formatted yes/no question with settable default (0 or 1) =>  yesNof( default return, question string, ...)	
+			// So questio below has 1=yes as default return. This default will be used if verbose level is no questions
+			
         if( yesNof(1, "Read protection level 1 active\nClear (chip will erase) to level 0?") ) {
             printf("\nReset the RDP level to 0\nThis can take a while due to erasing\n")
 
