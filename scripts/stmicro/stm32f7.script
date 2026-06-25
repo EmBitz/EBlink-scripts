@@ -73,7 +73,7 @@ const mem_template_F73 = @@"
   <property name=\"secstart\">0</property>
  </memory>
 
-  <!-- Place holder for STM32F2 -->
+  <!-- Place holder for additional memory -->
  %s
 
  <!-- peripheral regs -->
@@ -99,6 +99,9 @@ const mem_template_F72 = @@"
  <memory type=\"flash\" start=\"0x08040000\" length=\"0xC0000\">
   <property name=\"blocksize\">0x20000</property>
  </memory>"
+
+// Above this number we assume that de sector is bank #2 in flash algo.
+bank1SecNum <- 12 // default to 12
 
 /////////////////////////////////////////////////////
 //

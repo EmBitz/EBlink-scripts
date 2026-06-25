@@ -32,6 +32,9 @@ const mem_template = @@"
  <memory type=\"rom\" start=\"0x1ffff800\" length=\"0x10\"/>
 </memory-map>"
 
+// Above this number we assume that de sector is bank #2 in flash algo.
+bank1SecNum <- 12 // default to 12
+
 /////////////////////////////////////////////////////
 //
 //  Entry point of this script called by parent script

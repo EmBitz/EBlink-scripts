@@ -6,6 +6,9 @@
 // TODO: - Multi bank
 //       - options
 //
+//  The script needs a "bank1SecNum" variable from upper scripts with the amount of 
+//  sectors of the first (and perhaps only) bank.
+//
 
 const FLASH_ACR     0x40023c00
 const FLASH_KEYR    0x40023c04
@@ -155,8 +158,8 @@ function ebFlashErase(sector, address)
     try{
         // Check for large memory devices
         local secReg = sector
-        if(sector>= 12)
-            secReg = (sector-12) | 0x10
+        if(sector>= bank1SecNum)
+            secReg = (sector-bank1SecNum) | 0x10
 
         // (1) Check that no Flash memory operation is ongoing by checking the BSY bit in the FLASH_SR register
         // ....We skip this because every action is ending with this check
@@ -272,7 +275,7 @@ function ebFlashEraseChip()
         // ....We skip this because every action is ending with this check
 
         // (2)(3)Set the MER and STRT bit in the FLASH_CR register
-        if(DeviceAPI().sectorCount() > 12)
+        if(DeviceAPI().sectorCount() > bank1SecNum)
             intrfApi.write(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_MER1 | FLASH_CR_STRT)
         else
             intrfApi.write(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_STRT)

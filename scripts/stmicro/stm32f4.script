@@ -4,18 +4,18 @@
 //
 
 F4TBL <- { // Supported F4 devices table
-// DevID   RAM size   Name
-[0x411] = [0x30000, "x5/4x7"],  // Fix chip_id for F4 rev A errata
-[0x413] = [0x30000, "x5/4x7"],
-[0x419] = [0x40000, "2x/43x"],
-[0x421] = [0x20000, "46"],
-[0x423] = [0x10000, "01xB/C (Low Power)"],
-[0x431] = [0x20000, "11"],
-[0x433] = [0x18000, "01xD/E"],
-[0x434] = [0x40000, "69/479"],
-[0x441] = [0x40000, "12"],
-[0x458] = [0x08000, "10"],
-[0x463] = [0x50000, "13"]
+// DevID   RAM size   Name    bank1 sectors
+[0x411] = [0x30000, "x5/4x7",   12],
+[0x413] = [0x30000, "x5/4x7",   12],
+[0x419] = [0x40000, "2x/43x",   12],
+[0x421] = [0x20000, "46",       12],
+[0x423] = [0x10000, "01xB/C",   12],
+[0x431] = [0x20000, "11",       12],
+[0x433] = [0x18000, "01xD/E",   12],
+[0x434] = [0x40000, "69/479",   12],
+[0x441] = [0x40000, "12",       12],
+[0x458] = [0x08000, "10",       12],
+[0x463] = [0x50000, "13",       15]
 }
 
 /////////////////////////////////////////////////////
@@ -128,6 +128,9 @@ const mem_template_2MB = @@"
   <memory type=\"rom\" start=\"0x1FFFC000\" length=\"0x10\"/>
 </memory-map>"
 
+// Above this number we assume that de sector is bank #2 in flash algo.
+// Set by tabel 
+bank1SecNum <- 0
 
 /////////////////////////////////////////////////////
 //
@@ -182,6 +185,9 @@ function stm32_device()
         DeviceAPI().memmap( format( mem_template, flash_size,
                                                   ram_size,
                                                   flash_size - (128*1024) ) )
+
+
+    bank1SecNum <- F4TBL[deviceId][2]
 
     // Include flash loader script
     require("stmicro/flash/f7_f4_f2.script")
