@@ -165,7 +165,7 @@ function ebFlashWrite(sector, address, buffer)
 
         // Write halfpages, the buffer size is always the same as sector size (no sector trim)
         local halfPageSize = buffer.getSize()/2
-       brkPt()
+
         intrfApi.writeBuf(buffer, address, 32, 0, halfPageSize )
 
         checkBusy(FLASH_TIMEOUT)

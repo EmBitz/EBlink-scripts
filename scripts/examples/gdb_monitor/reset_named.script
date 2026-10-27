@@ -1,0 +1,55 @@
+/////////////////////////////////////////////////////
+//
+// Monitor command: reset [system|core|hardware]
+//
+//   Intercepts "monitor reset" with a named reset type.
+//   Unknown sub-commands are left to EBlink's built-in handler.
+//
+//   Usage (from GDB):
+//     monitor reset system    -> system reset  (NVIC SYSRESETREQ)
+//     monitor reset core      -> core reset    (NVIC VECTRESET)
+//     monitor reset hardware  -> hardware reset (nSRST pin)
+//
+//   Anything else (e.g. "monitor reset 0") is not consumed here,
+//   so EBlink handles it normally.
+//
+function ebGDBqRcmd(packet, length, ebBuffer)
+{
+    try {
+        local tokens = []
+        astrsep(tokens, packet, " \t")
+
+        // Only intercept if the first token is "reset"
+        if (tokens.len() >= 1 && tokens[0].tolower() == "reset") {
+
+            // Find the first non-empty sub-token
+            local sub = ""
+            for (local i = 1; i < tokens.len(); i++) {
+                if (tokens[i].len() > 0) {
+                    sub = tokens[i].tolower()
+                    break
+                }
+            }
+
+            local resetType = -1
+            if      (sub == "system")   resetType = SYSTEM_RESET
+            else if (sub == "core")     resetType = CORE_RESET
+            else if (sub == "hardware") resetType = JTAG_RESET
+
+            if (resetType >= 0) {
+                TargetAPI().reset(resetType)
+                ebBuffer.format("OK\n")
+                return ERROR_OK
+            }
+        }
+
+        // Not handled here -> EBlink takes over
+        return ERROR_OK
+    }
+    catch(e) {
+        if (catchString(e))
+            return ERROR_NOTIFIED
+        errorf("monitor reset error: %s\n", errorToStr(e))
+        return ERROR_NOTIFIED
+    }
+}

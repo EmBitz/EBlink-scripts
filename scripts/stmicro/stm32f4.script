@@ -129,7 +129,7 @@ const mem_template_2MB = @@"
 </memory-map>"
 
 // Above this number we assume that de sector is bank #2 in flash algo.
-// Set by tabel 
+// Set by F4TBL tabel parameter
 bank1SecNum <- 0
 
 /////////////////////////////////////////////////////
@@ -187,6 +187,7 @@ function stm32_device()
                                                   flash_size - (128*1024) ) )
 
 
+    // Set the bank1 number of sectors (even if it only has one bank)
     bank1SecNum <- F4TBL[deviceId][2]
 
     // Include flash loader script

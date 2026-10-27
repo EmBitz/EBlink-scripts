@@ -13,40 +13,36 @@
 //     so we have 0x411 also as a cortex-M4 in the list (see patch).
 //
 
-STMICRO <-{  // The supported STM32 device table
+STMICRO <- {
+	"M0+": { regs = [0x40015800], fam = {
+		l0 = [0x417, 0x425, 0x447, 0x457],
+		gx = [0x466, 0x456, 0x460, 0x467],
+		c0 = [0x443, 0x453],
+		u0 = [0x459, 0x489] } },
 
-// Arch    ID register(s)   script        dev ID code(s)
-["M0+"] = [[0x40015800],
-                           [["l0", [ 0x417, 0x425, 0x447, 0x457 ]],
-                            ["gx", [ 0x466, 0x456, 0x460, 0x467 ]],
-                            ["c0", [ 0x443, 0x453 ]],
-                            ["u0", [ 0x459, 0x489 ]]]],
+	"M0":  { regs = [0x40015800], fam = {
+		f0 = [0x440, 0x442, 0x444, 0x445, 0x448] } },
 
-["M0"]  = [[0x40015800],
-                           [["f0", [ 0x440, 0x442, 0x444, 0x445, 0x448 ]]]],
+	"M3":  { regs = [0xE0042000], fam = {
+		f1 = [0x410, 0x412, 0x414, 0x418, 0x420, 0x428, 0x430],
+		f2 = [0x411],
+		l1 = [0x416, 0x427, 0x429, 0x436, 0x437] } },
 
-["M3"]  = [[0xE0042000],
-                           [["f1", [ 0x410, 0x412, 0x414, 0x418, 0x420, 0x428, 0x430 ]],
-                            ["f2", [ 0x411 ]],
-                            ["l1", [ 0x416, 0x427, 0x429, 0x436, 0x437 ]]]],
+	"M4":  { regs = [0xE0042000], fam = {
+		f4 = [0x413, 0x419, 0x421, 0x423, 0x431, 0x433, 0x434, 0x441, 0x458, 0x411 /* <- patch */],
+		f3 = [0x422, 0x432, 0x438, 0x439, 0x446],
+		l4 = [0x415, 0x435, 0x461, 0x462, 0x464, 0x470, 0x471],
+		gx = [0x468, 0x469, 0x479],
+		wx = [0x495, 0x496, 0x497] } },
 
-["M4"]  = [[0xE0042000],
-                           [["f4", [ 0x413, 0x419, 0x421, 0x423, 0x431, 0x433, 0x434, 0x441, 0x458, 0x463, 0x411 /* <- patch*/ ]],
-                            ["f3", [ 0x422, 0x432, 0x438, 0x439, 0x446 ]],
-                            ["l4", [ 0x415, 0x435, 0x461, 0x462, 0x464, 0x470, 0x471 ]],
-                            ["gx", [ 0x468, 0x469, 0x479 ]],
-                            ["wx", [ 0x495, 0x496, 0x497 ]]]],
+	"M7":  { regs = [0x5C001000, 0xE0042000], fam = {
+		f7 = [0x449, 0x451, 0x452],
+		h7 = [0x450, 0x480, 0x483] } },
 
-["M7"]  = [[0x5C001000,
-            0xE0042000],
-                           [["f7", [ 0x449, 0x451, 0x452 ]],
-                            ["h7", [ 0x450, 0x480, 0x483 ]]]],
-
-["M33"] = [[0xE0044000,
-            0x44024000],
-                           [["u5", [ 0x455, 0x476, 0x481, 0x482 ]],
-                            ["l5", [ 0x472 ]],
-                            ["h5", [ 0x474, 0x478, 0x484 ]]]]
+	"M33": { regs = [0xE0044000, 0x44024000], fam = {
+		u5 = [0x455, 0x476, 0x481, 0x482],
+		l5 = [0x472],
+		h5 = [0x474, 0x478, 0x484] } }
 }
 
 intrfApi <- InterfAPI()  // Global so that all included script files also have access
@@ -63,26 +59,26 @@ deviceId <- 0            // Global deviceId
 //
 function ebMain()
 {
-    try{
-        findDevice()
-    }
-    catch(e){
-        // Catch any string exceptions (e.g. Squirrel error's)
-        if(catchString(e))
-            return ERROR_NOTIFIED
+	try{
+		findDevice()
+	}
+	catch(e){
+		// Catch any string exceptions (e.g. Squirrel error's)
+		if(catchString(e))
+			return ERROR_NOTIFIED
 
-        if( e == ERROR_NOT_FOUND)
-            if(deviceId){
-                printf("\n\nPlease report this ID so that we can add it.\n")
-                errorf("Error unsupported STM32 ID: 0x%X\n", deviceId)
-            }
-            else
-                errorf("ERROR: No valid STmicro device ID found\n")
-        else if( e != ERROR_NOTIFIED)
-             errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
-        return ERROR_NOTIFIED
-    }
-    return ERROR_OK
+		if( e == ERROR_NOT_FOUND)
+			if(deviceId){
+				printf("\n\nPlease report this ID so that we can add it.\n")
+				errorf("Error unsupported STM32 ID: 0x%X\n", deviceId)
+			}
+			else
+				errorf("ERROR: No valid STmicro device ID found\n")
+		else if( e != ERROR_NOTIFIED)
+			 errorf("Error:\tCan't access target device!\n\tIf reset is disabled (\"dr\" option), try with reset.")
+		return ERROR_NOTIFIED
+	}
+	return ERROR_OK
 }
 
 /////////////////////////////////////////////////////
@@ -91,37 +87,40 @@ function ebMain()
 //
 function findDevice()
 {
-    if( VERSION < 6.0){
-       errorf("Error:\n\nIncompatiable EBlink version %.2f\n\tPlease update\n", VERSION)
-       throw ERROR_NOTIFIED
-    }
+	if (VERSION < 6.0) {
+		errorf("Error:\n\nIncompatible EBlink version %.2f\n\tPlease update\n", VERSION)
+		throw ERROR_NOTIFIED
+	}
 
-    // Check the architecture
-    if( targetApi.getCpuName() in STMICRO == false)
-        throw ERROR_NOT_FOUND
+	// Check the architecture
+	local cpu = targetApi.getCpuName()
+	if (!(cpu in STMICRO))
+		throw ERROR_NOT_FOUND
 
-    // Scan all the device registers in this architecture
-    foreach(addr in STMICRO[targetApi.getCpuName()][0]){
-        try{ deviceId = intrfApi.read(addr) & 0xfff; if(deviceId) break; }
-        catch(e){}
-    }
+	local arch = STMICRO[cpu]
 
-    // If we have a valid device ID
-    if(deviceId){
-        noticef("STmicro device : 0x%X\n", deviceId)
+	// Scan the device ID registers of this architecture
+	deviceId = 0
+	foreach (addr in arch.regs) {
+		try { deviceId = intrfApi.read(addr) & 0xfff; if (deviceId) break }
+		catch (e) {}
+	}
 
-        // Search every script file if it supports the device ID
-        foreach(script in STMICRO[targetApi.getCpuName()][1])
-            foreach(devId in script[1])
-               if( devId == deviceId){
-                // Include the corresponding script file and initialize the device
-                require("stmicro/stm32"+script[0]+".script")
-                stm32_device()
-                return
-               }
-    }
+	if (deviceId) {
+		noticef("STmicro device : 0x%X\n", deviceId)
 
-    throw ERROR_NOT_FOUND
+		// Find the script file that supports this device ID
+		foreach (family, ids in arch.fam) {
+			if (ids.find(deviceId) != null) {
+				// Include the corresponding script file and initialize the device
+				require("stmicro/stm32" + family + ".script")
+				stm32_device()
+				return
+			}
+		}
+	}
+
+	throw ERROR_NOT_FOUND
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -136,35 +135,35 @@ function findDevice()
 //
 function  ebResetPost(resetType)
 {
-    try {
-        // Check if there is an user defined post reset hook, the user
-        // can add his own reset strategy with -S <myscript> as last
-        // defined script on the cli.
-        if (isScriptObject("ebResetPostHook"))
-            return ebResetPostHook(resetType)
+	try {
+		// Check if there is an user defined post reset hook, the user
+		// can add his own reset strategy with -S <myscript> as last
+		// defined script on the cli.
+		if (isScriptObject("ebResetPostHook"))
+			return ebResetPostHook(resetType)
 
-        // We don't use this if the reset is a user_script type. In that
-        // case, the user is responsible for the initialization.
-        //
-        if( resetType != USER_RESET ){
+		// We don't use this if the reset is a user_script type. In that
+		// case, the user is responsible for the initialization.
+		//
+		if( resetType != USER_RESET ){
 
-            // Set the Stack pointer according the Vector table entry
-            targetApi.writeReg("SP", intrfApi.read(0x08000000))
+			// Set the Stack pointer according the Vector table entry
+			targetApi.writeReg("SP", intrfApi.read(0x08000000))
 
-            // Set the Program pointer according the Vector table entry
-            targetApi.writeReg("PC", intrfApi.read(0x08000004))
-        }
-    }
-    catch(e) {
-        // Catch Squirrel errors in other optional scripts (e.g. ebResetPostHook)
-        if(catchString(e))
-            return ERROR_NOTIFIED
+			// Set the Program pointer according the Vector table entry
+			targetApi.writeReg("PC", intrfApi.read(0x08000004))
+		}
+	}
+	catch(e) {
+		// Catch Squirrel errors in other optional scripts (e.g. ebResetPostHook)
+		if(catchString(e))
+			return ERROR_NOTIFIED
 
-       if(e < ERROR_NOTIFIED)
-                errorf("ERROR(%d): reset failed\n", e )
+	   if(e < ERROR_NOTIFIED)
+				errorf("ERROR(%d): reset failed\n", e )
 
-       return ERROR_NOTIFIED
-    }
+	   return ERROR_NOTIFIED
+	}
 
-    return ERROR_OK
+	return ERROR_OK
 }
