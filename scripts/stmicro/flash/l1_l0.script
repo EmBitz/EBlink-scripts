@@ -50,6 +50,12 @@ const PRGKEY2         0x13141516
 const OPTKEY1         0xFBEAD9C8
 const OPTKEY2         0x24252627
 
+// Error flags (NOTZERO only exists on the L0, the bit is reserved on the L1)
+FLASH_SR_ERROR <- (FLASH_SR_NOTZERO | FLASH_SR_SIZERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR)
+
+// Status flags which are cleared by writing 1
+FLASH_SR_CLEAR <- (FLASH_SR_ERROR | FLASH_SR_EOP)
+
 maxFlashSpeed   <- 4000 // 4MHz is max speed for direct programming (we think)
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -83,17 +89,21 @@ function ebFlashStart()
 
         } while(targetApi.getState() != TARGET_HALTED )
 
-        // Read flash lock status
-        if( intrfApi.read(FLASH_BASE|FLASH_CR) & (FLASH_CR_PELOCK|FLASH_CR_PRGLOCK) ){
-            // Unlock
+        // Unlock in two steps, only write the keys of what is really locked.
+        // A wrong key sequence locks the PECR until the next reset.
+
+        // 1. Unlock PECR (PELOCK)
+        if( intrfApi.read(FLASH_BASE|FLASH_CR) & FLASH_CR_PELOCK ){
             intrfApi.write(FLASH_BASE|FLASH_PEKEYR, PEKEY1)
             intrfApi.write(FLASH_BASE|FLASH_PEKEYR, PEKEY2)
 
             // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
             if( intrfApi.read(FLASH_BASE|FLASH_CR) & FLASH_CR_PELOCK )
                 throw ERROR_UNLOCK
+        }
 
-            // Unlock flash program
+        // 2. Unlock flash program (PRGLOCK)
+        if( intrfApi.read(FLASH_BASE|FLASH_CR) & FLASH_CR_PRGLOCK ){
             intrfApi.write(FLASH_BASE|FLASH_PRGKEYR, PRGKEY1)
             intrfApi.write(FLASH_BASE|FLASH_PRGKEYR, PRGKEY2)
 
@@ -121,6 +131,9 @@ function ebFlashStart()
 function ebFlashErase(sector, address)
 {
     try{
+        // Clear EOP and the error flags of a previous operation
+        clearStatus()
+
         // Set the ERASE and PROG bits in the FLASH_CR register to enable page erasing
         intrfApi.write(FLASH_BASE|FLASH_CR, FLASH_CR_ERASE|FLASH_CR_PROG)
 
@@ -156,6 +169,9 @@ function ebFlashErase(sector, address)
 function ebFlashWrite(sector, address, buffer)
 {
     try{
+        // Clear EOP and the error flags of a previous operation
+        clearStatus()
+
         // Enable the program  FPRG and PRG in FLASH_CR
         intrfApi.write( FLASH_BASE|FLASH_CR, FLASH_CR_FPRG |FLASH_CR_PROG )
 
@@ -169,6 +185,9 @@ function ebFlashWrite(sector, address, buffer)
         intrfApi.writeBuf(buffer, address, 32, 0, halfPageSize )
 
         checkBusy(FLASH_TIMEOUT)
+
+        // Clear EOP of the first half page, so the check is for the second half
+        clearStatus()
 
         // Second half of the page
         intrfApi.writeBuf(buffer, address+halfPageSize, 32, halfPageSize, halfPageSize )
@@ -237,12 +256,25 @@ function checkBusy(timeout)
 
 
     // Check for errors
-    if( status & (FLASH_SR_NOTZERO | FLASH_SR_SIZERR | FLASH_SR_PGAERR |  FLASH_SR_WRPERR) )
+    if( status & FLASH_SR_ERROR )
         throw ERROR_FLASH
 
     //  Check the EOP flag in the FLASH_SR register
     if( !(status & FLASH_SR_EOP) )
        throw ERROR_FLASH
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Clear EOP and the error flags (cleared by writing 1).
+//  Only the flags which are set are written, so the reserved bit 16 on
+//  the L1 is never written.
+//
+function clearStatus()
+{
+    local status = intrfApi.read(FLASH_BASE|FLASH_SR) & FLASH_SR_CLEAR
+    if(status)
+        intrfApi.write(FLASH_BASE|FLASH_SR, status)
 }
 
 

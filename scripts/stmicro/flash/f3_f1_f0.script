@@ -32,6 +32,12 @@ const FLASH_CR_PG       1
 const FLASH_KEY1        0x45670123
 const FLASH_KEY2        0xCDEF89AB
 
+// Error flags (PROGERR = PGERR: programming a not erased half word)
+FLASH_SR_ERROR <- (FLASH_SR_PROGERR | FLASH_SR_WRPERR)
+
+// Status flags which are cleared by writing 1
+FLASH_SR_CLEAR <- (FLASH_SR_ERROR | FLASH_SR_EOP)
+
 maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think)
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -90,6 +96,10 @@ function ebFlashStart()
 function ebFlashErase(sector, address)
 {
     try{
+        // Clear EOP and the error flags of a previous operation,
+        // otherwise the EOP check below sees the EOP of the last write
+        flashClearStatus()
+
         // (1) Set the PER bit in the FLASH_CR register to enable page erasing
         intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_PER )
 
@@ -100,25 +110,19 @@ function ebFlashErase(sector, address)
         intrfApi.write(FLASH_BASE + FLASH_CR,  FLASH_CR_STRT| FLASH_CR_PER)
 
         // (4) Wait until the BSY bit is reset in the FLASH_SR register
-        local status
-        local time = GetTickCount()
-        do{
-            // Check for time out
-            if(GetTickCount() - time > 1500)
-              throw ERROR_TIMEOUT
-
-            status = intrfApi.read(FLASH_BASE + FLASH_SR)
-        }while ( status & FLASH_SR_BSY)
-
-        //  (5) Check the EOP flag in the FLASH_SR register
-        if( (status & FLASH_SR_EOP) == 0)
-            throw ERROR_FLASH
-
-        // (6) Clear EOP flag by software by writing EOP at 1
-        intrfApi.write(FLASH_BASE + FLASH_SR, status | FLASH_SR_EOP)
+        local status = flashWaitBusy(1500, false)
 
         // (7) Reset the PER Bit to disable the page erase
         intrfApi.write(FLASH_BASE + FLASH_CR, 0 )
+
+        //  (5) Check for errors and the EOP flag in the FLASH_SR register
+        if( (status & FLASH_SR_ERROR) || !(status & FLASH_SR_EOP) ){
+            errorf("ERROR: erasing sector %d failed! Flags: %s\n", sector, flashErrorStr(status))
+            throw ERROR_NOTIFIED
+        }
+
+        // (6) Clear EOP flag by software by writing EOP at 1
+        flashClearStatus()
 
         return ERROR_OK
     }
@@ -141,6 +145,13 @@ function ebFlashErase(sector, address)
 function ebFlashWrite(sector, address, buffer)
 {
     try{
+        // The flash is programmed per half word, the buffer must be a
+        // multiple of 2 bytes (EBlink trims it to the last non-erased byte)
+        buffer.trim(2)
+
+        // Clear EOP and the error flags of a previous operation
+        flashClearStatus()
+
         // Enable the program flag PG in flash_CR
         intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_PG )
 
@@ -148,16 +159,41 @@ function ebFlashWrite(sector, address, buffer)
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
-        // Write buffer to flash with 16bit memory access
-        intrfApi.writeBuf(buffer, address, 16)
+        // Write buffer to flash with 16bit memory access, always restore the probe speed
+        try{
+            intrfApi.writeBuf(buffer, address, 16)
+        }
+        catch(e){
+            intrfApi.setSpeed(probeSpeed)
+            throw e
+        }
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
+
+        // Wait until the last half word is programmed
+        local status = flashWaitBusy(1000, false)
+
+        // Disable the program flag PG in flash_CR
+        intrfApi.write(FLASH_BASE + FLASH_CR, 0 )
+
+        // Check for errors (PGERR: not erased, WRPRTERR: write protected)
+        if( status & FLASH_SR_ERROR ){
+            errorf("ERROR: writing sector %d failed! Flags: %s\n", sector, flashErrorStr(status))
+            throw ERROR_NOTIFIED
+        }
+
+        // Clear EOP
+        flashClearStatus()
+
         return ERROR_OK
     }
 
     // Catch all the sector write errors
     catch(e){
+       // Leave the flash in a clean state: PG off
+       try{ intrfApi.write(FLASH_BASE + FLASH_CR, 0 ) } catch(e2){}
+
        if(catchString(e))
             return ERROR_NOTIFIED
        if(e ==  INTERFACE_NOT_SUPPORTED)
@@ -188,6 +224,53 @@ function ebFlashDone()
            errorf("Error: locking flash failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Clear EOP and the error flags (cleared by writing 1)
+//
+function flashClearStatus()
+{
+    intrfApi.write(FLASH_BASE + FLASH_SR, FLASH_SR_CLEAR)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Wait until BSY is cleared, return FLASH_SR
+//   (animate: show the cursor animation, for long operations)
+//
+function flashWaitBusy(timeout, animate)
+{
+    local status
+    local time = GetTickCount()
+    do{
+        if(animate)
+            AnimateCursor()
+
+        if(GetTickCount() - time > timeout)
+            throw ERROR_TIMEOUT
+
+        status = intrfApi.read(FLASH_BASE + FLASH_SR)
+    }while ( status & FLASH_SR_BSY)
+
+    if(animate)
+        AnimateDone()
+
+    return status
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Return the names of the error flags in a FLASH_SR value
+//
+function flashErrorStr(status)
+{
+    local s = ""
+    if(status & FLASH_SR_PROGERR) s += "PGERR (not erased) "
+    if(status & FLASH_SR_WRPERR)  s += "WRPRTERR (write protected) "
+    if(!(status & FLASH_SR_EOP))  s += "no EOP "
+    return (s == "") ? "none" : s
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -226,36 +309,29 @@ function ebFlashEraseChip()
         // Unlock flash
         flashUnlock()
 
+        // Clear EOP and the error flags of a previous operation
+        flashClearStatus()
+
         // (1) Set the MER bit in the FLASH_CR register to enable mass erasing
         intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_MER )
 
         // (2) Set the STRT bit in the FLASH_CR register to start the erasing
         intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_MER | FLASH_CR_STRT )
 
-        // (3) Wait until the BSY bit is reset in the FLASH_SR register
-        local status
-        local time = GetTickCount()
-        do{
-            AnimateCursor()
+        // (3) Wait until the BSY bit is reset in the FLASH_SR register (timeout 30 seconds)
+        local status = flashWaitBusy(30000, true)
 
-            // Check for time out of 30 seconds
-            if(GetTickCount() - time > 3000)
-                throw ERROR_TIMEOUT
+        // (6) Reset the MER Bit to disable the mass erase
+        intrfApi.write(FLASH_BASE + FLASH_CR, 0 )
 
-            status = intrfApi.read(FLASH_BASE + FLASH_SR)
-        }while ( status & FLASH_SR_BSY)
-
-        AnimateDone()
-
-        // (4) Check the EOP flag in the FLASH_SR register
-        if( (status & FLASH_SR_EOP) == 0)
-            throw ERROR_FLASH
+        // (4) Check for errors and the EOP flag in the FLASH_SR register
+        if( (status & FLASH_SR_ERROR) || !(status & FLASH_SR_EOP) ){
+            errorf("ERROR: mass erase failed! Flags: %s\n", flashErrorStr(status))
+            throw ERROR_NOTIFIED
+        }
 
         // (5) Clear EOP flag by software by writing EOP at 1
-        intrfApi.write(FLASH_BASE + FLASH_SR, status | FLASH_SR_EOP)
-
-        // (6) Reset the PER Bit to disable the mass erase
-        intrfApi.write(FLASH_BASE + FLASH_CR, 0 )
+        flashClearStatus()
 
         // (7) Relock the flash by setting the FLASH_CR_LOCK in the flash CR register
         intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_LOCK )

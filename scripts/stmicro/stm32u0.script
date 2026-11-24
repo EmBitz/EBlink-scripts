@@ -28,6 +28,9 @@ const pgmBitsWidth 64
 // The flash parameters needed by the flash loader script
 const FLASH_BASE 0x40022000
 
+// The U0 has a single bank only (needed by c0_l4_u0_gx_wx.script)
+const hasDualBank false
+
 /////////////////////////////////////////////////////
 //
 //  Entry point of this script called by parent script
@@ -47,6 +50,7 @@ function stm32_device()
             page_size = 0x800  // 2KB pages
             ram_size  = 0x3000 // 12KB
             flash_size = intrfApi.read(0x1fff3ea0)
+            break
 
         case 0x489 :
             deviceStr = "73x/083x"
@@ -85,8 +89,11 @@ function stm32_device()
     // Don't trim the sectors, only whole sector sizes are programmed
     DeviceAPI().setFlashDontTrim(true)
 
-    // Flash loader script
-    require("stmicro/flash/u0.script")
+    // Flash loader script (same flash controller as the C0/G0)
+    // Remark: don't add the virtual option sector 999 to the memory map, the
+    //         option write of that script also writes PCROP registers
+    //         (0x24/0x28) which are reserved on the U0.
+    require("stmicro/flash/c0_l4_u0_gx_wx.script")
 
 }
 

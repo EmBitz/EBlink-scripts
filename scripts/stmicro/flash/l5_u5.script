@@ -47,7 +47,7 @@ const FLASH_NSSR_NSWRPERR   (1<< 4)
 const FLASH_NSSR_NSPGAERR   (1<< 5)
 const FLASH_NSSR_NSSIZERR   (1<< 6)
 const FLASH_NSSR_NSPGSERR   (1<< 7)
-const FLASH_NSSR_OPTWERR    (1<<12)
+const FLASH_NSSR_OPTWERR    (1<<13)
 const FLASH_NSSR_NSBSY      (1<<16) // Busy
 const FLASH_NSSR_ERROR_MASK 0x20FA
 
@@ -60,9 +60,9 @@ const FLASH_KEY2      0xCDEF89AB
 const OPT_KEY1        0x08192A3B
 const OPT_KEY2        0x4C5D6E7F
 
-// All the possible errors mask
-FLASH_ERROR <- ( FLASH_NSSR_NSPROGERR | FLASH_NSSR_NSWRPERR | FLASH_NSSR_NSPGAERR |
-                 FLASH_NSSR_NSSIZERR | FLASH_NSSR_NSPGSERR)
+// All the possible errors mask (OPERR included, same as the ST HAL)
+FLASH_ERROR <- ( FLASH_NSSR_NSOPERR  | FLASH_NSSR_NSPROGERR | FLASH_NSSR_NSWRPERR |
+                 FLASH_NSSR_NSPGAERR | FLASH_NSSR_NSSIZERR  | FLASH_NSSR_NSPGSERR)
 
 
 maxFlashSpeed   <- 16000 // The max speed tested with (can be changed from cli)
@@ -181,6 +181,7 @@ function ebFlashWrite(sector, address, buffer)
 
         // 1. Check that no Flash memory operation is ongoing by checking the NSBSY bit in the FLASH_NSSR register.
         // 2. Check and clear all non-secure error programming flags due to a previous programming. If not, NSPGSERR is set.
+        clear_flash_errors()
         flashCheckBusy(10000)
 
         // 3. Set the NSPG bit in the FLASH_NSCR register.
@@ -202,7 +203,7 @@ function ebFlashWrite(sector, address, buffer)
         // 6. Check that NSEOP flag is set in the FLASH_NSSR register (meaning that the
         // programming operation has succeed), and clear it by software.
 
-        // 7. Clear the NSPG bit in the FLASH_NSSR register if there no more programming request anymore.
+        // 7. Clear the NSPG bit in the FLASH_NSCR register if there no more programming request anymore.
         intrfApi.write(FLASH_BASE + FLASH_NSCR,
             intrfApi.read (FLASH_BASE + FLASH_NSCR) & ~FLASH_NSCR_NSPG )
 
@@ -241,7 +242,7 @@ function ebFlashDone()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//   Lock the flash
+//   Wait until the operation is ready (NSBSY cleared) and check for errors
 //
 function flashCheckBusy(timeout)
 {
@@ -281,6 +282,11 @@ function clear_flash_errors()
 //
 function flashUnlock()
 {
+    // Already unlocked (e.g. by the application before ebFlashEraseChip)?
+    // Don't write the keys again.
+    if( !(intrfApi.read(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_NSLOCK) )
+        return
+
     // Unlock Flash
     intrfApi.write(FLASH_BASE + FLASH_NSKEYR, FLASH_KEY1 )
     intrfApi.write(FLASH_BASE + FLASH_NSKEYR, FLASH_KEY2 )
@@ -319,6 +325,7 @@ function ebFlashEraseChip()
 
         // 1. Check that no Flash memory operation is ongoing by checking the NSBSY bit in the FLASH_NSSR register.
         // 2. Check and clear all non-secure error programming flags due to a previous programming. If not, NSPGSERR is set.
+        clear_flash_errors()
         flashCheckBusy(10000)
 
         // 3. Set the NSMER1 bit and NSMER2 bits in the FLASH_NSCR register

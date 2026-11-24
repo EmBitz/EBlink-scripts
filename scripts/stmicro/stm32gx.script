@@ -243,7 +243,7 @@ function stm32_device()
     }
 
     // Flash loader script
-    require("stmicro/flash/c0_l4_gx_wx.script")
+    require("stmicro/flash/c0_l4_u0_gx_wx.script")
 
     // =================== Read level protection (RDP) check =================
 

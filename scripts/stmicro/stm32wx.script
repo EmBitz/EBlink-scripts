@@ -105,7 +105,7 @@ function stm32_device()
     DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size, page_size))
 
     // include flash loader
-    require("stmicro/flash/c0_l4_gx_wx.script")
+    require("stmicro/flash/c0_l4_u0_gx_wx.script")
 
     // =================== Read level protection (RDP) check =================
 

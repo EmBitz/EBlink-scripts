@@ -164,6 +164,9 @@ function ebFlashErase(sector, address)
         // (1) Check that no Flash memory operation is ongoing by checking the BSY bit in the FLASH_SR register
         // ....We skip this because every action is ending with this check
 
+        // Clear error flags of a previous operation
+        flashClearErrors()
+
         // (2) Set the SER bit and select the sector out of the 8 in the main memory block) you wish to erase (SNB) in the FLASH_CR register
         // (3) Set the STRT bit in the FLASH_CR register also
         intrfApi.write(FLASH_CR, (secReg<<3) | pgSize | FLASH_CR_SER | FLASH_CR_STRT)
@@ -193,6 +196,9 @@ function ebFlashErase(sector, address)
 function ebFlashWrite(sector, address, buffer)
 {
     try{
+        // Clear error flags of a previous operation
+        flashClearErrors()
+
         // Enable the program flag PG in flash_CR together with the right parallelism
         intrfApi.write(FLASH_CR, pgSize | FLASH_CR_PG )
 
@@ -274,6 +280,9 @@ function ebFlashEraseChip()
         // (1) Check that no Flash memory operation is ongoing by checking the BSY bit in the FLASH_SR register
         // ....We skip this because every action is ending with this check
 
+        // Clear error flags of a previous operation
+        flashClearErrors()
+
         // (2)(3)Set the MER and STRT bit in the FLASH_CR register
         if(DeviceAPI().sectorCount() > bank1SecNum)
             intrfApi.write(FLASH_CR, pgSize | FLASH_CR_MER | FLASH_CR_MER1 | FLASH_CR_STRT)
@@ -325,6 +334,18 @@ function flashCheckBusy(timeout)
     // Check for error
     if ( status & FLASH_ERROR )
         throw ERROR_FLASH
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Clear the error flags in FLASH_SR (rc_w1: cleared by writing 1)
+//  Otherwise one error blocks every next erase/write in this session.
+//
+function flashClearErrors()
+{
+    if( intrfApi.read(FLASH_SR) & FLASH_ERROR )
+        intrfApi.write(FLASH_SR, FLASH_ERROR)
 }
 
 
