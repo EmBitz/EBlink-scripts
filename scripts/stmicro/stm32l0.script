@@ -37,8 +37,14 @@ function stm32_device()
     local page_size = 0x80
     local ram_size = 0x2000
 
-    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+    // Enable the DBG(MCU) peripheral clock first: RCC_APB2ENR DBGEN |= (1<<22)
+    intrfApi.write(0x40021034, intrfApi.read(0x40021034) | (1<<22))
+
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
     intrfApi.write(0x40015804, 6)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(0x40015808, 0x00001800)
 
     // Get the flash size by reading the info register
     flash_size = intrfApi.read(0x1ff8007c) & ~3
@@ -46,7 +52,7 @@ function stm32_device()
 
     local deviceStr
     switch(deviceId){
-        case 0x417 :0
+        case 0x417 :
             deviceStr = "(Cat. 3)"
             page_size = 0x80
             ram_size = 0x2000

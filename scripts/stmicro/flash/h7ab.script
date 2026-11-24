@@ -1,0 +1,1085 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//                   STM32H7Ax/H7Bx flash (H7A3, H7B3, H7B0)
+//
+// Derived from h7.script (H74x/75x/72x/73x). The flash controller has the
+// same register map (offsets, SR/CCR bits, option registers, bank 2 at
+// +0x100), the differences are (ST CMSIS stm32h7a3xx.h, RM0455):
+//  - FLASH_CR: FW bit 4, START bit 5, SNB bits 6..12 (7 bits), no PSIZE
+//  - 8KB sectors, 128 per bank (H7B0: 128KB, single bank, 16 sectors)
+//  - 128-bit flash word (+9 ECC bits), ECC_FA is a 16 bit flash word index
+//  - FLASH_ACR wait state table (RM0455 table 16) and the VOS encoding in
+//    PWR_SRDCR (00 = VOS3, 01 = VOS2, 10 = VOS1, 11 = VOS0)
+//  - Vprog 1.62..3.6V, no parallelism selection
+//
+// Needed from the device script: hasSecondBank, flashBank2Sec (the first
+// sector number of bank 2 in the memory map)
+//
+// Same features as h7.script: sector verify with ECC check and retry
+// (-F verify or -D FLASH_VERIFY), clearing of stale flags, flag names in
+// error messages, verify summary in ebFlashDone.
+//
+// Options via the command line (-D):
+//   -D FLASH_VERIFY=0/1     sector verify off/on, overrules -F verify
+//                           (default: on if -F contains verify)
+//   -D FLASH_RETRIES=n      number of retries per sector (default 2)
+//   -D FLASH_ECC_STRICT=1   a persistent single-bit ECC error (corrected,
+//                           data correct) is treated as a failure (default 0:
+//                           warning)
+//   -D FLASH_SPEED=n        max probe speed in kHz while programming
+//   -D VCC_VOLTAGE=v        target voltage for probes that can't measure it
+//                           (overrules the probe measurement)
+//
+
+// Same Flash registers for both banks access depends on Flash Base address
+const FLASH_ACR       0x00
+const FLASH_KEYR      0x04
+const FLASH_OPTKEYR   0x08
+const FLASH_CR        0x0C
+const FLASH_SR        0x10
+const FLASH_CCR       0x14
+const FLASH_OPTCR     0x18
+const FLASH_OPTSR_CUR 0x1C
+const FLASH_OPTSR_PRG 0x20
+const FLASH_OPTCCR    0x24
+const FLASH_WPSN_CUR  0x38
+const FLASH_WPSN_PRG  0x3C
+const FLASH_ECC_FA    0x60   // ECC fail address (bank 2: 0x160 via regbase)
+
+
+// FLASH_CR register bits
+const FLASH_LOCK     (1 << 0)
+const FLASH_PG       (1 << 1)
+const FLASH_SER      (1 << 2)
+const FLASH_BER      (1 << 3)
+const FLASH_FW       (1 << 4)
+const FLASH_START    (1 << 5)
+const FLASH_SNB_POS  6         // Sector number, 7 bits (6..12)
+
+// FLASH_SR register bits (FLASH_CCR has the clear bits at the same positions)
+const FLASH_BSY      (1 << 0)  // Operation in progress
+const FLASH_QW       (1 << 2)  // Operation queue in progress
+const FLASH_WRPERR   (1 << 17) // Write protection error
+const FLASH_PGSERR   (1 << 18) // Programming sequence error
+const FLASH_STRBERR  (1 << 19) // Strobe error
+const FLASH_INCERR   (1 << 21) // Inconsistency error
+const FLASH_OPERR    (1 << 22) // Operation error
+const FLASH_RDPERR   (1 << 23) // Read Protection error
+const FLASH_RDSERR   (1 << 24) // Secure Protection error
+const FLASH_SNECCERR (1 << 25) // Single ECC error (corrected)
+const FLASH_DBECCERR (1 << 26) // Double ECC error (not correctable)
+
+// FLASH_ECC_FA register
+const FLASH_ECC_FA_MASK  0xFFFF // Failing flash word index within the bank
+const FLASH_WORD_SIZE    16     // 128-bit flash word
+
+// FLASH_OPTCR register bits
+const OPT_LOCK               (1 << 0)
+const OPT_START              (1 << 1)
+
+// FLASH_OPTSR register bits
+const OPT_BSY                 (1 << 0)
+const OPT_RDP_POS              8
+const OPT_RDP_MASK            (0xff << 8)
+const OPT_OPTCHANGEERR        (1 << 30)
+
+// FLASH_OPTCCR register bits
+const OPT_CLR_OPTCHANGEERR    (1 << 30)
+
+// register unlock keys
+const KEY1                    0x45670123
+const KEY2                    0xCDEF89AB
+
+// option register unlock key
+const OPTKEY1                 0x08192A3B
+const OPTKEY2                 0x4C5D6E7F
+
+const FLASH_BANK0_ADDRESS     0x08000000
+const FLASH_BANK1_ADDRESS     0x08100000
+const FLASH_REG_BASE_B0       0x52002000
+const FLASH_REG_BASE_B1       0x52002100
+
+// Supply voltage
+const VCC_MIN           1.62   // Vprog 1.62..3.6V (datasheet DS13195 table 58)
+
+// FLASH_ACR for HSI 64MHz after reset (RM0455 table 16)
+//   VOS3          : 2 WS, WRHIGHFREQ 01 (1 WS only up to 44 MHz)
+//   VOS2/VOS1/VOS0: 1 WS, WRHIGHFREQ 00 (up to 68/76/84 MHz)
+const FLASH_ACR_64MHZ_VOS3  0x12  // LATENCY=2, WRHIGHFREQ=01
+const FLASH_ACR_64MHZ_OTHER 0x01  // LATENCY=1, WRHIGHFREQ=00
+
+// PWR SRD domain control register, voltage scaling
+const PWR_SRDCR         0x58024818
+const PWR_SRDCR_VOS_POS 14      // 00 = VOS3, 01 = VOS2, 10 = VOS1, 11 = VOS0
+
+// Target reset register and options
+const NVIC_AIRCR        0xE000ED0C
+const AIRCR_VECTKEY     (0x5FA << 16)
+const AIRCR_SYSRESETREQ (1 << 2)
+
+// Verify results
+const VERIFY_OK     0  // Data equal, no ECC errors
+const VERIFY_SNECC  1  // Data equal, but single (corrected) ECC error
+const VERIFY_FAIL   2  // Data differs or double ECC error
+
+// Errors of a program/erase operation
+FLASH_OP_ERROR  <- (FLASH_WRPERR | FLASH_PGSERR | FLASH_STRBERR | FLASH_INCERR |
+                    FLASH_OPERR  | FLASH_RDPERR | FLASH_RDSERR)
+
+// ECC read errors
+FLASH_ECC_ERROR <- (FLASH_SNECCERR | FLASH_DBECCERR)
+
+// Mask of all the errors (also used to clear them in FLASH_CCR)
+FLASH_ERROR <- (FLASH_OP_ERROR | FLASH_ECC_ERROR)
+
+// Names of the flags for error messages
+FLASH_ERROR_NAMES <- [[FLASH_WRPERR,   "WRPERR"],
+                      [FLASH_PGSERR,   "PGSERR"],
+                      [FLASH_STRBERR,  "STRBERR"],
+                      [FLASH_INCERR,   "INCERR"],
+                      [FLASH_OPERR,    "OPERR"],
+                      [FLASH_RDPERR,   "RDPERR"],
+                      [FLASH_RDSERR,   "RDSERR"],
+                      [FLASH_SNECCERR, "SNECCERR"],
+                      [FLASH_DBECCERR, "DBECCERR"]]
+
+maxFlashSpeed   <- 10000 // 10MHz is max speed for direct programming (we think)
+
+// Verify / retry settings (can be overruled with -D, see header)
+flashVerify     <- false   // set from -F ...,verify or -D FLASH_VERIFY in ebFlashStart
+flashRetries    <- 2
+flashEccStrict  <- false
+
+// Statistics of one flash session, printed in ebFlashDone
+flashStats      <- null
+
+
+// First sector number of bank 2 in the memory map (set by the device script)
+if(!isScriptObject("flashBank2Sec"))
+    flashBank2Sec <- 128
+
+
+//===================================================================================
+//                                        API
+//
+//  EBlink entry points, in the order EBlink calls them
+//===================================================================================
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Unlock the flash and preload the flash loader called by EBlink
+//
+function ebFlashStart()
+{
+    try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Verify / retry settings from cli
+        // Sector verify if "verify" is given with the -F cli option,
+        // -D FLASH_VERIFY=0/1 overrules it
+        flashVerify = flashCliVerify()
+        if (isScriptObject("FLASH_VERIFY"))
+            flashVerify = (FLASH_VERIFY != 0)
+
+        if (isScriptObject("FLASH_RETRIES") && FLASH_RETRIES >= 0)
+            flashRetries = FLASH_RETRIES
+
+        if (isScriptObject("FLASH_ECC_STRICT"))
+            flashEccStrict = (FLASH_ECC_STRICT != 0)
+
+        debugf("Sector verify: %s, retries: %d, ECC strict: %s\n",
+               flashVerify ? "on" : "off", flashRetries, flashEccStrict ? "on" : "off")
+
+        // Reset the statistics
+        flashResetStats()
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
+        // We reset the system so all clocks are at default values (HSI 64)
+        targetApi.reset(SYSTEM_RESET)
+
+        // Wait for halt
+        local time = GetTickCount();
+        do{
+            targetApi.poll()
+
+          // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+                throw ERROR_TIMEOUT
+
+        } while(targetApi.getState() != TARGET_HALTED )
+
+        // Check voltage (Vprog 1.62..3.6V)
+        local vcc = flashGetVoltage()
+        if(vcc < VCC_MIN){
+            errorf("Error: target voltage %.2fV is below the minimum of %.2fV\n", vcc, VCC_MIN)
+            throw ERROR_NOTIFIED
+        }
+        debugf("Target voltage: %.2fV\n", vcc)
+
+        // After the reset we have core clock HSI 64 MHz, set FLASH_ACR
+        // according to the actual voltage scaling (RM0455 table 16).
+        flashSetACR()
+
+        return ERROR_OK
+    }
+
+    // Catch the errors
+    catch(e){
+       if(catchString(e))
+           return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: target initializing! [%s]\n", errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   The sector erase is called by EBlink prior sector flashing
+//   Sector erase sequence according ST user manual
+//   Also used by ebFlashWrite for a retry.
+//
+function ebFlashErase(sector, address)
+{
+    local regbase = FLASH_REG_BASE_B0 // first flash bank
+
+    try{
+        // Skip the virtual option sector
+        if(sector == 999)
+            return ERROR_OK
+
+        local bnkSector = sector
+
+        // Select the right bank
+        if (address >= FLASH_BANK1_ADDRESS) {
+            regbase = FLASH_REG_BASE_B1 // Second flash bank
+            bnkSector = sector - flashBank2Sec
+        }
+
+        // FLASH_ACR is set in ebFlashStart (common for both banks)
+
+        // 1) Check and clear all the error flags due to previous programming/erase/read
+        flashClearErrors(regbase)
+
+        // 2) Unlock the flash bank
+        flashUnlock(regbase)
+
+        // (3) Set the SER bit and select the sector (SNB, 7 bits) in the FLASH_CR register
+        // (4) Set the START bit in the FLASH_CR register also
+        intrfApi.write(regbase + FLASH_CR, (bnkSector << FLASH_SNB_POS) | FLASH_SER | FLASH_START )
+
+        // (5) Wait for the QW1/2 bit and BSY1/2 to be cleared in the corresponding FLASH_SR1/2 register
+        local value = flashWaitReady(regbase, 5000) // Timeout of 5sec
+
+        // Check for errors
+        if(value & FLASH_OP_ERROR ){
+            errorf("Error: sector %d erase failed! Flags: %s\n", sector, flashErrorStr(value))
+            throw ERROR_NOTIFIED
+        }
+
+        // Lock the flash again
+        flashLock(regbase)
+
+        return ERROR_OK
+    }
+    catch(e){
+       flashSafeLock(regbase)
+       if(catchString(e))
+           return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: sector %d erase failed! [%s]\n", sector, errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink to flash a sector
+//
+//  Program the sector, verify it (read back + ECC flags) and on a failure
+//  erase the sector and program it again (max flashRetries times).
+//
+function ebFlashWrite(sector, address, buffer)
+{
+    local regbase = FLASH_REG_BASE_B0 // first flash bank
+
+    try{
+        // If this is the virtual option sector, go to options write function
+        if(sector == 999) {
+            printf("\n\nStart writing option bytes virtual sector 999\n")
+            return flashOptionWrite(buffer)
+        }
+
+        // Select the right flash bank
+        if (address >= FLASH_BANK1_ADDRESS)
+            regbase = FLASH_REG_BASE_B1 // Second flash bank
+
+        // The flash is programmed per 128-bit flash word (16 bytes)
+        buffer.trim(FLASH_WORD_SIZE)
+
+        if(flashStats == null)
+            flashResetStats()
+
+        flashStats.sectors++
+
+        local attempt = 0
+        local result  = VERIFY_OK
+
+        while(true){
+            // Program the sector
+            flashProgramSector(regbase, sector, address, buffer)
+
+            if(!flashVerify)
+                return ERROR_OK
+
+            // Verify the sector
+            result = flashVerifySector(regbase, sector, address, buffer)
+
+            if(result == VERIFY_OK)
+                break
+
+            if(attempt >= flashRetries)
+                break
+
+            // Retry: a programmed flash word can't be programmed again,
+            // so first erase the sector.
+            attempt++
+            flashStats.retries++
+            userf("Sector %d: retry %d/%d (erase + program)\n", sector, attempt, flashRetries)
+
+            if(ebFlashErase(sector, address) != ERROR_OK)
+                throw ERROR_NOTIFIED
+        }
+
+        if(result == VERIFY_FAIL){
+            flashStats.failed.append(sector)
+            errorf("Error: sector %d at 0x%08X verify failed after %d retries!\n", sector, address, attempt)
+            throw ERROR_NOTIFIED
+        }
+
+        if(result == VERIFY_SNECC){
+            flashStats.marginal.append(sector)
+            if(flashEccStrict){
+                errorf("Error: sector %d at 0x%08X keeps single ECC errors after %d retries (FLASH_ECC_STRICT)\n",
+                       sector, address, attempt)
+                throw ERROR_NOTIFIED
+            }
+            userf("WARNING: sector %d at 0x%08X keeps single ECC errors after %d retries.\n" +
+                  "         Data is correct (corrected by ECC), but the sector is marginal!\n",
+                  sector, address, attempt)
+            return ERROR_OK
+        }
+
+        // VERIFY_OK
+        flashStats.verified++
+        if(attempt > 0){
+            flashStats.recovered.append(sector)
+            userf("Sector %d: OK after %d retr%s\n", sector, attempt, attempt == 1 ? "y" : "ies")
+        }
+
+        return ERROR_OK
+    }
+
+    catch(e){
+       // Leave the flash in a clean state: PG off and locked
+       try{ intrfApi.write(regbase + FLASH_CR, 0) } catch(e2){}
+       flashSafeLock(regbase)
+
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: sector %d writing failed! [%s]\n", sector, errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Called by EBlink after all the sectors are processed (success or failure)
+//
+function ebFlashDone()
+{
+    try{
+        flashLock(FLASH_REG_BASE_B0)
+        if(hasSecondBank)
+            flashLock(FLASH_REG_BASE_B1)
+
+        flashPrintSummary()
+        return ERROR_OK
+    }
+    catch(e){
+       if(catchString(e))
+           return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: flash done failed! [%s]\n", errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink is chip erease is needed (e.g. command line flashing)
+//  This function is optional, if EBlink can't find it, it will erase per sector
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used.
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EB-link
+//   - The boolean "hasSecondBank" is set by parent script
+//
+function ebFlashEraseChip()
+{
+    try{
+        local time = GetTickCount()
+
+        flashEraseBank(1, FLASH_REG_BASE_B0)
+
+        if(hasSecondBank)
+             flashEraseBank(2, FLASH_REG_BASE_B1)
+
+        printf("done [%ums] \n", GetTickCount() - time)
+        return ERROR_OK
+    }
+
+    catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       return e
+    }
+}
+
+
+//===================================================================================
+//                                        ALGO
+//
+//  Flash algorithm: program, verify, erase, settings
+//===================================================================================
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Program a (erased) sector with the buffer
+//
+function flashProgramSector(regbase, sector, address, buffer)
+{
+    // Unlock flash
+    flashUnlock(regbase)
+
+    // Start with clean error flags
+    flashClearErrors(regbase)
+
+    // Enable the program flag PG in flash_CR (no parallelism on the H7Ax/Bx)
+    intrfApi.write(regbase+FLASH_CR, FLASH_PG )
+
+    // Lower the probe speed
+    local probeSpeed = intrfApi.getSpeed()
+    intrfApi.setSpeed(maxFlashSpeed)
+
+    // Write the buffer direct to flash, always restore the probe speed
+    try{
+        intrfApi.writeBuf(buffer, address)
+    }
+    catch(e){
+        intrfApi.setSpeed(probeSpeed)
+        throw e
+    }
+
+    // Restore probe speed
+    intrfApi.setSpeed(probeSpeed)
+
+    // Wait until the last flash word is really written (QW and BSY cleared)
+    local value = flashWaitReady(regbase, 1000)
+
+    // Disable the program flag  PG in flash_CR
+    intrfApi.write(regbase+ FLASH_CR, 0)
+
+    // Lock the flash again
+    flashLock(regbase)
+
+    // Check for program errors
+    if(value & FLASH_OP_ERROR ){
+        errorf("Error: sector %d programming failed! Flags: %s\n", sector, flashErrorStr(value))
+        throw ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Verify a programmed sector
+//  - Read back and compare with the buffer
+//  - Check the ECC flags which are set by this read back
+//
+//  Returns VERIFY_OK, VERIFY_SNECC or VERIFY_FAIL
+//
+function flashVerifySector(regbase, sector, address, buffer)
+{
+    local len = buffer.getSize()
+
+    // Clear the flags so only the ECC errors of our own read back count
+    flashClearErrors(regbase)
+
+    // Read back the sector.
+    // A double ECC error gives a bus error on the read, so readBuf throws.
+    // Catch it here and check the ECC flag before we decide what it was.
+    local readback  = EBbuffer()
+    local readError = ERROR_OK
+    try{
+        intrfApi.readBuf(readback, address, len)
+    }
+    catch(e){
+        if(isString(e))
+            throw e
+        readError = e
+    }
+
+    // ECC flags and fail address set by the read back
+    local value   = intrfApi.read(regbase + FLASH_SR)
+    local eccAddr = flashEccAddress(regbase)
+
+    // Clear the ECC flags again so they don't disturb the next operation
+    flashClearErrors(regbase)
+
+    // Read back aborted
+    if(readError != ERROR_OK){
+        if(value & FLASH_DBECCERR){
+            userf("Sector %d: double ECC error (not correctable) at flash word 0x%08X, read back aborted\n",
+                  sector, eccAddr)
+            return VERIFY_FAIL
+        }
+
+        // No ECC error, so a real probe/interface error
+        errorf("Error: sector %d read back failed! [%s]\n", sector, errorToStr(readError))
+        throw ERROR_NOTIFIED
+    }
+
+    // Compare the data
+    local diff = -1
+    if((readback <=> buffer) != 0)
+        diff = flashFirstDiff(readback, buffer, len)
+
+    if(diff >= 0){
+        userf("Sector %d: verify mismatch at 0x%08X (expected 0x%02X, read 0x%02X)\n",
+              sector, address + diff, buffer.get(diff, 8), readback.get(diff, 8))
+    }
+
+    if(value & FLASH_DBECCERR){
+        userf("Sector %d: double ECC error (not correctable) at flash word 0x%08X\n", sector, eccAddr)
+        return VERIFY_FAIL
+    }
+
+    if(diff >= 0)
+        return VERIFY_FAIL
+
+    if(value & FLASH_SNECCERR){
+        userf("Sector %d: single ECC error (corrected) at flash word 0x%08X\n", sector, eccAddr)
+        return VERIFY_SNECC
+    }
+
+    debugf("Sector %d verified OK (%d bytes)\n", sector, len)
+    return VERIFY_OK
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Erase a flash bank
+//
+function flashEraseBank(bank, regbase)
+{
+    try{
+        // 1. Check and clear all the error flags due to previous programming/erase/read
+        flashClearErrors(regbase)
+
+        // 2. Unlock the two FLASH_CR1/2 registers and FLASH_OPTCR register
+        flashUnlock(regbase)
+
+        //  3. BER1 and  START1 to launch bank erase
+        intrfApi.write(regbase + FLASH_CR,  FLASH_BER | FLASH_START )
+
+        // 4. Then wait until QW bit are cleared in the corresponding FLASH_SR1/2
+        flashCheckBusy(regbase, 30000) // 30 seconds timeout
+
+        // Check for errors
+        local value = intrfApi.read(regbase + FLASH_SR)
+        if(value & FLASH_OP_ERROR){
+            errorf("Error: mass erase bank %d failed! Flags: %s\n", bank, flashErrorStr(value))
+            throw ERROR_NOTIFIED
+        }
+
+        // 5. Lock the flash banks again
+        flashLock(regbase)
+    }
+
+    catch(e){
+       flashSafeLock(regbase)
+       catchThrowStr(e)
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: mass erase bank %d! %s\n", bank, errorToStr(e) )
+       throw ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Set FLASH_ACR (wait states and programming delay) for HSI 64MHz
+//   according to the actual voltage scaling (RM0455 table 16)
+//
+function flashSetACR()
+{
+    // PWR_SRDCR VOS: 00 = VOS3, 01 = VOS2, 10 = VOS1, 11 = VOS0
+    local vos = (intrfApi.read(PWR_SRDCR) >> PWR_SRDCR_VOS_POS) & 0x3
+    local acr = (vos == 0) ? FLASH_ACR_64MHZ_VOS3 : FLASH_ACR_64MHZ_OTHER
+
+    // FLASH_ACR is common for both banks
+    intrfApi.write(FLASH_REG_BASE_B0 + FLASH_ACR, acr)
+
+    debugf("Voltage scaling VOS%d, FLASH_ACR set to 0x%02X\n", 3 - vos, acr)
+}
+
+
+//===================================================================================
+//                                      HELPERS
+//
+//  Register access, cli options, error strings, statistics
+//===================================================================================
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Target voltage: -D VCC_VOLTAGE overrules the probe measurement
+//   (for probes that can't measure the target voltage)
+//
+function flashGetVoltage()
+{
+    if (isScriptObject("VCC_VOLTAGE") && VCC_VOLTAGE > 0){
+        printf("CLI vcc voltage: %.2fV\n", VCC_VOLTAGE)
+        return VCC_VOLTAGE
+    }
+    return intrfApi.targetVoltage()
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Return true if "verify" is given with the -F cli option
+//   (e.g. -F erase,verify,run,file=firmware.elf)
+//
+function flashCliVerify()
+{
+    local tokens = []
+    astrsep(tokens, cliSwitch("-F"), ",")
+
+    foreach(token in tokens)
+        if(token == "verify")
+            return true
+
+    return false
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Unlock the flash
+//
+function flashUnlock(regbase)
+{
+    // Wait for flash not busy
+    local time = GetTickCount();
+    do{
+        // Timeout of 1sec
+        if(GetTickCount() - time > 1000)
+            throw ERROR_TIMEOUT
+
+    }while ( intrfApi.read(regbase + FLASH_SR) &  FLASH_BSY )
+
+    // Read flash lock status in FLASH_CR
+    // Check if it's locked by the FLASH_CR_LOCK flag
+    if( intrfApi.read(regbase + FLASH_CR) & FLASH_LOCK ){
+
+        // Write flash KEYR
+        intrfApi.write(regbase + FLASH_KEYR, KEY1)
+        intrfApi.write(regbase + FLASH_KEYR, KEY2)
+
+        // Read flash CR again to check FLASH_CR_LOCK if it's unlocked
+        if( intrfApi.read(regbase + FLASH_CR) & FLASH_LOCK )
+            throw ERROR_UNLOCK
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Lock the flash
+//
+function flashLock(regbase)
+{
+    intrfApi.write(regbase + FLASH_CR, FLASH_LOCK)
+    intrfApi.write(regbase + FLASH_OPTCR, OPT_LOCK)
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Lock the flash, ignore errors (used in error handling)
+//
+function flashSafeLock(regbase)
+{
+    try{ flashLock(regbase) } catch(e){}
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Clear all the pending error flags (FLASH_CCR has the same bit positions)
+//
+function flashClearErrors(regbase)
+{
+    local value = intrfApi.read(regbase + FLASH_SR)
+
+    if( value & FLASH_ERROR ){
+        debugf("Clear pending flash flags (0x%08X): %s\n", regbase, flashErrorStr(value))
+        intrfApi.write(regbase + FLASH_CCR, FLASH_ERROR)
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Wait until QW and BSY are cleared, return FLASH_SR
+//
+function flashWaitReady(regbase, timeout)
+{
+    local time = GetTickCount()
+    local value
+    do{
+        value = intrfApi.read(regbase + FLASH_SR)
+
+        if(GetTickCount() - time > timeout)
+            throw ERROR_TIMEOUT
+
+    }while ( value & (FLASH_QW | FLASH_BSY) )
+
+    return value
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//
+//
+function flashCheckBusy(regbase, timeout)
+{
+    //Wait until QW bit are cleared in the corresponding FLASH_SR1/2
+    local time = GetTickCount()
+    do{
+        AnimateCursor()
+
+        // Timeout of 30sec (it can take quite long
+        if(GetTickCount() - time > timeout)
+            throw ERROR_TIMEOUT
+
+    }while ( intrfApi.read(regbase + FLASH_SR) &  (FLASH_QW|FLASH_BSY) )
+
+    AnimateDone()
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Get the absolute address of the flash word with the last ECC error
+//
+function flashEccAddress(regbase)
+{
+    local bankAddr = (regbase == FLASH_REG_BASE_B1) ? FLASH_BANK1_ADDRESS : FLASH_BANK0_ADDRESS
+    local index    = intrfApi.read(regbase + FLASH_ECC_FA) & FLASH_ECC_FA_MASK
+    return bankAddr + index * FLASH_WORD_SIZE
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Return the byte offset of the first difference, -1 if equal
+//
+function flashFirstDiff(bufA, bufB, len)
+{
+    local i = 0
+
+    // Fast search per 32 bits
+    for(; i + 4 <= len; i += 4)
+        if(bufA.get(i, 32) != bufB.get(i, 32))
+            break
+
+    // Find the exact byte
+    for(; i < len; i++)
+        if(bufA.get(i, 8) != bufB.get(i, 8))
+            return i
+
+    return -1
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Return the names of the error flags in a FLASH_SR value
+//
+function flashErrorStr(value)
+{
+    local s = ""
+    foreach(err in FLASH_ERROR_NAMES)
+        if(value & err[0])
+            s += (s == "" ? "" : " ") + err[1]
+
+    return (s == "") ? "none" : s
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Reset the verify statistics of this flash session
+//
+function flashResetStats()
+{
+    flashStats = { sectors   = 0,  // programmed sectors
+                   verified  = 0,  // sectors verified OK
+                   retries   = 0,  // total number of retries
+                   recovered = [], // sectors that were OK after a retry
+                   marginal  = [], // sectors with a persistent single ECC error
+                   failed    = [] } // sectors that failed
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Print the verify statistics of this flash session
+//
+function flashPrintSummary()
+{
+    if(flashStats == null || flashStats.sectors == 0)
+        return
+
+    // No verify, nothing to report (same as the other flash scripts)
+    if(!flashVerify)
+        return
+
+    printf("Flash verify: %d sector(s), %d OK, %d retr%s\n",
+           flashStats.sectors, flashStats.verified, flashStats.retries,
+           flashStats.retries == 1 ? "y" : "ies")
+
+    if(flashStats.recovered.len())
+        userf("  OK after retry : %s\n", flashSectorList(flashStats.recovered))
+    if(flashStats.marginal.len())
+        userf("  Marginal (ECC) : %s\n", flashSectorList(flashStats.marginal))
+    if(flashStats.failed.len())
+        errorf("  Failed         : %s\n", flashSectorList(flashStats.failed))
+}
+
+function flashSectorList(list)
+{
+    local s = ""
+    foreach(nr in list)
+        s += (s == "" ? "" : ", ") + nr
+    return s
+}
+
+
+//===================================================================================
+//                            Option byte programming
+//
+//  Virtual sector 999 of 32 bytes with format as below.
+//  Be aware of reserved reset values!! (otherwise program errors)
+//
+//  typedef struct {       //   Reset    Flash control offset
+//     un32 FLASH_OPTSR;   //0x1416AAF0  0x20 (alias 0x120)
+//     un32 FLASH_BOOT;    //0x1FF00800  0x44 (alias 0x144)
+//     un32 FLASH_PRAR_x1; //0x000000FF  0x2C
+//     un32 FLASH_PRAR_x2; //0x000000FF  0x12C
+//     un32 FLASH_SCAR_x1; //0x800000FF  0x34
+//     un32 FLASH_SCAR_x2; //0x800000FF  0x134
+//     un32 FLASH_WPSN_x1; //0x000000FF  0x3C
+//     un32 FLASH_WPSN_x2; //0x000000FF  0x13C
+//  } STM32H7_options;
+//
+//
+
+
+const FLASH_OPTSR    0
+const FLASH_BOOT     1
+const FLASH_PRAR_x1  2
+const FLASH_PRAR_x2  3
+const FLASH_SCAR_x1  4
+const FLASH_SCAR_x2  5
+const FLASH_WPSN_x1  6
+const FLASH_WPSN_x2  7
+
+//  Mapping of the EBlink EBbuffer (virtual sector) and STM32 registers
+OPT_MAPPING <- [[0x20, "FLASH_OPTSR  : 0x%08x\n"], // EBbuffer[0]
+                [0x44, "FLASH_BOOT   : 0x%08x\n"],
+                [0x2C, "FLASH_PRAR_x1: 0x%08x\n"],
+                [0x12C,"FLASH_PRAR_x2: 0x%08x\n"],
+                [0x34, "FLASH_SCAR_x1: 0x%08x\n"],
+                [0x134,"FLASH_SCAR_x2: 0x%08x\n"],
+                [0x3C, "FLASH_WPSN_x1: 0x%08x\n"],
+                [0x13C,"FLASH_WPSN_x2: 0x%08x\n"]] // EBbuffer[7]
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Write STM32H7Ax/Bx option bytes (same register offsets as the H74x,
+//  the meaning of the PRAR/SCAR/WPSN values differs, see RM0455)
+//
+function flashOptionWrite(buffer)
+{
+    try{
+        local regbase = FLASH_REG_BASE_B0 // first flash bank
+
+        // Get the current options
+        local curOptions = flashGetOptionBuffer()
+
+        // Check if the options are not already set
+        if(!( buffer <=> curOptions)){
+            debugf("Skipping options writing due equal settings\n")
+            return ERROR_OK
+        }
+
+        // Check if the buffer is valid
+        if(buffer.getSize() != 32){
+            errorf("Error: Option program length is %d, should be 32 bytes\n", buffer.getSize())
+            throw ERROR_NOTIFIED
+        }
+
+        //------------- Unlock options  --------------
+        // Read flash FLASH_OPTCR
+        // Check if options are locked by the FLASH_OPTCR_OPTLOCK flag
+        if( intrfApi.read(regbase + FLASH_OPTCR) & OPT_LOCK  ){
+            // Write FLASH_OPTKEYR to unlock
+           intrfApi.write(regbase + FLASH_OPTKEYR, OPTKEY1)
+           intrfApi.write(regbase + FLASH_OPTKEYR, OPTKEY2)
+
+            // Reread flash FLASH_OPTCR to check if we are unlocked
+            if( intrfApi.read(regbase + FLASH_OPTCR) & OPT_LOCK  )
+                throw ERROR_UNLOCK
+        }
+
+        local probeSpeed = intrfApi.getSpeed()
+        intrfApi.setSpeed(maxFlashSpeed)
+
+        //-------------- Program the options ---------
+        debugf("Write buffer into option registers:\n")
+        for(local i=0; i<OPT_MAPPING.len(); i++) {
+            if(curOptions[i] != buffer[i] ) {
+                debugf(OPT_MAPPING[i][1], buffer[i])
+                intrfApi.write(regbase + OPT_MAPPING[i][0], buffer[i] )
+            }
+        }
+
+        intrfApi.setSpeed(probeSpeed)
+
+        //------------- Commit options  --------------
+
+        // Remove OPT error flag in FLASH_OPTCCR before programming
+        intrfApi.write(regbase + FLASH_OPTCCR, OPT_OPTCHANGEERR)
+
+        // Set the FLASH_OPTCR_OPTSTART in the FLASH_OPTCR
+        intrfApi.write(regbase + FLASH_OPTCR, OPT_START)
+
+        local time = GetTickCount();
+        do{
+            AnimateCursor();
+
+            // Timeout of 10sec
+            if(GetTickCount() - time > 10000)
+                throw ERROR_TIMEOUT
+
+            // Read the FLASH_OPTSR_CUR to get the busy flag
+        }while ( intrfApi.read(regbase + FLASH_OPTSR_CUR) &  OPT_BSY )
+
+        AnimateDone()
+
+        if(intrfApi.read(regbase + FLASH_OPTSR_CUR) & OPT_OPTCHANGEERR)
+            throw ERROR_FLASH
+
+        // Relock the options bytes
+        intrfApi.write(regbase + FLASH_OPTCR, OPT_LOCK)
+
+        printf("Options bytes ready\n\n")
+        return ERROR_OK
+    }
+
+    catch(e){
+       catchThrowStr(e)
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: options writing failed! [%s]\n", errorToStr(e) )
+       throw ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  This function will return an EBbuffer with the option filled
+//
+function flashGetOptionBuffer()
+{
+    local regbase = FLASH_REG_BASE_B0 // first flash bank
+    local optionBuf = EBbuffer(8*4)   // Allocate buffer to hold 8 words
+
+    debugf("Read option registers in buffer:\n")
+    for(local i=0; i<OPT_MAPPING.len(); i++) {
+        optionBuf[i] = intrfApi.read(regbase + OPT_MAPPING[i][0])
+        debugf(OPT_MAPPING[i][1], optionBuf[i])
+    }
+
+    return optionBuf
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  This function will write an EBbuffer to the options area
+//
+function flashWriteOptionBuffer(optionBuf)
+{
+    // Reprogram the options
+    flashUnlock(FLASH_REG_BASE_B0)
+    flashOptionWrite(optionBuf)
+    flashLock(FLASH_REG_BASE_B0)
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  This is a standalone function to clear the RDP level
+//
+function flashClearRDP(optionBuf)
+{
+    // Clear the readout protection level
+    local optsr = optionBuf[FLASH_OPTSR] & 0xFFFF00FF
+    optionBuf[FLASH_OPTSR] = optsr | 0x0000AA00 // Level 0
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Get the readout protection level
+//
+function flashRDPlevel(optionBuf)
+{
+  local flash_optsr = (optionBuf[FLASH_OPTSR] >> 8) & 0xFF
+
+  if( flash_optsr == 0xAA ) return 0
+  if( flash_optsr == 0xCC ) return 2
+  return 1
+}

@@ -63,6 +63,12 @@ function stm32_device()
     local page_size
     local ram_size
 
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
+    intrfApi.write(0xE0044004, 6)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1FZR1 = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(0xE0044008, 0x00001800)
+
     hasDualBank = getDualBankOption()
 
     // Get the flash size in KB

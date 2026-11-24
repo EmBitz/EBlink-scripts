@@ -4,18 +4,18 @@
 //
 
 F4TBL <- { // Supported F4 devices table
-// DevID   RAM size   Name    bank1 sectors
-[0x411] = [0x30000, "x5/4x7",   12],
-[0x413] = [0x30000, "x5/4x7",   12],
-[0x419] = [0x40000, "2x/43x",   12],
+// DevID   RAM size   Name    bank1 sectors   (RAM: SRAM at 0x20000000, CCM not included)
+[0x411] = [0x20000, "x5/4x7",   12],
+[0x413] = [0x20000, "x5/4x7",   12],
+[0x419] = [0x30000, "2x/43x",   12],
 [0x421] = [0x20000, "46",       12],
 [0x423] = [0x10000, "01xB/C",   12],
 [0x431] = [0x20000, "11",       12],
 [0x433] = [0x18000, "01xD/E",   12],
-[0x434] = [0x40000, "69/479",   12],
+[0x434] = [0x50000, "69/479",   12],
 [0x441] = [0x40000, "12",       12],
 [0x458] = [0x08000, "10",       12],
-[0x463] = [0x50000, "13",       15]
+[0x463] = [0x50000, "13/423",   16]  // 1.5MB single bank, sectors 0..15
 }
 
 /////////////////////////////////////////////////////
@@ -128,8 +128,8 @@ const mem_template_2MB = @@"
   <memory type=\"rom\" start=\"0x1FFFC000\" length=\"0x10\"/>
 </memory-map>"
 
-// Above this number we assume that de sector is bank #2 in flash algo.
-// Set by F4TBL tabel parameter
+// Above this number we assume that the sector is bank #2 in flash algo.
+// Set by F4TBL table parameter
 bank1SecNum <- 0
 
 /////////////////////////////////////////////////////
@@ -172,7 +172,8 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    if(flash_size > (1024*1024) )
+    // 2MB dual bank (F42x/F43x/F469/F479), the F413/F423 1.5MB is single bank
+    if(flash_size > (1024*1024) && deviceId != 0x463)
         DeviceAPI().memmap( format(mem_template_2MB, ram_size) )
 
     else if(flash_size < (128*1024) )
@@ -181,7 +182,7 @@ function stm32_device()
                                                         ram_size,
                                                         flash_size ) )
     else
-        // Substract the first 128Kb (sector 0..4)
+        // Subtract the first 128Kb (sector 0..4)
         DeviceAPI().memmap( format( mem_template, flash_size,
                                                   ram_size,
                                                   flash_size - (128*1024) ) )

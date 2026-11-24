@@ -32,7 +32,7 @@ const mem_template = @@"
  <memory type=\"rom\" start=\"0x1ffff800\" length=\"0x10\"/>
 </memory-map>"
 
-// Above this number we assume that de sector is bank #2 in flash algo.
+// Above this number we assume that the sector is bank #2 in flash algo.
 bank1SecNum <- 12 // default to 12
 
 /////////////////////////////////////////////////////
@@ -46,7 +46,7 @@ function stm32_device()
     local flash_size
     local ram_size
 
-    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP | DBG_SLEEP
     intrfApi.write(0xE0042004, 7)
 
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP

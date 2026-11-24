@@ -68,6 +68,12 @@ function stm32_device()
 {
     local ram_size
 
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
+    intrfApi.write(0x44024004, 6)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1FZR1 = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(0x44024008, 0x00001800)
+
     // Get the flash size
     local flash_size = ( intrfApi.read(0x08fff80c) &0xFFFF) *1024
 

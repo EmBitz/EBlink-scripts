@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////
 //
-//                   STM32FL4x
+//                   STM32L4x
 //
 
 /////////////////////////////////////////////////////
@@ -41,7 +41,7 @@ const mem_template_L4 = @@"
 
 // The parameters for the flash script
 const FLASH_BASE 0x40022000
-hasDualBank <- false // Can be set by upper scripts is we have dual bank support
+hasDualBank <- false // Can be set by upper scripts if we have dual bank support
 
 /////////////////////////////////////////////////////
 //
@@ -55,7 +55,7 @@ function stm32_device()
     local page_size
     local ram_size
 
-    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP | DBG_SLEEP
     intrfApi.write(0xE0042004, 7)
 
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
@@ -105,7 +105,7 @@ function stm32_device()
             deviceStr = "L4R/L4Sxx"
             ram_size = 0xa0000
             page_size = 0x2000
-            if( (flash_size == (1024*1024)) && readDualBankOption(21) ){
+            if( readDualBankOption(22) ){ // DBANK (bit 22), all flash sizes
                 hasDualBank = true
                 page_size = 0x1000
             }
@@ -115,7 +115,7 @@ function stm32_device()
             deviceStr = "L4P5/L4Q5x"
             ram_size = 0x50000
             page_size = 0x2000
-            if( (flash_size == (1024*1024)) && readDualBankOption(21) ){
+            if( readDualBankOption(22) ){ // DBANK (bit 22), all flash sizes
                 hasDualBank = true
                 page_size = 0x1000
             }

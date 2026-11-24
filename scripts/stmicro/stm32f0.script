@@ -43,7 +43,14 @@ function stm32_device()
     local page_size
     local ram_size
 
-    intrfApi.write(DBGMCU_CR, DBG_STANDBY  )
+    // Enable the DBG(MCU) peripheral clock first: RCC_APB2ENR DBGMCUEN |= (1<<22)
+    intrfApi.write(0x40021018, intrfApi.read(0x40021018) | (1<<22))
+
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
+    intrfApi.write(DBGMCU_CR, DBG_STANDBY | DBG_STOP)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(DBGMCU_APB1_FZ, 0x00001800)
 
     // Get the flash size by reading the info register
     flash_size = intrfApi.read(0x1ffff7cc) 

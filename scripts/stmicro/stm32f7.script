@@ -68,12 +68,12 @@ const mem_template_F73 = @@"
  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%X\"/>
 
  <!-- Sectors 0..3 16KB each -->
- <memory type=\"flash\" start=\"0x08000000\" length=\"0x20000\">
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x10000\">
   <property name=\"blocksize\">0x4000</property>
   <property name=\"secstart\">0</property>
  </memory>
 
-  <!-- Place holder for additional memory -->
+  <!-- Place holder for additional memory (sector 4 and 5..7) -->
  %s
 
  <!-- peripheral regs -->
@@ -89,18 +89,78 @@ const mem_template_F73 = @@"
 </memory-map>"
 
 
-const mem_template_F72 = @@"
+// F72x/F73x flash organization (RM0431 3.3.1):
+//   F72x/F732/F733: 4 x 16KB, 1 x 64KB, 3 x 128KB (max 512KB)
+//   F730          : 4 x 16KB (64KB)
+const mem_template_F72_S4 = @@"
  <!-- Sector 4 64 kB -->
- <memory type=\"flash\" start=\"0x08020000\" length=\"0x20000\">
+ <memory type=\"flash\" start=\"0x08010000\" length=\"0x10000\">
   <property name=\"blocksize\">0x10000</property>
- </memory>
+ </memory>"
 
+const mem_template_F72_S5 = @@"
  <!-- Sectors 5..7 128kB each -->
- <memory type=\"flash\" start=\"0x08040000\" length=\"0xC0000\">
+ <memory type=\"flash\" start=\"0x08020000\" length=\"0x%X\">
   <property name=\"blocksize\">0x20000</property>
  </memory>"
 
-// Above this number we assume that de sector is bank #2 in flash algo.
+// F76x/F77x dual bank mode (nDBANK=0, RM0410 3.3.1), per bank:
+//   4 x 16KB, 1 x 64KB, 3 (1MB device) or 7 (2MB device) x 128KB
+//   Bank 2 sectors are 12.. (SNB 0x10..), done by the flash script with bank1SecNum
+const mem_template_F76_DB = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+ <!-- ITCM ram 16kB -->
+ <memory type=\"ram\" start=\"0x00000000\" length=\"0x4000\"/>
+ <!-- ITCM flash -->
+ <memory type=\"rom\" start=\"0x00200000\" length=\"0x%X\"/>
+ <!-- sram -->
+ <memory type=\"ram\" start=\"0x20000000\" length=\"0x%X\"/>
+
+ <!-- Bank 1 sectors 0..3 16KB each -->
+ <memory type=\"flash\" start=\"0x08000000\" length=\"0x10000\">
+  <property name=\"blocksize\">0x4000</property>
+  <property name=\"secstart\">0</property>
+ </memory>
+ <!-- Bank 1 sector 4 64KB -->
+ <memory type=\"flash\" start=\"0x08010000\" length=\"0x10000\">
+  <property name=\"blocksize\">0x10000</property>
+ </memory>
+ <!-- Bank 1 sectors 5.. 128KB each -->
+ <memory type=\"flash\" start=\"0x08020000\" length=\"0x%X\">
+  <property name=\"blocksize\">0x20000</property>
+ </memory>
+
+ <!-- Bank 2 sectors 16KB each -->
+ <memory type=\"flash\" start=\"0x%X\" length=\"0x10000\">
+  <property name=\"blocksize\">0x4000</property>
+ </memory>
+ <!-- Bank 2 sector 64KB -->
+ <memory type=\"flash\" start=\"0x%X\" length=\"0x10000\">
+  <property name=\"blocksize\">0x10000</property>
+ </memory>
+ <!-- Bank 2 sectors 128KB each -->
+ <memory type=\"flash\" start=\"0x%X\" length=\"0x%X\">
+  <property name=\"blocksize\">0x20000</property>
+ </memory>
+
+ <!-- peripheral regs -->
+ <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+ <!-- AHB3 Peripherals -->
+ <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+ <!-- cortex regs -->
+ <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+ <!-- bootrom -->
+ <memory type=\"rom\" start=\"0x00100000\" length=\"0xEDC0\"/>
+ <!-- option byte area -->
+ <memory type=\"rom\" start=\"0x1fff0000\" length=\"0x20\"/>
+</memory-map>"
+
+// FLASH_OPTCR nDBANK: 1 = single bank (default), 0 = dual bank
+const FLASH_OPTCR      0x40023C14
+const FLASH_OPTCR_nDBANK (1<<29)
+
+// Above this number we assume that the sector is bank #2 in flash algo.
 bank1SecNum <- 12 // default to 12
 
 /////////////////////////////////////////////////////
@@ -115,7 +175,7 @@ function stm32_device()
     local page_size
     local ram_size
 
-    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP | DBG_SLEEP
     intrfApi.write(0xE0042004, 7)
 
     // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
@@ -136,6 +196,7 @@ function stm32_device()
     local addMem = ""
 
     local deviceStr
+    local dualBank = false
     switch(deviceId) {
         case 0x449 :
             deviceStr = "74x/75x"
@@ -149,14 +210,19 @@ function stm32_device()
             if(flash_size>0x100000)
                 addMem = mem_template_2MB
             ram_size = 0x80000
+            dualBank = (intrfApi.read(FLASH_OPTCR) & FLASH_OPTCR_nDBANK) == 0
             break
 
         case 0x452 :
             deviceStr = "72x/73x"
             memMap = mem_template_F73
-            if( flash_size > 0x8000 )
-                addMem = mem_template_F72
-            ram_size = 0x80000
+            // Sector 4 (64KB) if more than the 4 x 16KB sectors
+            if( flash_size > 0x10000 )
+                addMem = mem_template_F72_S4
+            // Sectors 5..7 (128KB each) above the first 128KB
+            if( flash_size > 0x20000 )
+                addMem += format(mem_template_F72_S5, flash_size - 0x20000)
+            ram_size = 0x40000 // 256KB (DTCM 64KB + SRAM1 176KB + SRAM2 16KB)
             break
 
         default:
@@ -167,7 +233,7 @@ function stm32_device()
     printf("STmicro family : STM32F%s\n", deviceStr)
 
     // Inform the user
-    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
+    printf("Detected FLASH : %dKB%s\nConfigured RAM : %dKB\n", flash_size/1024, (dualBank ? " - Dualbank" :""), ram_size/1024)
 
     // The user specified the size of flash memory
     if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
@@ -181,7 +247,18 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    DeviceAPI().memmap( format(memMap, ram_size, addMem))
+    if(dualBank){
+        local bankSize = flash_size/2
+        local bank2    = 0x08000000 + bankSize
+        DeviceAPI().memmap( format(mem_template_F76_DB, flash_size, ram_size,
+                                   bankSize - 0x20000,
+                                   bank2, bank2 + 0x10000,
+                                   bank2 + 0x20000, bankSize - 0x20000))
+        // Sectors 0..3, 4 and 5.. of bank 1
+        bank1SecNum = 5 + (bankSize - 0x20000)/0x20000
+    }
+    else
+        DeviceAPI().memmap( format(memMap, ram_size, addMem))
 
     require("stmicro/flash/f7_f4_f2.script")
 }

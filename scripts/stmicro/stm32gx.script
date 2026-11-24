@@ -120,8 +120,20 @@ function stm32_device()
     local sram_size
     local bank2_start_address = 0x08020000
 
-    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
-    intrfApi.write(0x40015804, 6)
+    // Enable debug clocks in low power modes (DBGMCU_CR)
+    if(deviceId == 0x468 || deviceId == 0x469 || deviceId == 0x479)
+        intrfApi.write(0xE0042004, 7) // G4: DBG_STANDBY | DBG_STOP | DBG_SLEEP
+    else {
+        // G0: enable the DBG peripheral clock first: RCC_APBENR1 |= DBGEN (1<<27)
+        intrfApi.write(0x4002103C, intrfApi.read(0x4002103C) | (1<<27))
+        intrfApi.write(0x40015804, 6) // G0: DBG_STANDBY | DBG_STOP
+    }
+
+    // Stop watchdog counters during halt: APB(1)FZ(R1) = DBG_IWDG_STOP | DBG_WWDG_STOP
+    if(deviceId == 0x468 || deviceId == 0x469 || deviceId == 0x479)
+        intrfApi.write(0xE0042008, 0x00001800) // G4: DBGMCU_APB1FZR1
+    else
+        intrfApi.write(0x40015808, 0x00001800) // G0: DBG_APB_FZ1
 
     // Get the flash size by reading the info register
     flash_size = ((intrfApi.read(0x1fff75e0) & ~3) & 0xffff) * 1024
@@ -149,8 +161,8 @@ function stm32_device()
         case 0x467 :
             deviceStr = "0B1xx/0C1xx"
             page_size = 0x800   // 2K single bank
-            sram_size = 0x20000 // 144K
-            hasDualBank = readDualBankOption()
+            sram_size = 0x24000 // 144K
+            hasDualBank = readDualBankOption(21) // DUAL_BANK (bit 22 is RAM_PARITY_CHECK)
             if(hasDualBank){
                 flash_size = flash_size/2
                 if(flash_size > 0x20000) // 128Kbyte
@@ -170,7 +182,7 @@ function stm32_device()
             page_size = 0x1000  // 4K single bank
             cram_size = 0x8000  // 32K
             sram_size = 0x20000 // 128K
-            hasDualBank = readDualBankOption()
+            hasDualBank = readDualBankOption(22) // DBANK
             if(hasDualBank){
                 page_size =  0x800  // 2K
                 flash_size = flash_size/2
@@ -179,12 +191,9 @@ function stm32_device()
 
         case 0x479 :
             deviceStr = "49x"
-            page_size = 0x800   // 2K single and dual bank
+            page_size = 0x800   // 2K, single bank only (bit 22 is PB4_PUPEN here)
             cram_size = 0x4000  // 16K
-            sram_size = 0x18000 // 96K
-            hasDualBank = readDualBankOption()
-            if(hasDualBank)
-                flash_size = flash_size/2
+            sram_size = 0x1C000 // 112K (SRAM1 80K + SRAM2 16K + CCM alias 16K at 0x20018000)
             break
 
     default:
@@ -286,7 +295,7 @@ function stm32_device()
 //  Helper function to get the dual bank
 //  option state
 //
-function readDualBankOption()
+function readDualBankOption(bit)
 {
-     return (intrfApi.read(FLASH_BASE+0x20) & (1<<22) ? true: false)
+     return (intrfApi.read(FLASH_BASE+0x20) & (1<<bit) ? true: false)
 }

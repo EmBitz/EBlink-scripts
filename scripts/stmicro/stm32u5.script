@@ -59,6 +59,12 @@ function stm32_device()
     local page_size
     local ram_size
 
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
+    intrfApi.write(0xE0044004, 6)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1FZR1 = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(0xE0044008, 0x00001800)
+
     // Get the flash size in KB
     flash_size = (intrfApi.read(0x0bfa07a0) &0xFFFF)*1024
 
@@ -74,7 +80,7 @@ function stm32_device()
 
         case 0x476 : // CHIPID_STM32U5F/Gx5
             deviceStr = "U5F/Gx5"
-            ram_size = 0x2F4800 // 3026B
+            ram_size = 0x2F4800 // 3026KB
             page_size = 0x2000
             break
 

@@ -43,6 +43,15 @@ function stm32_device()
     local page_size
     local ram_size
 
+    // Enable the DBG(MCU) peripheral clock first: RCC_DBGCFGR DBGEN |= (1<<0)
+    intrfApi.write(0x40021050, intrfApi.read(0x40021050) | (1<<0))
+
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
+    intrfApi.write(0x40015804, 6)
+
+    // Stop watchdog counters during halt: DBGMCU_APBFZ1 = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(0x40015808, 0x00001800)
+
     local deviceStr
     switch(deviceId){
         case 0x459 :

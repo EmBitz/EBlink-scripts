@@ -38,7 +38,11 @@ function stm32_device()
     local ram_size
     local fsize_addr
 
-    // Enable debug clocks: DBG_STANDBY & DBG_STOP & DBG_SLEEP - RM0090 Page 1676/1705
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP | DBG_SLEEP
+    intrfApi.write(0xE0042004, 7)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1_FZ = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(0xE0042008, 0x00001800)
 
     local deviceStr
     switch(deviceId){
@@ -66,7 +70,7 @@ function stm32_device()
         case 0x436 :
             deviceStr = "(Cat.4/Cat.3 - Medium+/High Density)"
             // Get the flash size by reading the info register
-            flash_size = (intrfApi.read(0x1ff800cc) & ~3) & 0xffff               
+            flash_size = intrfApi.read(0x1ff800cc) & 0xffff // No & ~3 here, the value is 0 or 1
             
             // 0 is 384k and 1 is 256k
             if(flash_size == 0)

@@ -79,6 +79,59 @@ const mem_template_H7 = @@"
     <!-- Place holder for sram aliases -->
     %s
 
+    <!-- Place holder for the sram blocks -->
+    %s
+
+    <!-- Flash bank 1 -->
+    <memory type=\"flash\" start=\"0x08000000\" length=\"0x%X\">
+        <property name=\"blocksize\">0x%X</property>
+        <property name=\"secstart\">0</property>
+    </memory>
+
+    <!-- Place holder for flash bank 2 -->
+    %s
+
+    <!-- peripheral regs -->
+    <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+
+    <!-- AHB3 Peripherals -->
+    <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+
+    <!-- cortex regs -->
+    <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+
+    <!-- bootrom -->
+    <memory type=\"rom\" start=\"0x00100000\" length=\"0xEDC0\"/>
+
+    <memory type=\"rom\" start=\"0x1fff0000\" length=\"0x20\"/>
+
+    <!-- Place holder for the option byte area -->
+    %s
+
+</memory-map>"
+
+
+// Flash bank 2, always at 0x08100000 (also on 1MB devices: 2 x 512KB).
+// The sectors of bank 2 are numbered from the given secstart (8 on H74x/75x,
+// the flash script uses sector-8 as bank 2 sector number).
+const mem_bank2 = @@"
+    <!-- Flash bank 2 -->
+    <memory type=\"flash\" start=\"0x08100000\" length=\"0x%X\">
+        <property name=\"blocksize\">0x%X</property>
+        <property name=\"secstart\">%d</property>
+    </memory>"
+
+// The option byte area (virtual sector), same registers on all H7 variants here
+const mem_option = @@"
+    <!-- option byte area (virtual sector) -->
+    <memory type=\"flash\" start=\"0x1ff20000\" length=\"32\">
+        <property name=\"blocksize\">32</property>
+        <property name=\"secstart\">999</property>
+        <property name=\"sectype\">virtual</property>
+    </memory>"
+
+// SRAM blocks H74x/75x/72x/73x
+const mem_ram_H74 = @@"
     <!-- DTCM Ram, 128kB -->
     <memory type=\"ram\" start=\"0x20000000\" length=\"0x20000\"/>
 
@@ -98,47 +151,28 @@ const mem_template_H7 = @@"
     <memory type=\"ram\" start=\"0x38000000\" length=\"0x10000\"/>
 
     <!-- Backup SRAM -->
-    <memory type=\"ram\" start=\"0x38800000\" length=\"0x01000\"/>
+    <memory type=\"ram\" start=\"0x38800000\" length=\"0x01000\"/>"
 
-    <!-- Sectors 0..7 128KB each -->
-    <memory type=\"flash\" start=\"0x08000000\" length=\"0x%X\">
-        <property name=\"blocksize\">0x20000</property>
-        <property name=\"secstart\">0</property>
-    </memory>
+// SRAM blocks H7Ax/Bx (ST CMSIS stm32h7a3xx.h)
+const mem_ram_H7AB = @@"
+    <!-- DTCM Ram, 128kB -->
+    <memory type=\"ram\" start=\"0x20000000\" length=\"0x20000\"/>
 
-    <!-- Place holder for second 1MB bank -->
-    %s
+    <!-- AXI SRAM1..3 (CD), 256 + 384 + 384 kB -->
+    <memory type=\"ram\" start=\"0x24000000\" length=\"0x100000\"/>
 
-    <!-- peripheral regs -->
-    <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+    <!-- AHB SRAM1..2 (CD), 2 x 64 kB -->
+    <memory type=\"ram\" start=\"0x30000000\" length=\"0x20000\"/>
 
-    <!-- AHB3 Peripherals -->
-    <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+    <!-- SRD SRAM, 32 kB -->
+    <memory type=\"ram\" start=\"0x38000000\" length=\"0x08000\"/>
 
-    <!-- cortex regs -->
-    <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+    <!-- Backup SRAM -->
+    <memory type=\"ram\" start=\"0x38800000\" length=\"0x01000\"/>"
 
-    <!-- bootrom -->
-    <memory type=\"rom\" start=\"0x00100000\" length=\"0xEDC0\"/>
-
-    <memory type=\"rom\" start=\"0x1fff0000\" length=\"0x20\"/>
-
-    <!-- option byte area (virtual sector) -->
-    <memory type=\"flash\" start=\"0x1ff20000\" length=\"32\">
-        <property name=\"blocksize\">32</property>
-        <property name=\"secstart\">999</property>
-        <property name=\"sectype\">virtual</property>
-    </memory>
-
-</memory-map>"
-
-
-// The second 1MB bank if available which is put into the place holder above
-const mem_2MB = @@"
-    <!-- Sectors 8..16 128kB each -->
-    <memory type=\"flash\" start=\"0x08100000\" length=\"0x100000\">
-        <property name=\"blocksize\">0x20000</property>
-    </memory>"
+// H7Ax/Bx (0x480): same register map, but another flash engine (8KB sectors,
+// 128 bit flash word, other FLASH_CR layout), see stmicro/flash/h7ab.script
+const H7AB_ID 0x480
 
 // Dual core has some additional sram aliases
 const mem_ram_alias = @@"
@@ -152,8 +186,9 @@ const mem_ram_alias = @@"
     <memory type=\"ram\" start=\"0x10040000\" length=\"0x20000\"/>"
 
 
-// Gloabal variables
+// Global variables
 hasSecondBank <- false // Global boolean used by flash script
+flashBank2Sec <- 8     // First sector number of bank 2 in the memory map (flash script)
 hasDualCore   <- false // There is a Dual Core
 
 /////////////////////////////////////////////////////
@@ -175,12 +210,17 @@ function stm32_device()
     value = intrfApi.read(DBGMCU_APB4FZ1)
     intrfApi.write(DBGMCU_APB4FZ1, value | DBG_IIWDG1)
 
+    // DBGMCU_APB3FZ1 |= WWDG1_FRZ
+    value = intrfApi.read(DBGMCU_APB3FZ1)
+    intrfApi.write(DBGMCU_APB3FZ1, value | WWDG1_FRZ)
+
 
     // Get the flash size by reading the info register
     // Be sure that we are usig DAP-AP 0, the user can change the
     // default interface AP-port on the CLI
+    // H7Ax/Bx has the flash size register at another address
     local curAp = intrfApi.setDapAp(0)
-    value = intrfApi.read(0x1ff1e880)
+    value = intrfApi.read(deviceId == H7AB_ID ? 0x08fff80c : 0x1ff1e880)
     intrfApi.setDapAp(curAp) // Restore the default DAP-AP!
 
     flash_size = (value & 0xffff) * 1024
@@ -196,7 +236,7 @@ function stm32_device()
 
         case 0x480 :
             deviceStr = "7Ax/7Bx"
-            ram_size = 0x80000
+            ram_size = 0x100000 // AXI SRAM 1MB
             break
 
         case 0x483 :
@@ -226,18 +266,36 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
-    // If we have more then 1MB, add the second bank
-    if(flash_size > 0x100000){
-        flash_size = 0x100000
+    // Flash organization
+    //  - H74x/75x (0x450) : 128KB sectors, >= 1MB: two banks of flash_size/2
+    //                       (1MB devices are 2 x 512KB, bank 2 at 0x08100000)
+    //  - H72x/73x (0x483) : 128KB sectors, single bank (max 1MB)
+    //  - H7Ax/Bx  (0x480) : 8KB sectors,   >= 1MB: two banks of flash_size/2
+    local sectorSize = (deviceId == H7AB_ID) ? 0x2000 : 0x20000
+    local bank1Size  = flash_size
+    local bank2Str   = ""
+
+    if( (deviceId == 0x450 || deviceId == H7AB_ID) && flash_size >= 0x100000 ){
+        bank1Size     = flash_size / 2
         hasSecondBank = true
+
+        // Bank 2 sectors start at 8 on the H74x/75x and after the last bank 1
+        // sector on the H7Ax/Bx (128), the flash scripts use flashBank2Sec
+        flashBank2Sec = (deviceId == H7AB_ID) ? bank1Size / sectorSize : 8
+        bank2Str = format(mem_bank2, flash_size / 2, sectorSize, flashBank2Sec)
     }
 
     // Generate XML and put it in EBlink's device object
-    DeviceAPI().memmap( format(mem_template_H7, ( hasDualCore ? mem_ram_alias : "" ), flash_size, ( hasSecondBank ? mem_2MB : "") ) )
+    DeviceAPI().memmap( format(mem_template_H7, ( hasDualCore ? mem_ram_alias : "" ),
+                               ( deviceId == H7AB_ID ? mem_ram_H7AB : mem_ram_H74 ),
+                               bank1Size, sectorSize, bank2Str, mem_option ) )
 
 
-    // Use the normal H7 flash algorithm
-    require("stmicro/flash/h7.script")
+    // Flash engine mux: H7Ax/Bx has its own flash controller
+    if(deviceId == H7AB_ID)
+        require("stmicro/flash/h7ab.script")
+    else
+        require("stmicro/flash/h7.script")
 
     // =================== Flash Option checking =================
 
@@ -252,7 +310,7 @@ function stm32_device()
     }
 
     if(rdpLevel == 1){
-	
+
 	        // yesNof formatted yes/no question with settable default (0 or 1) =>  yesNof( default return, question string, ...)	
 			// So questio below has 1=yes as default return. This default will be used if verbose level is no questions
 			
