@@ -89,5 +89,5 @@ function stm32_device()
                                               ram_size,
                                               flash_size - (128*1024) ) )
 
-    require("stmicro/flash/f7_f4_f2.script")
+    require("stmicro/flash/f2_f4_f7.script")
 }

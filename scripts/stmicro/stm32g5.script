@@ -1,0 +1,167 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32G5x
+//
+
+//*************************************************************
+//*****          Memory map of the G5                      ****
+//*************************************************************
+const mem_template_G5 = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <memory type=\"rom\" start=\"0x00000000\" length=\"0x100000\"/>
+
+  <!-- SRAM -->
+  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+
+  <!-- Flash bank 1-->
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+   <property name=\"blocksize\">0x2000</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+
+  <!-- Flash bank 2-->
+  <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+   <property name=\"blocksize\">0x2000</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+
+  <!-- Highcycle data flash 1 -->
+  <memory type=\"flash\" start=\"0x09000000\" length=\"0x%x\">
+   <property name=\"blocksize\">0x1800</property>
+   <property name=\"secstart\">0</property>
+   <property name=\"sectype\">virtual</property>
+  </memory>
+
+  <!-- Highcycle data flash 2 -->
+  <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+   <property name=\"blocksize\">0x1800</property>
+   <property name=\"secstart\">0</property>
+   <property name=\"sectype\">virtual</property>
+  </memory>
+
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+  <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+  <memory type=\"rom\" start=\"0x0bf80000\" length=\"0x10000\"/>
+</memory-map>"
+
+// Option register settings for highcycle data
+const FLASH_HIGH_CNF_1 0x500220f0
+const FLASH_HIGH_CNF_2 0x500221f0
+const FLASH_HIGH_EN    (1<<15)
+const FLASH_HIGH_SEC   0x7
+
+// The start address of flash bank 2
+flashBank2Start <- 0
+// The HighCycle sector 0 is the last page of the bank
+startHcSec <- 0
+edataReverse <- true
+// The start address of HighCycle bank 2
+edataBank2Start <- 0
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local ram_size
+    local edata_size
+
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
+    intrfApi.write(0x44026004, 6)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1FZR = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(0x44026008, 0x00003000)
+
+    // Get the flash size
+    local flash_size = ( intrfApi.read(0x08fff80c) &0xFFFF) *1024
+
+    // Set the memory map according the device ID
+      local deviceStr
+      switch(deviceId) {
+
+        case 0x44B : // CHIPID_STM32G534/G544
+            deviceStr = "G534/544"
+            ram_size = 0xF000 // 60KB
+            edata_size = 0xC000
+            break
+
+        case 0x44A : // CHIPID_STM32G553/G554/G563/G564
+            deviceStr = "G553/554/563/564"
+            ram_size = 0x1C000 // 112KB
+            edata_size = 0x18000
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+    }
+
+    // HighCycle page n is user page (pages per bank - 1 - n) (ST HAL)
+    startHcSec = flash_size/2/0x2000 - 1
+
+    // Calculate start address of flashbank 2
+    flashBank2Start = 0x08000000 + flash_size/2
+
+    // HighCycle bank 2 starts after the HighCycle area of bank 1
+    edataBank2Start = 0x09000000 + edata_size/2
+
+    // Check if there are any HighCycle pages active in one of the two banks
+    local flashDataSectorCnt_1 = highCycleFlashSec(FLASH_HIGH_CNF_1)
+    local flashDataSectorCnt_2 = highCycleFlashSec(FLASH_HIGH_CNF_2)
+
+    // The HighCycle area can't be larger than the HighCycle address space of the bank
+    local edataLength_1 = flashDataSectorCnt_1 * 0x1800
+    local edataLength_2 = flashDataSectorCnt_2 * 0x1800
+    if(edataLength_1 > edata_size/2) edataLength_1 = edata_size/2
+    if(edataLength_2 > edata_size/2) edataLength_2 = edata_size/2
+
+    // Inform the user about the HighCycle data flash
+    if(flashDataSectorCnt_1)
+        printf("HighCycle Data1: %dKB (%d pages)\n", flashDataSectorCnt_1 *6, flashDataSectorCnt_1)
+
+    if(flashDataSectorCnt_2)
+        printf("HighCycle Data2: %dKB (%d pages)\n", flashDataSectorCnt_2 *6, flashDataSectorCnt_2)
+
+    // Pass the formatted memory map, the last pages of a bank are used by HighCycle
+    DeviceAPI().memmap(format( mem_template_G5, ram_size,
+                               flash_size/2 - flashDataSectorCnt_1 * 0x2000,
+                               flashBank2Start, flash_size/2 - flashDataSectorCnt_2 * 0x2000,
+                               edataLength_1,
+                               edataBank2Start, edataLength_2 ))
+
+    // Include flash loader script
+    require("stmicro/flash/c5_g5_h5.script")
+}
+
+
+/////////////////////////////////////////////////////
+//
+//  Returns the HighCycle data flash page count
+//
+function highCycleFlashSec(flashReg)
+{
+    local regVal = intrfApi.read(flashReg)
+    return ( regVal & FLASH_HIGH_EN  ? (regVal & FLASH_HIGH_SEC)+1 : 0)
+}

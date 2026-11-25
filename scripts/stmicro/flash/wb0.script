@@ -1,0 +1,224 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//                   STM32WB0x flash (WB05, WB06, WB07, WB09)
+//
+// The flash controller is command based, the flash is not written directly
+// (ST CMSIS stm32wb09.h, HAL stm32wb0x_hal_flash.c, OpenOCD bluenrg-x.c):
+//  - ADDRESS is the word offset from the flash start (0x10040000)
+//  - page erase 0x11, mass erase 0x22, burst write 0xCC (DATA0..DATA3)
+//  - wait for CMDDONE in IRQRAW, errors CMDERR and ILLCMD
+//  - flags are cleared by writing 1 to IRQRAW
+//  - no lock/unlock
+//
+
+const FLASH_BASE        0x40001000
+const FLASH_MEM_START   0x10040000
+
+// Register offsets of the flash controller
+const FLASH_COMMAND     (0x00)
+const FLASH_IRQRAW      (0x10)
+const FLASH_ADDRESS     (0x18)
+const FLASH_DATA0       (0x40)
+const FLASH_DATA1       (0x44)
+const FLASH_DATA2       (0x48)
+const FLASH_DATA3       (0x4C)
+
+// Flash commands
+const FLASH_CMD_ERASE_PAGES   0x11
+const FLASH_CMD_MASSERASE     0x22
+const FLASH_CMD_BURSTWRITE    0xCC
+
+// FLASH_IRQRAW flags
+const FLASH_IRQ_CMDDONE     (1 << 0)
+const FLASH_IRQ_CMDSTART    (1 << 1)
+const FLASH_IRQ_CMDERR      (1 << 2)
+const FLASH_IRQ_ILLCMD      (1 << 3)
+
+// The flags the ST HAL clears before a command
+const FLASH_IRQ_CLEAR_MASK  0x0F
+const FLASH_IRQ_ERROR_MASK  (FLASH_IRQ_CMDERR | FLASH_IRQ_ILLCMD)
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+function ebFlashStart()
+{
+    try{
+        // Be sure that the core is halted
+        targetApi.reset(SYSTEM_RESET)
+
+        // Wait for halt
+        local time = GetTickCount()
+        do{
+            // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+                throw ERROR_TIMEOUT
+
+            targetApi.poll()
+        } while(targetApi.getState() != TARGET_HALTED )
+
+        return ERROR_OK
+    }
+
+    catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: target initializing! [%s]\n", errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+//   Page erase sequence according the ST HAL
+//
+function ebFlashErase(sector, address)
+{
+    try{
+        flashCommand(address, FLASH_CMD_ERASE_PAGES)
+        flashCheckBusy(1000)
+        return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing address 0x%08X [sec %d] failed! [%s]\n", address, sector, errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Flash write with burst write (4 words) according the ST HAL
+//
+function ebFlashWrite(sector, address, buffer)
+{
+    try{
+        local size = buffer.getSize()
+        local offset = 0
+
+        while(offset < size){
+            AnimateCursor()
+
+            intrfApi.write(FLASH_BASE + FLASH_DATA0, getWord(buffer, offset))
+            intrfApi.write(FLASH_BASE + FLASH_DATA1, getWord(buffer, offset+4))
+            intrfApi.write(FLASH_BASE + FLASH_DATA2, getWord(buffer, offset+8))
+            intrfApi.write(FLASH_BASE + FLASH_DATA3, getWord(buffer, offset+12))
+
+            flashCommand(address + offset, FLASH_CMD_BURSTWRITE)
+            flashCheckBusy(100)
+
+            offset += 16
+        }
+        AnimateDone()
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback, there is no flash lock
+//
+function ebFlashDone()
+{
+    return ERROR_OK
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EBlink
+//
+function ebFlashEraseChip()
+{
+    try{
+        printf("Flash chip erase ")
+
+        targetApi.halt()
+        intrfApi.write(FLASH_BASE + FLASH_IRQRAW, FLASH_IRQ_CLEAR_MASK)
+        intrfApi.write(FLASH_BASE + FLASH_COMMAND, FLASH_CMD_MASSERASE)
+        flashCheckBusy(30000)
+        printf("done\n")
+        return ERROR_OK
+    }
+
+    catch(e){
+        if(catchString(e))
+           return ERROR_NOTIFIED
+        if(e < ERROR_NOTIFIED)
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
+        return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Start a command for an address (clear the flags first, same as the ST HAL)
+//
+function flashCommand(address, command)
+{
+    intrfApi.write(FLASH_BASE + FLASH_IRQRAW, FLASH_IRQ_CLEAR_MASK)
+    intrfApi.write(FLASH_BASE + FLASH_ADDRESS, (address - FLASH_MEM_START) >> 2)
+    intrfApi.write(FLASH_BASE + FLASH_COMMAND, command)
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Wait until CMDDONE and check for errors
+//
+function flashCheckBusy(timeout)
+{
+    local time = GetTickCount()
+    local value
+    do{
+        value = intrfApi.read(FLASH_BASE + FLASH_IRQRAW)
+
+        if(GetTickCount() - time > timeout)
+            throw ERROR_TIMEOUT
+
+    }while( !(value & FLASH_IRQ_CMDDONE) )
+
+    if( value & FLASH_IRQ_ERROR_MASK){
+        intrfApi.write(FLASH_BASE + FLASH_IRQRAW, value & FLASH_IRQ_ERROR_MASK)
+        throw ERROR_FLASH
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Get a word from the buffer, beyond the data it is filled with 0xFF
+//
+function getWord(buffer, offset)
+{
+    local size = buffer.getSize()
+    if(offset + 4 <= size)
+        return buffer.get(offset)
+
+    local value = 0xFFFFFFFF
+    for(local i = 0; i < 4 && offset + i < size; i++)
+        value = (value & ~(0xFF << (i*8))) | (buffer.get(offset + i, 8) << (i*8))
+
+    return value
+}

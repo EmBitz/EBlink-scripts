@@ -51,12 +51,13 @@ const mem_template_H5 = @@"
 const FLASH_HIGH_CNF_1 0x500220f0
 const FLASH_HIGH_CNF_2 0x500221f0
 const FLASH_HIGH_EN    (1<<15)
-const FLASH_HIGH_SEC   0x7
 
 // The start address of flash bank 2
 flashBank2Start <- 0
 // The start sector of HighCycle
 startHcSec <- 0
+// The start address of HighCycle bank 2
+edataBank2Start <- 0x0900C000
 
 /////////////////////////////////////////////////////
 //
@@ -91,9 +92,18 @@ function stm32_device()
             ram_size = 0x44000 // 272KB
             break
 
+        case 0x47C : // CHIPID_STM32H543/H553
+            deviceStr = "H543/553"
+            ram_size = 0x4c000 // 304KB
+            break
         case 0x484 : // CHIPID_STM32H562/H563/H573
             deviceStr = "H562/563/573"
             ram_size = 0xa0000 // 640k
+            break
+
+        case 0x47A : // CHIPID_STM32H5E/H5F
+            deviceStr = "H5E/H5F"
+            ram_size = 0x180000 // 1536KB
             break
 
         default:
@@ -118,19 +128,30 @@ function stm32_device()
       ram_size = (RAM_SIZE & 0xffff) * 1024
     }
 
+    // The H5E/H5F has 16 HighCycle sectors per bank, the others 8
+    local hcSecMax = (deviceId == 0x47A ? 16 : 8)
+    edataBank2Start = 0x09000000 + hcSecMax * 0x1800
+
     // Set the first sector number of highCycle area
-    startHcSec = (flash_size < 1024*1024 ? 24 : 120)
+    // The H543/553 has 64 sectors per bank (6 bit SNB), the H562/563/573 128
+    // The H5E/H5F has up to 256 sectors per bank (8 bit SNB)
+    if(deviceId == 0x47A)
+        startHcSec = flash_size/2/0x2000 - 16
+    else if(deviceId == 0x47C)
+        startHcSec = 56
+    else
+        startHcSec = (flash_size < 1024*1024 ? 24 : 120)
 
     // Calculate start address of flashbank 2
     flashBank2Start = 0x08000000 + flash_size/2
 
     // Check if there are any HighCycle sectors active in one of the two banks
-    local flashDataSectorCnt_1 = highCycleFlashSec(FLASH_HIGH_CNF_1)
-    local flashDataSectorCnt_2 = highCycleFlashSec(FLASH_HIGH_CNF_2)
+    local flashDataSectorCnt_1 = highCycleFlashSec(FLASH_HIGH_CNF_1, hcSecMax)
+    local flashDataSectorCnt_2 = highCycleFlashSec(FLASH_HIGH_CNF_2, hcSecMax)
 
      // Calculate the bank sizes according HighCycle options (H503 both are zero)
-    local bankSize_1 = getFlashBankSize(flash_size, flashDataSectorCnt_1)
-    local bankSize_2 = getFlashBankSize(flash_size, flashDataSectorCnt_2)
+    local bankSize_1 = getFlashBankSize(flash_size, flashDataSectorCnt_1, hcSecMax)
+    local bankSize_2 = getFlashBankSize(flash_size, flashDataSectorCnt_2, hcSecMax)
 
     // Inform the user about the HighCycle data flash
     if(flashDataSectorCnt_1)
@@ -144,11 +165,11 @@ function stm32_device()
                                bankSize_1,
                                flashBank2Start, bankSize_2,
                                //               Start Addr                             total length                    Start sector count
-                               (0x09000000 + (8-flashDataSectorCnt_1)*0x1800), ( flashDataSectorCnt_1 * 0x1800), 8 - flashDataSectorCnt_1,
-                               (0x0900C000 + (8-flashDataSectorCnt_2)*0x1800), ( flashDataSectorCnt_2 * 0x1800), 8 - flashDataSectorCnt_2 ))
+                               (0x09000000 + (hcSecMax-flashDataSectorCnt_1)*0x1800), ( flashDataSectorCnt_1 * 0x1800), hcSecMax - flashDataSectorCnt_1,
+                               (edataBank2Start + (hcSecMax-flashDataSectorCnt_2)*0x1800), ( flashDataSectorCnt_2 * 0x1800), hcSecMax - flashDataSectorCnt_2 ))
 
     // Include flash loader script
-    require("stmicro/flash/h5.script")
+    require("stmicro/flash/c5_g5_h5.script")
 }
 
 
@@ -156,19 +177,21 @@ function stm32_device()
 //
 //  Returns the HighCycle data flash sector count
 //
-function highCycleFlashSec(flashReg)
+function highCycleFlashSec(flashReg, hcSecMax)
 {
     local regVal = intrfApi.read(flashReg)
-    return ( regVal & FLASH_HIGH_EN  ? (regVal & FLASH_HIGH_SEC)+1 : 0)
+    return ( regVal & FLASH_HIGH_EN  ? (regVal & (hcSecMax-1))+1 : 0)
 }
 
 /////////////////////////////////////////////////////
 //
 //  Calculates the flashbank size
 //
-function getFlashBankSize(flashSize, dataSectors)
+function getFlashBankSize(flashSize, dataSectors, hcSecMax)
 {
     if(dataSectors == 0) return flashSize/2
+    // H5E/H5F: the last dataSectors sectors are reserved (ST HAL)
+    if(hcSecMax == 16)   return flashSize/2 - (dataSectors * 0x2000)
     if(dataSectors <5 )  return flashSize/2 - (4*  0x2000)
     return flashSize/2 - (8*  0x2000)
 }

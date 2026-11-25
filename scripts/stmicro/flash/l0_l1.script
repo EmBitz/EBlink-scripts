@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////////
 //
-//                   stm32L1x stm32L0x
+//                   stm32L0x stm32L1x
 //
 
 // Needed global script input: FLASH_BASE

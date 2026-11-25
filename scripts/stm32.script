@@ -12,12 +12,18 @@
 //     Fix chip_id for F4 rev A errata , Read CPU ID, as CoreID is the same for F2/F4 - 0x411
 //     so we have 0x411 also as a cortex-M4 in the list (see patch).
 //
+//     If the probe can read the MEM-AP BASE (readDap), the device must be a
+//     STmicro device according the JEP106 designer code of the ROM table.
+//     Families without DBGMCU IDCODE are then found by the ROM table part
+//     number (STMICRO_ROM). Otherwise (e.g. old STlink firmware) a warning
+//     is given and only the DBGMCU IDCODE is used (STMICRO).
+//
 
 STMICRO <- {
 	"M0+": { regs = [0x40015800], fam = {
 		l0 = [0x417, 0x425, 0x447, 0x457],
 		gx = [0x466, 0x456, 0x460, 0x467],
-		c0 = [0x443, 0x453],
+		c0 = [0x443, 0x453, 0x44C, 0x493, 0x44D],
 		u0 = [0x459, 0x489] } },
 
 	"M0":  { regs = [0x40015800], fam = {
@@ -33,21 +39,35 @@ STMICRO <- {
 		f3 = [0x422, 0x432, 0x438, 0x439, 0x446],
 		l4 = [0x415, 0x435, 0x461, 0x462, 0x464, 0x470, 0x471],
 		gx = [0x468, 0x469, 0x479],
-		wx = [0x495, 0x496, 0x497] } },
+		wx = [0x494, 0x495, 0x496, 0x497] } },
 
 	"M7":  { regs = [0x5C001000, 0xE0042000], fam = {
 		f7 = [0x449, 0x451, 0x452],
-		h7 = [0x450, 0x480, 0x483] } },
+		h7 = [0x450, 0x480, 0x483],
+		h7rs = [0x485] } },
 
-	"M33": { regs = [0xE0044000, 0x44024000], fam = {
-		u5 = [0x455, 0x476, 0x481, 0x482],
+	"M33": { regs = [0xE0044000, 0x44024000, 0x44026000 /* G5 */], fam = {
+		u3u5 = [0x455, 0x476, 0x481, 0x482, 0x42A, 0x42B, 0x42C, 0x454],
+		wba = [0x492, 0x4B0, 0x4B2],
 		l5 = [0x472],
-		h5 = [0x474, 0x478, 0x484] } }
+		h5 = [0x474, 0x478, 0x47C, 0x484, 0x47A],
+		g5 = [0x44A, 0x44B],
+		c5 = [0x44E, 0x44F, 0x45A] } }
 }
+
+// Families identified by the ROM table part number (no DBGMCU IDCODE)
+STMICRO_ROM <- {
+	wb0 = [0x01E]
+}
+
+// JEP106 designer codes of the ROM table
+const JEP106_ST             0x020
+const JEP106_ERRATA_STM32WX 0x420  // Not JEP106 compliant ST code (see Black Magic Probe adi.c)
 
 intrfApi <- InterfAPI()  // Global so that all included script files also have access
 targetApi<- TargetAPI()  // Global interface to the target class
 deviceId <- 0            // Global deviceId
+resetVector <- 0x08000000 // Vector table after reset, the device script can change it
 
 // To decalare user errors below -1000
 //const ERROR_MY_ERROR1 -1001
@@ -92,15 +112,37 @@ function findDevice()
 		throw ERROR_NOTIFIED
 	}
 
+	deviceId = 0
+	local rom = readRomTableId()
+
+	// If the probe can't read the ROM table, only the DBGMCU IDCODE is used
+	if (rom != null) {
+		// It must be a STmicro device
+		if (rom.designer != JEP106_ST)
+			throw ERROR_NOT_FOUND
+
+		// Families identified by the ROM table part number
+		foreach (family, ids in STMICRO_ROM) {
+			if (ids.find(rom.part) != null) {
+				deviceId = rom.part
+				noticef("STmicro device : 0x%X\n", deviceId)
+				require("stmicro/stm32" + family + ".script")
+				stm32_device()
+				return
+			}
+		}
+	}
+
 	// Check the architecture
 	local cpu = targetApi.getCpuName()
-	if (!(cpu in STMICRO))
+	if (!(cpu in STMICRO)) {
+		if (rom == null) noVendorCheckWarning()
 		throw ERROR_NOT_FOUND
+	}
 
 	local arch = STMICRO[cpu]
 
 	// Scan the device ID registers of this architecture
-	deviceId = 0
 	foreach (addr in arch.regs) {
 		try { deviceId = intrfApi.read(addr) & 0xfff; if (deviceId) break }
 		catch (e) {}
@@ -120,7 +162,74 @@ function findDevice()
 		}
 	}
 
+	if (rom == null) noVendorCheckWarning()
 	throw ERROR_NOT_FOUND
+}
+
+/////////////////////////////////////////////////////
+//
+//  Nothing found and the probe can't read the ROM table
+//
+function noVendorCheckWarning()
+{
+	userf("\nWARNING: The probe firmware can't read the debug port registers (readDap).\n" +
+	      "         The STmicro vendor check is skipped and devices without a DBGMCU\n" +
+	      "         IDCODE (e.g. STM32WB0) can't be detected.\n" +
+	      "         Please update the probe firmware (STlink/V2 J24 or higher).\n")
+}
+
+/////////////////////////////////////////////////////
+//
+//  Read the JEP106 designer code and part number from the
+//  ROM table of the current AP (fields as Black Magic Probe adi.c)
+//
+//  Returns null if the probe can't read the MEM-AP BASE (readDap),
+//  designer is -1 if there is no ROM table or no JEP106 code
+//
+function readRomTableId()
+{
+	local romBase
+	try {
+		romBase = intrfApi.readDap(intrfApi.getDapAp(), 0xF8) & 0xFFFFFFFF   // MEM-AP BASE
+	}
+	catch (e) {
+		// Squirrel errors to the caller, an interface error means no readDap
+		if (typeof e == "string")
+			throw e
+		return null
+	}
+
+	local noRom = { designer = -1, part = 0 }
+	try {
+		if (romBase == 0xFFFFFFFF || !(romBase & 1))   // Not present
+			return noRom
+		romBase = romBase & 0xFFFFF000
+
+		// The ID registers have their data in the lowest byte
+		local pidr0 = intrfApi.read(romBase + 0xFE0) & 0xFF
+		local pidr1 = intrfApi.read(romBase + 0xFE4) & 0xFF
+		local pidr2 = intrfApi.read(romBase + 0xFE8) & 0xFF
+		local pidr4 = intrfApi.read(romBase + 0xFD0) & 0xFF
+
+		// No JEP106 code (legacy ASCII)
+		if (!(pidr2 & 0x08))
+			return noRom
+
+		local designer = ((pidr4 & 0x0F) << 8) | ((pidr2 & 0x07) << 4) | (pidr1 >> 4)
+		local part     = ((pidr1 & 0x0F) << 8) | pidr0
+
+		if (designer == JEP106_ERRATA_STM32WX)
+			designer = JEP106_ST
+
+		debugf("ROM table : designer 0x%03X part 0x%03X\n", designer, part)
+		return { designer = designer, part = part }
+	}
+	catch (e) {
+		// Squirrel errors to the caller, an interface error means no ROM table
+		if (typeof e == "string")
+			throw e
+		return noRom
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -148,10 +257,10 @@ function  ebResetPost(resetType)
 		if( resetType != USER_RESET ){
 
 			// Set the Stack pointer according the Vector table entry
-			targetApi.writeReg("SP", intrfApi.read(0x08000000))
+			targetApi.writeReg("SP", intrfApi.read(resetVector))
 
 			// Set the Program pointer according the Vector table entry
-			targetApi.writeReg("PC", intrfApi.read(0x08000004))
+			targetApi.writeReg("PC", intrfApi.read(resetVector + 4))
 		}
 	}
 	catch(e) {

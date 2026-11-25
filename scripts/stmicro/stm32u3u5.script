@@ -1,6 +1,9 @@
 /////////////////////////////////////////////////////
 //
-//                   STM32U5x
+//                   STM32U3x / STM32U5x
+//
+//  The U3 flash controller is equal to the U5 (same registers and bits),
+//  only the program word (64 bit) and the page size (4KB) are different.
 //
 
 /////////////////////////////////////////////////////
@@ -41,11 +44,11 @@ const DBANK      (1<<21) // Dualbank bit
 // The U5 is always programmed as dualbank
 const hasDualBank true
 
-// The U5 has a 128 width program word
-const pgmBitsWidth 128
+// The U5 has a 128 width program word, the U3 64 (set per device below)
+pgmBitsWidth <- 128
 
-// Used for restoreDualBankMode function
-const defaultOptrValue  0x1FEFF8AA
+// Used for restoreDualBankMode function (U3: not known, not supported)
+defaultOptrValue <- 0x1FEFF8AA
 
 /////////////////////////////////////////////////////
 //
@@ -96,6 +99,38 @@ function stm32_device()
             page_size = 0x2000
             break
 
+        case 0x42C : // STM32U335/345
+            deviceStr = "U335/345"
+            ram_size = 0x14000 // 80KB
+            page_size = 0x1000
+            pgmBitsWidth = 64
+            defaultOptrValue = 0
+            break
+
+        case 0x42B : // STM32U356/366
+            deviceStr = "U356/366"
+            ram_size = 0x30000 // 192KB
+            page_size = 0x1000
+            pgmBitsWidth = 64
+            defaultOptrValue = 0
+            break
+
+        case 0x454 : // STM32U375/385
+            deviceStr = "U375/385"
+            ram_size = 0x40000 // 256KB
+            page_size = 0x1000
+            pgmBitsWidth = 64
+            defaultOptrValue = 0
+            break
+
+        case 0x42A : // STM32U3B5/3C5
+            deviceStr = "U3B5/3C5"
+            ram_size = 0xA0000 // 640KB
+            page_size = 0x1000
+            pgmBitsWidth = 64
+            defaultOptrValue = 0
+            break
+
         default:
             throw ERROR_NOT_FOUND
     }
@@ -121,7 +156,7 @@ function stm32_device()
     DeviceAPI().memmap(format( mem_template_U5, ram_size, flash_size, page_size))
 
     // Include flash loader script
-    require("stmicro/flash/l5_u5.script")
+    require("stmicro/flash/l5_u3_u5_wba.script")
 }
 
 ////////////////////////////////////////

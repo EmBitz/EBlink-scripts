@@ -260,5 +260,5 @@ function stm32_device()
     else
         DeviceAPI().memmap( format(memMap, ram_size, addMem))
 
-    require("stmicro/flash/f7_f4_f2.script")
+    require("stmicro/flash/f2_f4_f7.script")
 }

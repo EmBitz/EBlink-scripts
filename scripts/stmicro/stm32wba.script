@@ -1,0 +1,146 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32WBAx
+//
+//  The WBA flash controller is equal to the U5 (same registers and bits).
+//  The flash/l5_u3_u5_wba.script is used. Differences per family (ST HAL):
+//    WBA2x : 64 bit program word,  4KB pages, single bank
+//    WBA5x : 128 bit program word, 8KB pages, single bank
+//    WBA6x : 128 bit program word, 8KB pages, dual bank
+//
+
+/////////////////////////////////////////////////////
+//
+//   Memory map template of this device(s)
+//   Avoid unnecessary spaces.
+//
+
+//*************************************************************
+//*****             Memory map of the WBA                  ****
+//*************************************************************
+const mem_template_WBA = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <memory type=\"rom\" start=\"0x00000000\" length=\"0x100000\"/>
+  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+   <property name=\"blocksize\">0x%x</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+  <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+  <memory type=\"rom\" start=\"0x0bf80000\" length=\"0x21000\"/>
+ </memory-map>"
+
+
+// The parameters for the flash script
+const FLASH_BASE 0x40022000
+const FLASH_OPTR    0x40
+
+// The FLASH_OPTR bit flags
+const DBANK      (1<<21) // Dualbank bit (WBA6x)
+
+// Set per device below
+hasDualBank  <- false
+pgmBitsWidth <- 128
+noMer2       <- true  // Mass erase: only the WBA6x has a NSMER2 bit
+
+// No factory option value known, restoreDualBankMode is not supported
+const defaultOptrValue  0
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local flash_size
+    local page_size
+    local ram_size
+    local fsize_addr
+
+    // Set the memory map according the device ID
+      local deviceStr
+      switch(deviceId) {
+
+        case 0x4B2 : // STM32WBA2x
+            deviceStr = "WBA2x"
+            ram_size = 0x18000 // 96KB
+            page_size = 0x1000
+            pgmBitsWidth = 64
+            hasDualBank = false
+            fsize_addr = 0x0bf8d7a0
+
+            // Enable debug clocks: DBGMCU_SCR = DBG_STANDBY | DBG_STOP | DBG_SLEEP
+            intrfApi.write(0xE0044004, 7)
+
+            // Stop watchdog counter during halt: DBGMCU_APB1LFZR = DBG_IWDG_STOP
+            intrfApi.write(0xE0044008, 0x00001000)
+            break
+
+        case 0x492 : // STM32WBA5x
+            deviceStr = "WBA5x"
+            ram_size = 0x20000 // 128KB
+            page_size = 0x2000
+            pgmBitsWidth = 128
+            hasDualBank = false
+            fsize_addr = 0x0bf907a0
+
+            // Enable debug clocks: DBGMCU_SCR = DBG_STANDBY | DBG_STOP
+            intrfApi.write(0xE0044004, 6)
+
+            // Stop watchdog counters during halt: DBGMCU_APB1LFZR = DBG_IWDG_STOP | DBG_WWDG_STOP
+            intrfApi.write(0xE0044008, 0x00001800)
+            break
+
+        case 0x4B0 : // STM32WBA6x
+            deviceStr = "WBA6x"
+            ram_size = 0x80000 // 512KB
+            page_size = 0x2000
+            pgmBitsWidth = 128
+            hasDualBank = true
+            noMer2 = false
+            fsize_addr = 0x0bfa07a0
+
+            // Enable debug clocks: DBGMCU_SCR = DBG_STANDBY | DBG_STOP
+            intrfApi.write(0xE0044004, 6)
+
+            // Stop watchdog counters during halt: DBGMCU_APB1LFZR = DBG_IWDG_STOP | DBG_WWDG_STOP
+            intrfApi.write(0xE0044008, 0x00001800)
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Get the flash size in KB
+    flash_size = (intrfApi.read(fsize_addr) &0xFFFF)*1024
+
+    // Inform user of the device found
+    printf("STmicro family : STM32%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : %dKB %s\nConfigured RAM : %dKB\n", flash_size/1024, hasDualBank ? "(Dual bank)" : "(Single bank)", ram_size/1024)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+    }
+
+    DeviceAPI().memmap(format( mem_template_WBA, ram_size, flash_size, page_size))
+
+    // Include flash loader script
+    require("stmicro/flash/l5_u3_u5_wba.script")
+}

@@ -1,0 +1,354 @@
+/////////////////////////////////////////////////////////////////////////////////
+//
+//                   STM32C5 / STM32G5 / STM32H5
+//
+//  ToDo:  - option programming
+//
+// Used parameters from parent script(s)
+//
+// - flashBank2Start
+// - startHcSec
+// - edataBank2Start   start address of the HighCycle data of bank 2
+//
+// Optional parameters
+//
+// - edataReverse      HighCycle sector 0 is the last sector of the bank (G5)
+//                     sector = startHcSec - sector
+// - extAreaStart      Area erased with EDATASEL, sector is the page in the bank (C5)
+// - extBank2Start     Start of bank 2 of this area
+//
+
+const FLASH_BASE 0x40022000
+
+// Register offsets of the flash controller
+const FLASH_ACCESS_CTRL (0x00)
+const FLASH_KEYR        (0x04)
+const FLASH_OPTION_KEY  (0x0c)
+const FLASH_NSSR        (0x20)
+const FLASH_NSCR        (0x28)
+const FLASH_NSCCR       (0x30)
+
+// FLASH_NSCR control bit flags
+const FLASH_NSCR_LOCK         (1 << 0)
+const FLASH_NSCR_PGM          (1 << 1)
+const FLASH_NSCR_SER          (1 << 2)
+const FLASH_NSCR_BER          (1 << 3)
+const FLASH_NSCR_FW           (1 << 4)
+const FLASH_NSCR_START        (1 << 5)
+const FLASH_NSCR_MASS_MER     (1 << 15)
+const FLASH_NSCR_EOPIE        (1 << 16)
+const FLASH_NSCR_WRPERRIE     (1 << 17)
+const FLASH_NSCR_PGSERRIE     (1 << 18)
+const FLASH_NSCR_STRBERRIE    (1 << 19)
+const FLASH_NSCR_INCERRIE     (1 << 20)
+const FLASH_NSCR_OBKERRIE     (1 << 21)
+const FLASH_NSCR_OBKWERRIE    (1 << 22)
+const FLASH_NSCR_OPTCHGERRIE  (1 << 23)
+const FLASH_NSCR_EDATASEL     (1 << 29)   // C5 only
+const FLASH_NSCR_BKSEL        (1 << 31)
+const FLASH_NSCR_PAGE_SHIFT   (6)
+
+// Flash NSSR flags
+const FLASH_NSSR_BSY        (1 << 0)   // Operation in progress
+const FLASH_NSSR_WBNE       (1 << 1)   // Write buffer not empty
+const FLASH_NSSR_DBNE       (1 << 3)   // Data buffer not empty
+const FLASH_NSSR_EOP        (1 << 16)
+const FLASH_NSSR_WRPERR     (1 << 17)
+const FLASH_NSSR_PGSERR     (1 << 18)
+const FLASH_NSSR_STRBERR    (1 << 19)
+const FLASH_NSSR_INCERR     (1 << 20)
+const FLASH_NSSR_OBKERR     (1 << 21)
+const FLASH_NSSR_OBKWERR    (1 << 22)
+const FLASH_NSSR_OPTCHGERR  (1 << 23)
+
+// FLASH_NSCCR  flags
+const FLASH_NSCCR_CLREOP        (1 << 16)
+const FLASH_NSCCR_CLRWRPERR     (1 << 17)
+const FLASH_NSCCR_CLRPGSERR     (1 << 18)
+const FLASH_NSCCR_CLRSTRBERR    (1 << 19)
+const FLASH_NSCCR_CLRINCERR     (1 << 20)
+const FLASH_NSCCR_CLROBKERR     (1 << 21)
+const FLASH_NSCCR_CLROBKWERR    (1 << 22)
+const FLASH_NSCCR_CLROPTCHGERR  (1 << 23)
+
+
+// All the possible errors mask (bits 17..23, WRPERR included)
+const FLASH_NSSR_ERROR_MASK 0xFE0000
+
+// Wait until all of these are cleared (same as the ST HAL)
+FLASH_NSSR_BUSY_MASK <- (FLASH_NSSR_BSY | FLASH_NSSR_WBNE | FLASH_NSSR_DBNE)
+
+const FLASH_KEYR1  0x45670123
+const FLASH_KEYR2  0xCDEF89AB
+
+maxFlashSpeed   <- 24000 // Can be changed from CLI
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+//   Unlock the flash
+//
+function ebFlashStart()
+{
+    try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
+        // Be sure that the core is halted
+        targetApi.reset(SYSTEM_RESET)
+
+        // Wait for halt
+        local time = GetTickCount()
+        do{
+            // Timeout of 1sec
+            if(GetTickCount() - time > 1000)
+                throw ERROR_TIMEOUT
+
+            targetApi.poll()
+        } while(targetApi.getState() != TARGET_HALTED )
+
+        flashUnlock()
+        return ERROR_OK
+    }
+
+    // Catch all the lock errors
+    catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("Error: target initializing! [%s]\n", errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+//   Erase sequence according ST user manual
+//   Addr -  >=edataBank2Start : HighCycle #2 secNumber = startHcSec + sector
+//   Addr -  >=0x09000000      : HighCycle #1 secNumber = startHcSec + sector
+//   Addr -  >=flashBank2Start : Flash bank 2 secNumber = sector
+//   Addr -  >=0x08000000      : Flash bank 1 secNumber = sector
+//
+//   G5 (edataReverse)  : HighCycle secNumber = startHcSec - sector
+//   C5 (extAreaStart)  : >=extAreaStart secNumber = sector with EDATASEL,
+//                        bank 2 from extBank2Start
+//
+function ebFlashErase(sector, address)
+{
+    try{
+        // Clear error flags of a previous operation
+        flashClearErrors()
+
+        local eraseFlags = FLASH_NSCR_SER | FLASH_NSCR_START
+        local bank2
+
+        // C5 extended user / data area, page number in the bank with EDATASEL
+        if( isScriptObject("extAreaStart") && address >= extAreaStart ){
+            eraseFlags = eraseFlags | FLASH_NSCR_EDATASEL
+            bank2 = (address >= extBank2Start)
+        }
+        // HighCycle data, calculate the right sector number
+        else if(address >= 0x09000000){
+            if( isScriptObject("edataReverse") && edataReverse )
+                sector = startHcSec - sector
+            else
+                sector += startHcSec
+            bank2 = (address >= edataBank2Start)
+        }
+        else
+            bank2 = (address >= flashBank2Start)
+
+        eraseFlags = eraseFlags | (sector << FLASH_NSCR_PAGE_SHIFT )
+
+        // Is this flash bank 1 or 2 ?
+        if( bank2 )
+            eraseFlags  = eraseFlags | FLASH_NSCR_BKSEL
+
+        intrfApi.write(FLASH_BASE + FLASH_NSCR, eraseFlags )
+
+        flashCheckBusy(10000)
+
+        return ERROR_OK
+    }
+
+    // Catch all the sector erase errors
+    catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: erasing address 0x%08X [sec %d] failed! [%s]\n", address, sector, errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// Flash write according ST user manual
+//
+function ebFlashWrite(sector, address, buffer)
+{
+    try{
+        // Handle highCycle must be flashed with multiplies of 2
+        // Normal memory must be flashed with multiplies of 16
+        buffer.trim(address >= 0x09000000 ? 2 : 16 )
+
+        // Clear error flags of a previous operation
+        flashClearErrors()
+
+        // Set the PG bit of the FLASH control register (FLASH_NSCR)
+        intrfApi.write(FLASH_BASE + FLASH_NSCR,  FLASH_NSCR_PGM )
+
+        // Adjust the probe speed to the maximum for direct write
+        local probeSpeed = intrfApi.getSpeed()
+        intrfApi.setSpeed(maxFlashSpeed)
+
+        // Program the flash with as the widest width possible
+        intrfApi.writeBuf(buffer, address)
+
+        // Restore probe speed
+        intrfApi.setSpeed(probeSpeed)
+
+        flashCheckBusy(2000)
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
+       return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+// EBlink callback
+//
+function ebFlashDone()
+{
+    try{
+        intrfApi.write( FLASH_BASE + FLASH_NSCR,
+            intrfApi.read(FLASH_BASE + FLASH_NSCR) | FLASH_NSCR_LOCK )
+        return ERROR_OK
+    }
+    catch(e) {
+       if(catchString(e))
+            return ERROR_NOTIFIED
+       if(e < ERROR_NOTIFIED)
+           errorf("ERROR: locking device\n")
+        return ERROR_NOTIFIED
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//  Called by EBlink if chip erase is needed (e.g. command line flashing)
+//
+//   Erase the whole chip
+//   - If this function is not defined, sector by sector erase is used by EBlink.
+//   - This is an isolated function, ebFlashStart and ebFlashDone are not called by EBlink
+//
+function ebFlashEraseChip()
+{
+    try{
+        printf("Flash chip erase ")
+
+        targetApi.halt()
+        flashUnlock()
+        flashClearErrors()
+        intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_MASS_MER |  FLASH_NSCR_START )
+
+        // Now really waits for BSY (the old back-off Sleep(500) was needed
+        // because the busy wait checked the wrong bit)
+        flashCheckBusy(30000)
+        ebFlashDone()
+        printf("done\n")
+        return ERROR_OK
+    }
+
+    // Catch all the sector write errors
+    catch(e){
+        if(catchString(e))
+           return ERROR_NOTIFIED
+        if(e < ERROR_NOTIFIED)
+           errorf("ERROR: mass erase failed! [%s]\n", errorToStr(e) )
+        return ERROR_NOTIFIED
+    }
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Wait until the operation is ready (BSY, WBNE and DBNE cleared)
+//   and check for errors
+//
+function flashCheckBusy(timeout)
+{
+    local time = GetTickCount()
+    local value
+    do{
+        AnimateCursor()
+        value = intrfApi.read(FLASH_BASE + FLASH_NSSR)
+
+        if(GetTickCount() - time > timeout)
+            throw ERROR_TIMEOUT
+
+    }while(value & FLASH_NSSR_BUSY_MASK)
+
+    AnimateDone()
+
+    // Clear errors and EOP, also when there is an error
+    // (otherwise one error blocks every next erase/write)
+    intrfApi.write( FLASH_BASE + FLASH_NSCCR,
+                         value & (FLASH_NSSR_ERROR_MASK | FLASH_NSSR_EOP))
+
+    if( value & FLASH_NSSR_ERROR_MASK)
+        throw ERROR_FLASH
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Clear the error flags of a previous operation
+//
+function flashClearErrors()
+{
+    local value = intrfApi.read(FLASH_BASE + FLASH_NSSR)
+    if( value & (FLASH_NSSR_ERROR_MASK | FLASH_NSSR_EOP) )
+        intrfApi.write( FLASH_BASE + FLASH_NSCCR,
+                             value & (FLASH_NSSR_ERROR_MASK | FLASH_NSSR_EOP))
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Unlock the flash
+//
+function flashUnlock()
+{
+    // Already unlocked (e.g. by the application before ebFlashEraseChip)?
+    // Writing the keys again is a wrong sequence and can lock NSCR until reset.
+    if( !(intrfApi.read(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_LOCK) )
+        return
+
+    // Unlock Flash
+    intrfApi.write(FLASH_BASE + FLASH_KEYR, FLASH_KEYR1 )
+    intrfApi.write(FLASH_BASE + FLASH_KEYR, FLASH_KEYR2 )
+
+    if(intrfApi.read(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_LOCK )
+       throw ERROR_UNLOCK
+}
+

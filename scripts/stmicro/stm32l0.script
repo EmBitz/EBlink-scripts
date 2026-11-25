@@ -107,6 +107,6 @@ function stm32_device()
     DeviceAPI().setFlashDontTrim(true)
 
     // Flash loader script
-    require("stmicro/flash/l1_l0.script")
+    require("stmicro/flash/l0_l1.script")
 }
 

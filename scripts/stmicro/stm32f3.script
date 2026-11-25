@@ -7,9 +7,9 @@
 F3TBL <- { // Supported F3 devices table
 // DevID   RAM size   Name
 [0x422] = [ 0x0A000, "0x"],
-[0x432] = [ 0x08000, "7x"],
+[0x432] = [ 0x0A000, "7x"],
 [0x438] = [ 0x03000, "03x6/8, STM32F328"],
-[0x439] = [ 0x04000, "02x/8"],
+[0x439] = [ 0x0A000, "02x/8"],
 [0x446] = [ 0x10000, "03xD/E, STM32F398xE"],
 }
 
@@ -91,5 +91,5 @@ function stm32_device()
     DeviceAPI().memmap( format( mem_template, ram_size, flash_size))
 
     // Include flash loader script
-    require("stmicro/flash/f3_f1_f0.script")
+    require("stmicro/flash/f0_f1_f3.script")
 }

@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////////
 //
-//                   STM32L5/U5 (only non-secure memory)
+//                   STM32L5/U3/U5/WBA (only non-secure memory)
 //
 //  ToDo:  - option programming
 //         - secure memory programming
@@ -13,6 +13,10 @@
 // const FLASH_OPTR  : Flash option register offset
 // hasDualBank       : True if dual bank otherwise false
 // defaultOptrValue  : The default factory flash option value (used for option reset)
+//
+// Optional
+//
+// noMer2            : True if there is no NSMER2 bit (single bank only WBA2x/WBA5x)
 
 // Register offsets of the flash controller
 const FLASH_ACR     0x00
@@ -330,7 +334,9 @@ function ebFlashEraseChip()
 
         // 3. Set the NSMER1 bit and NSMER2 bits in the FLASH_NSCR register
         // 4. Set the NSSTRT bit in the FLACH_NSCR register.
-        intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSMER1 | FLASH_NSCR_NSMER2  | FLASH_NSCR_NSSTRT )
+        //    Single bank only devices (e.g. WBA2x/WBA5x) have no NSMER2 bit, they set noMer2
+        local mer2 = ( isScriptObject("noMer2") && noMer2 ) ? 0 : FLASH_NSCR_NSMER2
+        intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_NSMER1 | mer2  | FLASH_NSCR_NSSTRT )
 
         // 5. Wait for the NSBSY bit to be cleared in the FLASH_NSSR.
         flashCheckBusy(10000)

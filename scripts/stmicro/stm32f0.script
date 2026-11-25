@@ -113,5 +113,5 @@ function stm32_device()
     DeviceAPI().memmap( format( mem_template, flash_size, ram_size, flash_size, page_size))
 
     // Flash loader script
-    require("stmicro/flash/f3_f1_f0.script")
+    require("stmicro/flash/f0_f1_f3.script")
 }

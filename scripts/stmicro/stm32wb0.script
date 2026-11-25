@@ -1,0 +1,102 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32WB0x
+//
+//  The WB0 is found by the ST JEP106 code (0x041) in the JTAG_ID register
+//  (SYSCFG 0x40000004). The full JTAG_ID is checked here (same as OpenOCD
+//  bluenrg-x.c), an unknown value is not a WB0.
+//
+
+//*************************************************************
+//*****          Memory map of the WB0                     ****
+//*************************************************************
+const mem_template_WB0 = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <!-- System memory -->
+  <memory type=\"rom\" start=\"0x10000000\" length=\"0x1800\"/>
+
+  <!-- OTP -->
+  <memory type=\"rom\" start=\"0x10001800\" length=\"0x400\"/>
+
+  <!-- SRAM -->
+  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+
+  <!-- Flash -->
+  <memory type=\"flash\" start=\"0x10040000\" length=\"0x%x\">
+   <property name=\"blocksize\">0x800</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+  <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+</memory-map>"
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local ram_size
+    local size_mask
+
+    // Set the memory map according the JTAG_ID
+      local deviceStr
+      switch(intrfApi.read(0x40000004)) {
+
+        case 0x02028041 : // STM32WB05
+            deviceStr = "WB05"
+            ram_size = 0x6000 // 24KB
+            size_mask = 0xFFFF
+            break
+
+        case 0x0201E041 : // STM32WB06/WB07
+            deviceStr = "WB06/07"
+            ram_size = 0x10000 // 64KB (WB06 32KB)
+            size_mask = 0xFFFF
+            break
+
+        case 0x02032041 : // STM32WB09
+            deviceStr = "WB09"
+            ram_size = 0x10000 // 64KB
+            size_mask = 0x1FFFF
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Get the flash size: FLASH_SIZE register is the number of words - 1
+    local flash_size = ((intrfApi.read(0x40001014) & size_mask) + 1) * 4
+
+    // Inform user of the device found
+    printf("STmicro family : STM32%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+    }
+
+    // The vector table is at the start of the flash
+    resetVector = 0x10040000
+
+    // Pass the formatted memory map.
+    DeviceAPI().memmap(format( mem_template_WB0, ram_size, flash_size ))
+
+    // Include flash loader script
+    require("stmicro/flash/wb0.script")
+}

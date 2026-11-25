@@ -1,10 +1,26 @@
 /////////////////////////////////////////////////////////////////////////////////
 //
-//          STM32F3 / F1 and F0 (Half word flash loader)
+//          STM32F0 / F1 and F3  -  ALTERNATIVE with RAM loader fallback
 //
-//  Remark: We only support probe (STlink) versions with 16bit memory support !!!
-//          If needed, update probe firmware.
+//  *****************************************************************************
+//  *                                                                           *
+//  *  WARNING: THIS SCRIPT IS AN EXAMPLE / WORKAROUND, NOT THE DEFAULT SCRIPT  *
+//  *                                                                           *
+//  *  It works, but the right solution is to UPDATE THE PROBE FIRMWARE.        *
+//  *  Only old ST-Link/V2 firmware doesn't support 16bit memory access.        *
+//  *  Current ST-Link, J-Link and CMSIS-DAP firmware all support it, and then  *
+//  *  the normal f0_f1_f3.script is used and this fallback never runs.        *
+//  *                                                                           *
+//  *  The fallback uploads a small flash loader + one sector to target RAM:    *
+//  *   - loader at 0x20000000, sector data from 0x20000030                     *
+//  *   - needs (page size + 48) bytes of RAM, e.g. 2KB pages -> 2.1KB RAM      *
+//  *   - the RAM content is overwritten                                        *
+//  *                                                                           *
+//  *****************************************************************************
 //
+//  Same as f0_f1_f3.script, but if the probe doesn't support direct 16bit
+//  memory access (INTERFACE_NOT_SUPPORTED) the sector is programmed by the
+//  external RAM flash loader below.
 //
 
 // TODO: - Dual bank F103_XL
@@ -37,6 +53,25 @@ FLASH_SR_ERROR <- (FLASH_SR_PROGERR | FLASH_SR_WRPERR)
 
 // Status flags which are cleared by writing 1
 FLASH_SR_CLEAR <- (FLASH_SR_ERROR | FLASH_SR_EOP)
+
+/////////////////////////////////////////////////////////
+// Half word external flash loader (Thumb), parameters :
+//  r0 = scratch area (source data in RAM)
+//  r1 = start program address (flash)
+//  r2 = Length in half words
+//
+//  Skips erased half words (0xFFFF), waits for BSY after every half word,
+//  stops on PGERR. Ends with BKPT, r2 == 0 if all half words are written.
+//
+const extFlashLoader = "\
+\x01\x25\x04\x26\x08\x4C\x09\x4F\x03\x88\xBB\x42\x05\xD0\x0B\x80\
+\xE3\x68\x2B\x42\xFC\xD1\x33\x42\x04\xD1\x02\x30\x02\x31\x01\x3A\
+\x00\x2A\xF1\xD1\x00\xBE\xC0\x46\x00\x20\x02\x40\xFF\xFF\x00\x00"
+
+const EXT_LOADER_SIZE  48 //bytes
+
+const LOADER_ADDR      0x20000000
+const SCRATCH_ADDR     0x20000030  // The area for program upload
 
 maxFlashSpeed   <- 10000  // 10MHz is max speed for direct programming (we think)
 
@@ -73,6 +108,10 @@ function ebFlashStart()
 
         // Unlock flash
         flashUnlock()
+
+        // Load the flash loader in advance in target RAM in case we need it
+        intrfApi.loadString(LOADER_ADDR, extFlashLoader, EXT_LOADER_SIZE)
+
         return ERROR_OK
     }
 
@@ -160,16 +199,29 @@ function ebFlashWrite(sector, address, buffer)
         intrfApi.setSpeed(maxFlashSpeed)
 
         // Write buffer to flash with 16bit memory access, always restore the probe speed
+        local result = ERROR_OK
         try{
             intrfApi.writeBuf(buffer, address, 16)
         }
         catch(e){
-            intrfApi.setSpeed(probeSpeed)
-            throw e
+            if(isString(e)){
+                intrfApi.setSpeed(probeSpeed)
+                throw e
+            }
+            result = e
         }
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
+
+        // Probe doesn't support 16bit memory access: fall back to the RAM flash loader
+        // (old ST-Link/V2 firmware, better update the probe!)
+        if(result == INTERFACE_NOT_SUPPORTED){
+            debugf("No 16bit memory access, using the RAM flash loader\n")
+            flashLoaderWrite(address, buffer)
+        }
+        else if(result != ERROR_OK)
+            throw result
 
         // Wait until the last half word is programmed
         local status = flashWaitBusy(1000, false)
@@ -196,9 +248,7 @@ function ebFlashWrite(sector, address, buffer)
 
        if(catchString(e))
             return ERROR_NOTIFIED
-       if(e ==  INTERFACE_NOT_SUPPORTED)
-            errorf("This interface doesn't support direct 16bit memory access\nPlease update probe firmware or use other probe\n")
-       else if(e < ERROR_NOTIFIED)
+       if(e < ERROR_NOTIFIED)
            errorf("ERROR: writing sector %d failed! [%s]\n", sector, errorToStr(e) )
        return ERROR_NOTIFIED
     }
@@ -224,6 +274,41 @@ function ebFlashDone()
            errorf("Error: locking flash failed! [%s]\n", errorToStr(e) )
        return ERROR_NOTIFIED
     }
+}
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Program a sector with the RAM flash loader (PG must already be set)
+//
+function flashLoaderWrite(address, buffer)
+{
+    // Write buffer to data ram space
+    intrfApi.writeBuf(buffer, SCRATCH_ADDR)
+
+    // Initialize flash loader
+    targetApi.writeReg("R0", SCRATCH_ADDR)         // Data address to be written
+    targetApi.writeReg("R1", address)              // Target address in flash
+    targetApi.writeReg("R2", buffer.getSize()/2)   // Half words count to be written
+
+    // Run the flash loader, don't block so we can use a timeout
+    targetApi.execute(LOADER_ADDR, false)
+
+    // Wait until the loader hits its BKPT (timeout 5 sec)
+    local time = GetTickCount()
+    do{
+        if(GetTickCount() - time > 5000){
+            targetApi.halt()
+            errorf("ERROR: RAM flash loader timeout\n")
+            throw ERROR_NOTIFIED
+        }
+        targetApi.poll()
+    } while(targetApi.getState() != TARGET_HALTED )
+
+    // Check flash loader result, if R2 is 0 then all data is written.
+    // If not, the loader stopped on an error which is checked by the caller in FLASH_SR.
+    local left = targetApi.readReg("R2")
+    if(left != 0)
+        debugf("RAM flash loader stopped, %d half words not written\n", left)
 }
 
 /////////////////////////////////////////////////////////////////////////////////

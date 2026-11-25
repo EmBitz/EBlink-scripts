@@ -1,0 +1,94 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32H7Rx/H7Sx
+//
+
+//*************************************************************
+//*****          Memory map of the H7R/S                   ****
+//*************************************************************
+const mem_template_H7RS = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <!-- ITCM -->
+  <memory type=\"ram\" start=\"0x00000000\" length=\"0x10000\"/>
+
+  <!-- DTCM -->
+  <memory type=\"ram\" start=\"0x20000000\" length=\"0x10000\"/>
+
+  <!-- AXI SRAM -->
+  <memory type=\"ram\" start=\"0x24000000\" length=\"0x%x\"/>
+
+  <!-- AHB SRAM -->
+  <memory type=\"ram\" start=\"0x30000000\" length=\"0x8000\"/>
+
+  <!-- Flash -->
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+   <property name=\"blocksize\">0x2000</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+  <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+  <memory type=\"rom\" start=\"0x1ff00000\" length=\"0x20000\"/>
+</memory-map>"
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local ram_size
+
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
+    intrfApi.write(0x5C001004, intrfApi.read(0x5C001004) | 6)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1FZR = DBG_WWDG_STOP
+    intrfApi.write(0x5C00103C, intrfApi.read(0x5C00103C) | (1<<11))
+
+    // DBGMCU_APB4FZR = DBG_IWDG_STOP
+    intrfApi.write(0x5C001054, intrfApi.read(0x5C001054) | (1<<18))
+
+    // The H7R/S has a fixed 64KB (boot) flash
+    local flash_size = 0x10000
+
+    // Set the memory map according the device ID
+      local deviceStr
+      switch(deviceId) {
+
+        case 0x485 : // CHIPID_STM32H7R3/R7/S3/S7
+            deviceStr = "H7R3/R7/S3/S7"
+            ram_size = 0x72000 // AXI SRAM1..4 456KB
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32%s\n", deviceStr)
+
+    // Inform the user
+    printf("FLASH          : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+    }
+
+    // Pass the formatted memory map.
+    DeviceAPI().memmap(format( mem_template_H7RS, ram_size, flash_size ))
+
+    // Include flash loader script
+    require("stmicro/flash/h7rs.script")
+}

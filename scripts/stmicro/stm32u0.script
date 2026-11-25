@@ -28,7 +28,7 @@ const pgmBitsWidth 64
 // The flash parameters needed by the flash loader script
 const FLASH_BASE 0x40022000
 
-// The U0 has a single bank only (needed by c0_l4_u0_gx_wx.script)
+// The U0 has a single bank only (needed by c0_gx_l4_u0_wx.script)
 const hasDualBank false
 
 /////////////////////////////////////////////////////
@@ -102,7 +102,7 @@ function stm32_device()
     // Remark: don't add the virtual option sector 999 to the memory map, the
     //         option write of that script also writes PCROP registers
     //         (0x24/0x28) which are reserved on the U0.
-    require("stmicro/flash/c0_l4_u0_gx_wx.script")
+    require("stmicro/flash/c0_gx_l4_u0_wx.script")
 
 }
 

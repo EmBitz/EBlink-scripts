@@ -109,7 +109,7 @@ function stm32_device()
     DeviceAPI().memmap(format( mem_template_L5, ram_size, flash_size, page_size))
 
     // Include flash loader script
-    require("stmicro/flash/l5_u5.script")
+    require("stmicro/flash/l5_u3_u5_wba.script")
 }
 
 ////////////////////////////////////////

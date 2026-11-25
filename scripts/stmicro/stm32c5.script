@@ -1,0 +1,164 @@
+/////////////////////////////////////////////////////
+//
+//                   STM32C5x
+//
+
+//*************************************************************
+//*****          Memory map of the C5                      ****
+//*************************************************************
+const mem_template_C5 = @@"
+<?xml version=\"1.0\"?>
+<memory-map>
+  <memory type=\"rom\" start=\"0x00000000\" length=\"0x100000\"/>
+
+  <!-- SRAM -->
+  <memory type=\"ram\" start=\"0x20000000\" length=\"0x%x\"/>
+
+  <!-- Flash bank 1-->
+  <memory type=\"flash\" start=\"0x08000000\" length=\"0x%x\">
+   <property name=\"blocksize\">0x2000</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+
+  <!-- Flash bank 2-->
+  <memory type=\"flash\" start=\"0x%x\" length=\"0x%x\">
+   <property name=\"blocksize\">0x2000</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+%s
+  <memory type=\"ram\" start=\"0x40000000\" length=\"0x1fffffff\"/>
+  <memory type=\"ram\" start=\"0x60000000\" length=\"0x7fffffff\"/>
+  <memory type=\"ram\" start=\"0xe0000000\" length=\"0x1fffffff\"/>
+  <memory type=\"rom\" start=\"0x0bf80000\" length=\"0x10000\"/>
+</memory-map>"
+
+//  EDATA_EN = 0 : extended user flash 64KB, 2KB pages
+const mem_template_C5_ext = @@"
+  <!-- Extended user flash bank 1-->
+  <memory type=\"flash\" start=\"0x08400000\" length=\"0x8000\">
+   <property name=\"blocksize\">0x800</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+
+  <!-- Extended user flash bank 2-->
+  <memory type=\"flash\" start=\"0x08408000\" length=\"0x8000\">
+   <property name=\"blocksize\">0x800</property>
+   <property name=\"secstart\">0</property>
+  </memory>
+"
+
+//  EDATA_EN = 1 : HighCycle data flash 48KB, 1.5KB pages
+const mem_template_C5_edata = @@"
+  <!-- Highcycle data flash 1 -->
+  <memory type=\"flash\" start=\"0x09000000\" length=\"0x6000\">
+   <property name=\"blocksize\">0x600</property>
+   <property name=\"secstart\">0</property>
+   <property name=\"sectype\">virtual</property>
+  </memory>
+
+  <!-- Highcycle data flash 2 -->
+  <memory type=\"flash\" start=\"0x09006000\" length=\"0x6000\">
+   <property name=\"blocksize\">0x600</property>
+   <property name=\"secstart\">0</property>
+   <property name=\"sectype\">virtual</property>
+  </memory>
+"
+
+// Option status register, flash data area enable
+const FLASH_OPTSR_CUR       0x40022050
+const FLASH_OPTSR_EDATA_EN  (1<<29)
+
+// The start address of flash bank 2
+flashBank2Start <- 0
+// Not used by the C5, the EDATA area is erased with EDATASEL
+startHcSec <- 0
+edataBank2Start <- 0x09006000
+// Extended user / EDATA area, erased with EDATASEL
+extAreaStart <- 0x08400000
+extBank2Start <- 0
+
+/////////////////////////////////////////////////////
+//
+//  Entry point of this script called by parent script
+//
+//      Remark: The intrfApi is a global object from parent
+//
+function stm32_device()
+{
+    local ram_size
+
+    // Enable debug clocks: DBGMCU_CR = DBG_STANDBY | DBG_STOP
+    intrfApi.write(0x44024004, 6)
+
+    // Stop watchdog counters during halt: DBGMCU_APB1LFZR = DBG_IWDG_STOP | DBG_WWDG_STOP
+    intrfApi.write(0x44024008, 0x00001800)
+
+    // Get the flash size
+    local flash_size = ( intrfApi.read(0x08fff80c) &0xFFFF) *1024
+
+    // Set the memory map according the device ID
+      local deviceStr
+      switch(deviceId) {
+
+        case 0x44F : // CHIPID_STM32C531/C532/C542
+            deviceStr = "C531/532/542"
+            ram_size = 0x10000 // 64KB
+            break
+
+        case 0x44E : // CHIPID_STM32C551/C552/C562
+            deviceStr = "C551/552/562"
+            ram_size = 0x20000 // 128KB
+            break
+
+        case 0x45A : // CHIPID_STM32C591/C593/C5A3
+            deviceStr = "C591/593/5A3"
+            ram_size = 0x40000 // 256KB
+            break
+
+        default:
+            throw ERROR_NOT_FOUND
+    }
+
+    // Inform user of the device found
+    printf("STmicro family : STM32%s\n", deviceStr)
+
+    // Inform the user
+    printf("Detected FLASH : %dKB\nConfigured RAM : %dKB\n", flash_size/1024, ram_size/1024)
+
+    // The user specified the size of flash memory
+    if (isScriptObject("FLASH_SIZE") && FLASH_SIZE>0){
+      printf("CLI set  FLASH : %dKB\n", FLASH_SIZE)
+      flash_size = (FLASH_SIZE & 0xffff) * 1024
+    }
+
+    // The user specified the size of ram memory
+    if (isScriptObject("RAM_SIZE") && RAM_SIZE>0){
+      printf("CLI set    RAM : %dKB\n", RAM_SIZE)
+      ram_size = (RAM_SIZE & 0xffff) * 1024
+    }
+
+    // Calculate start address of flashbank 2
+    flashBank2Start = 0x08000000 + flash_size/2
+
+    // The extra area is extended user flash or HighCycle data (EDATA_EN option)
+    local extArea
+    if( intrfApi.read(FLASH_OPTSR_CUR) & FLASH_OPTSR_EDATA_EN ){
+        printf("HighCycle Data : 48KB\n")
+        extArea = mem_template_C5_edata
+        extBank2Start = 0x09006000
+    }
+    else{
+        printf("Extended FLASH : 64KB\n")
+        extArea = mem_template_C5_ext
+        extBank2Start = 0x08408000
+    }
+
+    // Pass the formatted memory map.
+    DeviceAPI().memmap(format( mem_template_C5, ram_size,
+                               flash_size/2,
+                               flashBank2Start, flash_size/2,
+                               extArea ))
+
+    // Include flash loader script
+    require("stmicro/flash/c5_g5_h5.script")
+}

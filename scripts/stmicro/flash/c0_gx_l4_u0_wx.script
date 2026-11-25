@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////////////////////////////
 //
-//              STM32 C0 / L4 / U0 / G0 / G4 / WB / WL
+//              STM32 C0 / G0 / G4 / L4 / U0 / WB / WL
 //
 //  These families share the same flash controller layout (KEYR 0x08,
 //  OPTKEYR 0x0C, SR 0x10, CR 0x14, OPTR 0x20, WRP1AR 0x2C) and program

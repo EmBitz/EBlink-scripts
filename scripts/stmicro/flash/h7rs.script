@@ -1,73 +1,60 @@
 /////////////////////////////////////////////////////////////////////////////////
 //
-//                   STM32H5
+//                   STM32H7Rx/H7Sx flash (H7R3, H7R7, H7S3, H7S7)
 //
 //  ToDo:  - option programming
 //
-// Used parameters from parent script(s)
-//
-// - flashBank2Start
-// - startHcSec
+// The flash controller is not the H7 one (ST CMSIS stm32h7s7xx.h, HAL
+// stm32h7rsxx_hal_flash.c):
+//  - CR 0x10, SR 0x14, ISR 0x24 (flags), ICR 0x28 (clear)
+//  - 64KB single bank, 8 sectors of 8KB, SSN bits 6..8
+//  - 128-bit flash word, the HAL writes it with 16-bit accesses
+//  - wait for QW (operation queue), errors in ISR
 //
 
-const FLASH_BASE 0x40022000
+const FLASH_BASE 0x52002000
 
 // Register offsets of the flash controller
-const FLASH_ACCESS_CTRL (0x00)
+const FLASH_ACR         (0x00)
 const FLASH_KEYR        (0x04)
-const FLASH_OPTION_KEY  (0x0c)
-const FLASH_NSSR        (0x20)
-const FLASH_NSCR        (0x28)
-const FLASH_NSCCR       (0x30)
+const FLASH_CR          (0x10)
+const FLASH_SR          (0x14)
+const FLASH_ISR         (0x24)
+const FLASH_ICR         (0x28)
 
-// FLASH_NSCR control bit flags
-const FLASH_NSCR_LOCK         (1 << 0)
-const FLASH_NSCR_PGM          (1 << 1)
-const FLASH_NSCR_SER          (1 << 2)
-const FLASH_NSCR_BER          (1 << 3)
-const FLASH_NSCR_FW           (1 << 4)
-const FLASH_NSCR_START        (1 << 5)
-const FLASH_NSCR_MASS_MER     (1 << 15)
-const FLASH_NSCR_EOPIE        (1 << 16)
-const FLASH_NSCR_WRPERRIE     (1 << 17)
-const FLASH_NSCR_PGSERRIE     (1 << 18)
-const FLASH_NSCR_STRBERRIE    (1 << 19)
-const FLASH_NSCR_INCERRIE     (1 << 20)
-const FLASH_NSCR_OBKERRIE     (1 << 21)
-const FLASH_NSCR_OBKWERRIE    (1 << 22)
-const FLASH_NSCR_OPTCHGERRIE  (1 << 23)
-const FLASH_NSCR_BKSEL        (1 << 31)
-const FLASH_NSCR_PAGE_SHIFT   (6)
+// FLASH_CR control bit flags
+const FLASH_CR_LOCK         (1 << 0)
+const FLASH_CR_PG           (1 << 1)
+const FLASH_CR_SER          (1 << 2)
+const FLASH_CR_BER          (1 << 3)
+const FLASH_CR_FW           (1 << 4)
+const FLASH_CR_START        (1 << 5)
+const FLASH_CR_SSN_SHIFT    (6)
+const FLASH_CR_SSN_MASK     (0x7 << 6)
 
-// Flash NSSR flags
-const FLASH_NSSR_BSY        (1 << 0)   // Operation in progress
-const FLASH_NSSR_WBNE       (1 << 1)   // Write buffer not empty
-const FLASH_NSSR_DBNE       (1 << 3)   // Data buffer not empty
-const FLASH_NSSR_EOP        (1 << 16)
-const FLASH_NSSR_WRPERR     (1 << 17)
-const FLASH_NSSR_PGSERR     (1 << 18)
-const FLASH_NSSR_STRBERR    (1 << 19)
-const FLASH_NSSR_INCERR     (1 << 20)
-const FLASH_NSSR_OBKERR     (1 << 21)
-const FLASH_NSSR_OBKWERR    (1 << 22)
-const FLASH_NSSR_OPTCHGERR  (1 << 23)
+// FLASH_SR flags
+const FLASH_SR_BUSY         (1 << 0)   // Operation in progress
+const FLASH_SR_WBNE         (1 << 1)   // Write buffer not empty
+const FLASH_SR_QW           (1 << 2)   // Operation queue in progress
 
-// FLASH_NSCCR  flags
-const FLASH_NSCCR_CLREOP        (1 << 16)
-const FLASH_NSCCR_CLRWRPERR     (1 << 17)
-const FLASH_NSCCR_CLRPGSERR     (1 << 18)
-const FLASH_NSCCR_CLRSTRBERR    (1 << 19)
-const FLASH_NSCCR_CLRINCERR     (1 << 20)
-const FLASH_NSCCR_CLROBKERR     (1 << 21)
-const FLASH_NSCCR_CLROBKWERR    (1 << 22)
-const FLASH_NSCCR_CLROPTCHGERR  (1 << 23)
+// FLASH_ISR flags (FLASH_ICR has the clear bits at the same positions)
+const FLASH_ISR_EOPF        (1 << 16)
+const FLASH_ISR_WRPERRF     (1 << 17)
+const FLASH_ISR_PGSERRF     (1 << 18)
+const FLASH_ISR_STRBERRF    (1 << 19)
+const FLASH_ISR_OBLERRF     (1 << 20)
+const FLASH_ISR_INCERRF     (1 << 21)
+const FLASH_ISR_RDSERRF     (1 << 24)
+const FLASH_ISR_SNECCERRF   (1 << 25)
+const FLASH_ISR_DBECCERRF   (1 << 26)
+const FLASH_ISR_CRCENDF     (1 << 27)
+const FLASH_ISR_CRCRDERRF   (1 << 28)
 
+// The errors the ST HAL checks after an operation (FLASH_FLAG_ISR_ERRORS)
+const FLASH_ISR_ERROR_MASK  0x113E0000
 
-// All the possible errors mask (bits 17..23, WRPERR included)
-const FLASH_NSSR_ERROR_MASK 0xFE0000
-
-// Wait until all of these are cleared (same as the ST HAL)
-FLASH_NSSR_BUSY_MASK <- (FLASH_NSSR_BSY | FLASH_NSSR_WBNE | FLASH_NSSR_DBNE)
+// Also cleared before an operation, a stale ECC flag of a read is no flash error
+const FLASH_ISR_CLEAR_MASK  0x1F3F0000
 
 const FLASH_KEYR1  0x45670123
 const FLASH_KEYR2  0xCDEF89AB
@@ -125,31 +112,21 @@ function ebFlashStart()
 //
 // EBlink callback
 //
-//   Erase sequence according ST user manual
-//   Addr -  >=0x0900C000      : HighCycle #2 secNumber = 8-sector (inverse sector count)
-//   Addr -  >=0x09000000      : HighCycle #1 secNumber = 8-sector (inverse sector count)
-//   Addr -  >=flashBank2Start : Flash bank 2 secNumber = sector
-//   Addr -  >=0x08000000      : Flash bank 1 secNumber = sector
+//   Sector erase sequence according the ST HAL
 //
 function ebFlashErase(sector, address)
 {
     try{
-        // Clear error flags of a previous operation
+        // Clear flags of a previous operation
         flashClearErrors()
 
-        // If this is high cycle calculate the right sector number
-        if(address >= 0x09000000)
-            sector += startHcSec;
-
-        local eraseFlags = (sector << FLASH_NSCR_PAGE_SHIFT ) | FLASH_NSCR_SER | FLASH_NSCR_START
-
-        // Is this flash bank 1 or 2 ?
-        if( (address >= flashBank2Start && address < 0x09000000 ) || address >= 0x0900C000 )
-            eraseFlags  = eraseFlags | FLASH_NSCR_BKSEL
-
-        intrfApi.write(FLASH_BASE + FLASH_NSCR, eraseFlags )
+        intrfApi.write(FLASH_BASE + FLASH_CR,
+                       (sector << FLASH_CR_SSN_SHIFT ) | FLASH_CR_SER | FLASH_CR_START )
 
         flashCheckBusy(10000)
+
+        // Clear the erase bits (same as the ST HAL)
+        flashClearCr(FLASH_CR_SER | FLASH_CR_SSN_MASK)
 
         return ERROR_OK
     }
@@ -167,32 +144,35 @@ function ebFlashErase(sector, address)
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-// Flash write according ST user manual
+// Flash write according the ST HAL
 //
 function ebFlashWrite(sector, address, buffer)
 {
     try{
-        // Handle highCycle must be flashed with multiplies of 2
-        // Normal memory must be flashed with multiplies of 16
-        buffer.trim(address >= 0x09000000 ? 2 : 16 )
+        // Flash must be programmed with flash words of 16 bytes
+        buffer.trim(16)
 
-        // Clear error flags of a previous operation
+        // Clear flags of a previous operation
         flashClearErrors()
 
-        // Set the PG bit of the FLASH control register (FLASH_NSCR)
-        intrfApi.write(FLASH_BASE + FLASH_NSCR,  FLASH_NSCR_PGM )
+        // Set the PG bit of the FLASH control register (FLASH_CR)
+        intrfApi.write(FLASH_BASE + FLASH_CR,  FLASH_CR_PG )
 
         // Adjust the probe speed to the maximum for direct write
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
-        // Program the flash with as the widest width possible
-        intrfApi.writeBuf(buffer, address)
+        // Program the flash with 16 bit accesses (same as the ST HAL)
+        intrfApi.writeBuf(buffer, address, 16)
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
 
         flashCheckBusy(2000)
+
+        // Clear the PG bit
+        flashClearCr(FLASH_CR_PG)
+
         return ERROR_OK
     }
 
@@ -213,8 +193,8 @@ function ebFlashWrite(sector, address, buffer)
 function ebFlashDone()
 {
     try{
-        intrfApi.write( FLASH_BASE + FLASH_NSCR,
-            intrfApi.read(FLASH_BASE + FLASH_NSCR) | FLASH_NSCR_LOCK )
+        intrfApi.write( FLASH_BASE + FLASH_CR,
+            intrfApi.read(FLASH_BASE + FLASH_CR) | FLASH_CR_LOCK )
         return ERROR_OK
     }
     catch(e) {
@@ -242,11 +222,10 @@ function ebFlashEraseChip()
         targetApi.halt()
         flashUnlock()
         flashClearErrors()
-        intrfApi.write(FLASH_BASE + FLASH_NSCR, FLASH_NSCR_MASS_MER |  FLASH_NSCR_START )
+        intrfApi.write(FLASH_BASE + FLASH_CR, FLASH_CR_BER | FLASH_CR_START )
 
-        // Now really waits for BSY (the old back-off Sleep(500) was needed
-        // because the busy wait checked the wrong bit)
         flashCheckBusy(30000)
+        flashClearCr(FLASH_CR_BER)
         ebFlashDone()
         printf("done\n")
         return ERROR_OK
@@ -265,43 +244,50 @@ function ebFlashEraseChip()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//   Wait until the operation is ready (BSY, WBNE and DBNE cleared)
+//   Wait until the operation is ready (QW cleared, same as the ST HAL)
 //   and check for errors
 //
 function flashCheckBusy(timeout)
 {
     local time = GetTickCount()
-    local value
     do{
         AnimateCursor()
-        value = intrfApi.read(FLASH_BASE + FLASH_NSSR)
 
         if(GetTickCount() - time > timeout)
             throw ERROR_TIMEOUT
 
-    }while(value & FLASH_NSSR_BUSY_MASK)
+    }while(intrfApi.read(FLASH_BASE + FLASH_SR) & FLASH_SR_QW)
 
     AnimateDone()
 
     // Clear errors and EOP, also when there is an error
     // (otherwise one error blocks every next erase/write)
-    intrfApi.write( FLASH_BASE + FLASH_NSCCR,
-                         value & (FLASH_NSSR_ERROR_MASK | FLASH_NSSR_EOP))
+    local value = intrfApi.read(FLASH_BASE + FLASH_ISR)
+    intrfApi.write( FLASH_BASE + FLASH_ICR, value & FLASH_ISR_CLEAR_MASK)
 
-    if( value & FLASH_NSSR_ERROR_MASK)
+    if( value & FLASH_ISR_ERROR_MASK)
         throw ERROR_FLASH
 }
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//   Clear the error flags of a previous operation
+//   Clear the flags of a previous operation
 //
 function flashClearErrors()
 {
-    local value = intrfApi.read(FLASH_BASE + FLASH_NSSR)
-    if( value & (FLASH_NSSR_ERROR_MASK | FLASH_NSSR_EOP) )
-        intrfApi.write( FLASH_BASE + FLASH_NSCCR,
-                             value & (FLASH_NSSR_ERROR_MASK | FLASH_NSSR_EOP))
+    local value = intrfApi.read(FLASH_BASE + FLASH_ISR)
+    if( value & FLASH_ISR_CLEAR_MASK )
+        intrfApi.write( FLASH_BASE + FLASH_ICR, value & FLASH_ISR_CLEAR_MASK)
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
+//
+//   Clear control bits of the operation
+//
+function flashClearCr(bits)
+{
+    intrfApi.write(FLASH_BASE + FLASH_CR, intrfApi.read(FLASH_BASE + FLASH_CR) & ~bits)
 }
 
 
@@ -312,15 +298,14 @@ function flashClearErrors()
 function flashUnlock()
 {
     // Already unlocked (e.g. by the application before ebFlashEraseChip)?
-    // Writing the keys again is a wrong sequence and can lock NSCR until reset.
-    if( !(intrfApi.read(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_LOCK) )
+    // Writing the keys again is a wrong sequence and can lock CR until reset.
+    if( !(intrfApi.read(FLASH_BASE + FLASH_CR) & FLASH_CR_LOCK) )
         return
 
     // Unlock Flash
     intrfApi.write(FLASH_BASE + FLASH_KEYR, FLASH_KEYR1 )
     intrfApi.write(FLASH_BASE + FLASH_KEYR, FLASH_KEYR2 )
 
-    if(intrfApi.read(FLASH_BASE + FLASH_NSCR) & FLASH_NSCR_LOCK )
+    if(intrfApi.read(FLASH_BASE + FLASH_CR) & FLASH_CR_LOCK )
        throw ERROR_UNLOCK
 }
-
