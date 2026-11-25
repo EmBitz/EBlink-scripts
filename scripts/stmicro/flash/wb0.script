@@ -27,6 +27,7 @@ const FLASH_DATA3       (0x4C)
 const FLASH_CMD_ERASE_PAGES   0x11
 const FLASH_CMD_MASSERASE     0x22
 const FLASH_CMD_BURSTWRITE    0xCC
+const FLASH_CMD_WAKEUP        0xBB   // Black Magic Probe stm32wb0.c
 
 // FLASH_IRQRAW flags
 const FLASH_IRQ_CMDDONE     (1 << 0)
@@ -38,6 +39,8 @@ const FLASH_IRQ_ILLCMD      (1 << 3)
 const FLASH_IRQ_CLEAR_MASK  0x0F
 const FLASH_IRQ_ERROR_MASK  (FLASH_IRQ_CMDERR | FLASH_IRQ_ILLCMD)
 
+maxFlashSpeed   <- 4000  // Probe speed while writing (no polling per burst), can be changed from CLI
+
 /////////////////////////////////////////////////////////////////////////////////
 //
 // EBlink callback
@@ -45,6 +48,16 @@ const FLASH_IRQ_ERROR_MASK  (FLASH_IRQ_CMDERR | FLASH_IRQ_ILLCMD)
 function ebFlashStart()
 {
     try{
+        // Override the maximum flash speed from cli
+        if (isScriptObject("FLASH_SPEED") && FLASH_SPEED>0){
+            maxFlashSpeed = FLASH_SPEED
+            printf("Flash speed set: %d KHz\n", maxFlashSpeed)
+        }
+
+        // Check that we don't go faster than the user selected on the cli
+        if(maxFlashSpeed > intrfApi.getSpeed())
+            maxFlashSpeed = intrfApi.getSpeed()
+
         // Be sure that the core is halted
         targetApi.reset(SYSTEM_RESET)
 
@@ -58,6 +71,7 @@ function ebFlashStart()
             targetApi.poll()
         } while(targetApi.getState() != TARGET_HALTED )
 
+        flashWakeup()
         return ERROR_OK
     }
 
@@ -80,7 +94,9 @@ function ebFlashStart()
 function ebFlashErase(sector, address)
 {
     try{
-        flashCommand(address, FLASH_CMD_ERASE_PAGES)
+        intrfApi.write(FLASH_BASE + FLASH_IRQRAW, FLASH_IRQ_CLEAR_MASK)
+        intrfApi.write(FLASH_BASE + FLASH_ADDRESS, (address - FLASH_MEM_START) >> 2)
+        intrfApi.write(FLASH_BASE + FLASH_COMMAND, FLASH_CMD_ERASE_PAGES)
         flashCheckBusy(1000)
         return ERROR_OK
     }
@@ -103,28 +119,52 @@ function ebFlashErase(sector, address)
 function ebFlashWrite(sector, address, buffer)
 {
     try{
-        local size = buffer.getSize()
-        local offset = 0
+        // Burst write: 4 words (16 bytes)
+        buffer.trim(16)
 
-        while(offset < size){
-            AnimateCursor()
+        // Clear the flags once, the error flags stay set so they
+        // are checked once after the whole sector
+        intrfApi.write(FLASH_BASE + FLASH_IRQRAW, FLASH_IRQ_CLEAR_MASK)
 
-            intrfApi.write(FLASH_BASE + FLASH_DATA0, getWord(buffer, offset))
-            intrfApi.write(FLASH_BASE + FLASH_DATA1, getWord(buffer, offset+4))
-            intrfApi.write(FLASH_BASE + FLASH_DATA2, getWord(buffer, offset+8))
-            intrfApi.write(FLASH_BASE + FLASH_DATA3, getWord(buffer, offset+12))
+        // Limit the probe speed, the bursts are written without polling
+        local probeSpeed = intrfApi.getSpeed()
+        intrfApi.setSpeed(maxFlashSpeed)
 
-            flashCommand(address + offset, FLASH_CMD_BURSTWRITE)
-            flashCheckBusy(100)
+        // Write the bursts, always restore the probe speed
+        try{
+            local size = buffer.getSize() + buffer.getTrim()   // Trimmed size, multiple of 16
+            local offset = 0
+            while(offset < size){
+                AnimateCursor()
 
-            offset += 16
+                intrfApi.write(FLASH_BASE + FLASH_ADDRESS, (address + offset - FLASH_MEM_START) >> 2)
+                intrfApi.writeBuf(buffer, FLASH_BASE + FLASH_DATA0, 32, offset, 16)
+
+                // Only CMDDONE, the error flags stay set and are checked after the sector
+                intrfApi.write(FLASH_BASE + FLASH_IRQRAW, FLASH_IRQ_CMDDONE)
+                intrfApi.write(FLASH_BASE + FLASH_COMMAND, FLASH_CMD_BURSTWRITE)
+
+                offset += 16
+            }
         }
+        catch(e){
+            intrfApi.setSpeed(probeSpeed)
+            throw e
+        }
+
+        // Restore probe speed
+        intrfApi.setSpeed(probeSpeed)
+
+        flashCheckBusy(100)
+
         AnimateDone()
         return ERROR_OK
     }
 
     // Catch all the sector write errors
     catch(e){
+       AnimateDone()
+
        if(catchString(e))
             return ERROR_NOTIFIED
        if(e < ERROR_NOTIFIED)
@@ -156,6 +196,7 @@ function ebFlashEraseChip()
         printf("Flash chip erase ")
 
         targetApi.halt()
+        flashWakeup()
         intrfApi.write(FLASH_BASE + FLASH_IRQRAW, FLASH_IRQ_CLEAR_MASK)
         intrfApi.write(FLASH_BASE + FLASH_COMMAND, FLASH_CMD_MASSERASE)
         flashCheckBusy(30000)
@@ -175,13 +216,14 @@ function ebFlashEraseChip()
 
 /////////////////////////////////////////////////////////////////////////////////
 //
-//   Start a command for an address (clear the flags first, same as the ST HAL)
+//   Make sure the flash controller is awake (same as Black Magic Probe
+//   stm32wb0_enter_flash_mode), the application can have put it asleep
 //
-function flashCommand(address, command)
+function flashWakeup()
 {
     intrfApi.write(FLASH_BASE + FLASH_IRQRAW, FLASH_IRQ_CLEAR_MASK)
-    intrfApi.write(FLASH_BASE + FLASH_ADDRESS, (address - FLASH_MEM_START) >> 2)
-    intrfApi.write(FLASH_BASE + FLASH_COMMAND, command)
+    intrfApi.write(FLASH_BASE + FLASH_COMMAND, FLASH_CMD_WAKEUP)
+    flashCheckBusy(100)
 }
 
 /////////////////////////////////////////////////////////////////////////////////
@@ -204,21 +246,4 @@ function flashCheckBusy(timeout)
         intrfApi.write(FLASH_BASE + FLASH_IRQRAW, value & FLASH_IRQ_ERROR_MASK)
         throw ERROR_FLASH
     }
-}
-
-/////////////////////////////////////////////////////////////////////////////////
-//
-//   Get a word from the buffer, beyond the data it is filled with 0xFF
-//
-function getWord(buffer, offset)
-{
-    local size = buffer.getSize()
-    if(offset + 4 <= size)
-        return buffer.get(offset)
-
-    local value = 0xFFFFFFFF
-    for(local i = 0; i < 4 && offset + i < size; i++)
-        value = (value & ~(0xFF << (i*8))) | (buffer.get(offset + i, 8) << (i*8))
-
-    return value
 }

@@ -162,8 +162,14 @@ function ebFlashWrite(sector, address, buffer)
         local probeSpeed = intrfApi.getSpeed()
         intrfApi.setSpeed(maxFlashSpeed)
 
-        // Program the flash with 16 bit accesses (same as the ST HAL)
-        intrfApi.writeBuf(buffer, address, 16)
+        // Program the flash with 16 bit accesses (same as the ST HAL), always restore the probe speed
+        try{
+            intrfApi.writeBuf(buffer, address, 16)
+        }
+        catch(e){
+            intrfApi.setSpeed(probeSpeed)
+            throw e
+        }
 
         // Restore probe speed
         intrfApi.setSpeed(probeSpeed)
