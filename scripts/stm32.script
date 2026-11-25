@@ -62,7 +62,7 @@ STMICRO_ROM <- {
 
 // JEP106 designer codes of the ROM table
 const JEP106_ST             0x020
-const JEP106_ERRATA_STM32WX 0x420  // Not JEP106 compliant ST code (see Black Magic Probe adi.c)
+const JEP106_ERRATA_STM32WX 0x420  // Not JEP106 compliant ST code
 
 intrfApi <- InterfAPI()  // Global so that all included script files also have access
 targetApi<- TargetAPI()  // Global interface to the target class
